@@ -85,7 +85,16 @@ app.post('/api/download', async (req, res) => {
     console.log(`[INFO] Obteniendo info para: ${url}`);
     
     // Get metadata to confirm it's valid and get a filename
-    const metadata = await ytDlpWrap.getVideoInfo(url);
+    // Get metadata with stealth flags
+    const metadataArgs = [
+      '--no-playlist',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ];
+    if (fs.existsSync(path.join(__dirname, 'cookies.txt'))) {
+      metadataArgs.push('--cookies', path.join(__dirname, 'cookies.txt'));
+    }
+    
+    const metadata = await ytDlpWrap.getVideoInfo([url, ...metadataArgs]);
     const title = metadata.title || 'video';
     
     // Clean filename
@@ -124,8 +133,15 @@ app.get('/api/stream', async (req, res) => {
     url,
     '--no-playlist',
     '--ffmpeg-location', currentFfmpegPath,
-    '-o', '-' // Output to stdout
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    '--referer', 'https://www.google.com/',
+    '-o', '-' 
   ];
+
+  // Si existe un archivo cookies.txt en la raíz, usarlo
+  if (fs.existsSync(path.join(__dirname, 'cookies.txt'))) {
+    args.push('--cookies', path.join(__dirname, 'cookies.txt'));
+  }
 
   if (mode === 'audio') {
     args.push('-x', '--audio-format', 'mp3', '--audio-quality', bitrate || '128');
