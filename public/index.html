@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TubeGrab — YouTube a MP3</title>
+  <meta name="description" content="Descarga el audio de YouTube en formato MP3 de forma segura y privada.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+  <div class="app-container">
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <span class="logo-text">TubeGrab</span>
+      </div>
+      <div class="header-badge"><span class="badge-dot"></span>Privacidad Total</div>
+    </header>
+    <main class="main-card" id="mainCard">
+      <div class="card-glow"></div>
+      <h1 class="main-title">Audio de YouTube<span class="title-accent">en Alta Calidad</span></h1>
+      <p class="main-subtitle">Descargas anónimas. Tu conexión nunca toca directamente los servidores de YouTube.</p>
+      
+      <div class="input-group" id="inputGroup">
+        <div class="input-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <input type="url" id="urlInput" placeholder="Pega el link del video aquí..." autocomplete="off" spellcheck="false">
+          <button class="btn-clear" id="btnClear" title="Limpiar"><svg viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        </div>
+      </div>
+
+      <div class="format-section">
+        <div class="option-group" id="audioOptions">
+          <label class="option-label">Calidad de Audio (MP3)</label>
+          <div class="select-wrapper">
+            <select id="audioBitrate">
+              <option value="320">320 kbps — Calidad Original</option>
+              <option value="256">256 kbps — Alta Fidelidad</option>
+              <option value="128" selected>128 kbps — Estándar</option>
+              <option value="96">96 kbps — Ahorro de Espacio</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-download" id="btnDownload">
+        <span class="btn-content"><svg class="btn-icon" viewBox="0 0 24 24" fill="none"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Descargar MP3</span>
+        <span class="btn-loading"><div class="spinner"></div>Procesando...</span>
+      </button>
+
+      <div class="status-area" id="statusArea">
+        <div class="status-message" id="statusMessage"></div>
+      </div>
+      <div class="progress-bar hidden" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+    </main>
+
+    <section class="info-section">
+      <div class="info-card"><div class="info-icon">🛡️</div><h3>Sin Rastro</h3><p>Proxies dedicados protegen tu identidad</p></div>
+      <div class="info-card"><div class="info-icon">⚡</div><h3>Veloz</h3><p>Conversión instantánea en la nube</p></div>
+      <div class="info-card"><div class="info-icon">🎵</div><h3>Cristalino</h3><p>Audio optimizado hasta 320kbps</p></div>
+    </section>
+
+    <footer class="footer"><p>TubeGrab — Audio anónimo para uso personal.</p></footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

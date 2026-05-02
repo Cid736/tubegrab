@@ -1,0 +1,24 @@
+services:
+  tubegrab:
+    build: .
+    container_name: tubegrab
+    restart: unless-stopped
+    ports:
+      # 127.0.0.1:3000 → solo accesible desde tu máquina
+      # Nunca desde Internet ni desde tu red WiFi local
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+    # Sin acceso a archivos del sistema host
+    read_only: false
+    # Limitar recursos
+    mem_limit: 256m
+    cpus: "0.5"
+    # Red interna aislada (el contenedor no puede hacer nada más)
+    networks:
+      - tubegrab-net
+
+networks:
+  tubegrab-net:
+    driver: bridge
+    internal: false   # necesita salida a internet para contactar los servidores cobalt
