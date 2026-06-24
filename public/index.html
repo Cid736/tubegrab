@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TubeGrab — YouTube a MP3</title>
-  <meta name="description" content="Descarga el audio de YouTube en formato MP3 de forma segura y privada.">
+  <title>TubeGrab — YouTube a MP3 & MP4</title>
+  <meta name="description" content="Descarga audio y vídeo de YouTube en formato MP3 o MP4 de forma segura y privada.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -28,8 +28,8 @@
     </header>
     <main class="main-card" id="mainCard">
       <div class="card-glow"></div>
-      <h1 class="main-title">Audio de YouTube<span class="title-accent">en Alta Calidad</span></h1>
-      <p class="main-subtitle">Descargas anónimas. Tu conexión nunca toca directamente los servidores de YouTube.</p>
+      <h1 class="main-title">YouTube<span class="title-accent">en Alta Calidad</span></h1>
+      <p class="main-subtitle">Descargas anónimas. MP3 o MP4, tú eliges el formato.</p>
       
       <div class="input-group" id="inputGroup">
         <div class="input-wrapper">
@@ -39,9 +39,25 @@
         </div>
       </div>
 
+      <!-- Format Toggle -->
+      <div class="format-toggle-section">
+        <div class="format-toggle" id="formatToggle">
+          <button class="format-btn active" data-mode="audio" id="btnAudio">
+            <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="2"/></svg>
+            MP3
+          </button>
+          <button class="format-btn" data-mode="video" id="btnVideo">
+            <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><polygon points="23 7 16 12 23 17 23 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2" stroke="currentColor" stroke-width="2"/></svg>
+            MP4
+          </button>
+          <div class="toggle-slider" id="toggleSlider"></div>
+        </div>
+      </div>
+
       <div class="format-section">
+        <!-- Audio Options -->
         <div class="option-group" id="audioOptions">
-          <label class="option-label">Calidad de Audio (MP3)</label>
+          <label class="option-label">Calidad de Audio</label>
           <div class="select-wrapper">
             <select id="audioBitrate">
               <option value="320">320 kbps — Calidad Original</option>
@@ -51,10 +67,24 @@
             </select>
           </div>
         </div>
+        <!-- Video Options -->
+        <div class="option-group hidden" id="videoOptions">
+          <label class="option-label">Calidad de Vídeo</label>
+          <div class="select-wrapper">
+            <select id="videoQuality">
+              <option value="2160">4K (2160p) — Ultra HD</option>
+              <option value="1440">2K (1440p) — QHD</option>
+              <option value="1080" selected>1080p — Full HD</option>
+              <option value="720">720p — HD</option>
+              <option value="480">480p — SD</option>
+              <option value="360">360p — Ahorro de Datos</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <button class="btn-download" id="btnDownload">
-        <span class="btn-content"><svg class="btn-icon" viewBox="0 0 24 24" fill="none"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Descargar MP3</span>
+        <span class="btn-content"><svg class="btn-icon" viewBox="0 0 24 24" fill="none"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="btnText">Descargar MP3</span></span>
         <span class="btn-loading"><div class="spinner"></div>Procesando...</span>
       </button>
 
@@ -65,12 +95,12 @@
     </main>
 
     <section class="info-section">
-      <div class="info-card"><div class="info-icon">🛡️</div><h3>Sin Rastro</h3><p>Proxies dedicados protegen tu identidad</p></div>
-      <div class="info-card"><div class="info-icon">⚡</div><h3>Veloz</h3><p>Conversión instantánea en la nube</p></div>
-      <div class="info-card"><div class="info-icon">🎵</div><h3>Cristalino</h3><p>Audio optimizado hasta 320kbps</p></div>
+      <div class="info-card"><div class="info-icon">🛡️</div><h3>Sin Rastro</h3><p>Ejecución 100% local en tu máquina</p></div>
+      <div class="info-card"><div class="info-icon">⚡</div><h3>Veloz</h3><p>Conversión directa con yt-dlp + ffmpeg</p></div>
+      <div class="info-card"><div class="info-icon">🎬</div><h3>Audio & Vídeo</h3><p>MP3 hasta 320kbps · MP4 hasta 4K</p></div>
     </section>
 
-    <footer class="footer"><p>TubeGrab — Audio anónimo para uso personal.</p></footer>
+    <footer class="footer"><p>TubeGrab — Descargas privadas para uso personal.</p></footer>
   </div>
   <script src="app.js"></script>
 </body>

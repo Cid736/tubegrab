@@ -129,59 +129,114 @@ app.get('/api/stream', async (req, res) => {
 
   console.log(`[STREAM] Iniciando descarga: ${filename} (${mode})`);
 
+  const cookiesPath = path.join(__dirname, 'cookies.txt');
+  const hasCookies = fs.existsSync(cookiesPath);
+
+  // ── AUDIO MODE: pipe directly to response (no merge needed) ──
+  if (mode === 'audio') {
+    let args = [
+      url,
+      '--no-playlist',
+      '--ffmpeg-location', currentFfmpegPath,
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      '--referer', 'https://www.google.com/',
+      '-o', '-',
+      '-x', '--audio-format', 'mp3', '--audio-quality', bitrate || '128'
+    ];
+    if (hasCookies) args.push('--cookies', cookiesPath);
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    try {
+      const ytDlpProcess = ytDlpWrap.execStream(args);
+
+      ytDlpProcess.on('error', (err) => {
+        console.error('[STREAM ERROR]', err);
+        if (!res.headersSent) {
+          res.status(500).send('Error durante el procesamiento del audio');
+        }
+      });
+
+      ytDlpProcess.pipe(res);
+
+      req.on('close', () => {
+        console.log('[STREAM] Cliente desconectado, deteniendo yt-dlp');
+        if (ytDlpProcess.ytDlpProcess) ytDlpProcess.ytDlpProcess.kill();
+      });
+    } catch (err) {
+      console.error('[ERROR] Audio stream failed:', err.message);
+      if (!res.headersSent) res.status(500).send('Error al iniciar la descarga de audio');
+    }
+    return;
+  }
+
+  // ── VIDEO MODE: download to temp file, then send ──
+  // yt-dlp cannot merge bestvideo+bestaudio to stdout, so we write to a temp file first.
+  const tmpDir = os.tmpdir();
+  const tmpId = `tubegrab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const tmpFile = path.join(tmpDir, `${tmpId}.mp4`);
+
+  const h = quality || '1080';
   let args = [
     url,
     '--no-playlist',
     '--ffmpeg-location', currentFfmpegPath,
     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     '--referer', 'https://www.google.com/',
-    '-o', '-' 
+    '-f', `bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}]+bestaudio/best[ext=mp4]/best`,
+    '--merge-output-format', 'mp4',
+    '-o', tmpFile
   ];
+  if (hasCookies) args.push('--cookies', cookiesPath);
 
-  // Si existe un archivo cookies.txt en la raíz, usarlo
-  if (fs.existsSync(path.join(__dirname, 'cookies.txt'))) {
-    args.push('--cookies', path.join(__dirname, 'cookies.txt'));
-  }
+  console.log(`[VIDEO] Descargando a archivo temporal: ${tmpFile}`);
 
-  if (mode === 'audio') {
-    args.push('-x', '--audio-format', 'mp3', '--audio-quality', bitrate || '128');
-    res.setHeader('Content-Type', 'audio/mpeg');
-  } else {
-    // For video, we try to get the requested quality
-    // 'bestvideo[height<=?1080]+bestaudio/best'
-    const h = quality || '1080';
-    args.push('-f', `bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`);
-    res.setHeader('Content-Type', 'video/mp4');
-  }
-
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  let clientDisconnected = false;
+  req.on('close', () => { clientDisconnected = true; });
 
   try {
-    const ytDlpProcess = ytDlpWrap.execStream(args);
-    
-    ytDlpProcess.on('error', (err) => {
-      console.error('[STREAM ERROR]', err);
-      if (!res.headersSent) {
-        res.status(500).send('Error durante el procesamiento del video');
-      }
+    // Use exec instead of execStream so yt-dlp can write to a file
+    await ytDlpWrap.execPromise(args);
+
+    if (clientDisconnected) {
+      console.log('[VIDEO] Cliente desconectó durante la descarga, limpiando temp...');
+      fs.unlink(tmpFile, () => {});
+      return;
+    }
+
+    if (!fs.existsSync(tmpFile)) {
+      console.error('[VIDEO] Archivo temporal no encontrado tras descarga');
+      if (!res.headersSent) res.status(500).send('Error: el archivo de vídeo no se generó');
+      return;
+    }
+
+    const stat = fs.statSync(tmpFile);
+    console.log(`[VIDEO] Descarga completada (${(stat.size / 1024 / 1024).toFixed(1)} MB). Enviando al cliente...`);
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', stat.size);
+
+    const fileStream = fs.createReadStream(tmpFile);
+    fileStream.pipe(res);
+
+    fileStream.on('end', () => {
+      console.log('[VIDEO] Envío completado, eliminando temporal...');
+      fs.unlink(tmpFile, (err) => { if (err) console.warn('[CLEANUP]', err.message); });
     });
 
-    // Pipe the stdout of yt-dlp to the express response
-    ytDlpProcess.pipe(res);
-
-    // Handle client disconnect
-    req.on('close', () => {
-      console.log('[STREAM] Cliente desconectado, deteniendo yt-dlp');
-      // ytDlpProcess is a Readable stream wrapping the process
-      if (ytDlpProcess.ytDlpProcess) {
-        ytDlpProcess.ytDlpProcess.kill();
-      }
+    fileStream.on('error', (err) => {
+      console.error('[VIDEO FILE ERROR]', err.message);
+      fs.unlink(tmpFile, () => {});
+      if (!res.headersSent) res.status(500).send('Error al leer archivo de vídeo');
     });
 
   } catch (err) {
-    console.error('[ERROR] Stream failed:', err.message);
+    console.error('[ERROR] Video download failed:', err.message);
+    fs.unlink(tmpFile, () => {}); // cleanup on failure
     if (!res.headersSent) {
-      res.status(500).send('Error al iniciar la descarga');
+      res.status(500).send('Error al descargar el vídeo. Intenta con una calidad menor.');
     }
   }
 });

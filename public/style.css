@@ -136,6 +136,45 @@ body {
 .btn-clear.visible { opacity: 1; visibility: visible; }
 .btn-clear:hover { background: rgba(255,255,255,0.05); color: var(--text); }
 
+/* ===== FORMAT TOGGLE ===== */
+.format-toggle-section {
+  display: flex; justify-content: center;
+  margin-bottom: 28px;
+}
+.format-toggle {
+  position: relative; display: flex;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 14px; padding: 4px;
+  gap: 0;
+}
+.format-btn {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none;
+  color: var(--text-muted); font-family: inherit;
+  font-size: 0.95rem; font-weight: 700;
+  padding: 12px 32px; cursor: pointer;
+  border-radius: 10px; transition: color 0.3s;
+  width: 50%;
+  justify-content: center;
+}
+.format-btn svg { transition: color 0.3s; }
+.format-btn.active { color: #fff; }
+.format-btn:not(.active):hover { color: var(--text-dim); }
+.toggle-slider {
+  position: absolute; top: 4px; left: 4px;
+  width: calc(50% - 4px); height: calc(100% - 8px);
+  background: linear-gradient(135deg, var(--accent), #6d28d9);
+  border-radius: 10px;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+  z-index: 1;
+}
+
+/* ===== UTILITY ===== */
+.hidden { display: none !important; }
+
 /* ===== OPTIONS ===== */
 .format-section { margin-bottom: 32px; }
 .option-label {

@@ -42,5 +42,8 @@ app.on('window-all-closed', function () {
 });
 
 app.on('activate', function () {
-  if (mainWindow === null) createWindow();
+  // Only create a new window if all windows are closed
+  if (require('electron').BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
 });
