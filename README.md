@@ -1,3 +1,76 @@
+<p align="center">
+  <a href="#english">🇬🇧 English</a> &nbsp;·&nbsp; <a href="#español">🇪🇸 Español</a>
+</p>
+
+---
+
+<a name="english"></a>
+
+# TubeGrab
+
+Local YouTube video and audio downloader. Runs entirely on your machine — no external servers, no trackers, full privacy.
+
+## Features
+
+- Download in **MP4** (up to 1080p) or **MP3** (64–320 kbps)
+- Video quality and audio bitrate selection
+- 100% local processing using [yt-dlp](https://github.com/yt-dlp/yt-dlp) + ffmpeg
+- Cookie support for age-restricted videos
+- Available as a portable Windows app (no installation) or via Docker
+
+## Usage
+
+### 1. Node.js (development)
+
+```bash
+npm install
+npm start
+# Open http://localhost:3000
+```
+
+### 2. Portable Windows (no installation)
+
+Run `TubeGrab.exe` from the `dist/TubeGrab/` folder — opens the browser automatically.
+
+### 3. Docker
+
+```bash
+docker compose up
+# Open http://localhost:3000
+```
+
+## Structure
+
+```
+├── server.js          # Express server + yt-dlp logic
+├── electron-main.js   # Electron entry point (optional)
+├── public/
+│   ├── index.html
+│   ├── app.js
+│   └── style.css
+├── Dockerfile
+└── docker-compose.yml
+```
+
+## Cookies (optional)
+
+For restricted videos, place a `cookies.txt` file (Netscape format) in the project root next to `server.js`.
+
+## Dependencies
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- [ffmpeg-static](https://www.npmjs.com/package/ffmpeg-static)
+- [Express](https://expressjs.com/)
+- [yt-dlp-wrap-extended](https://www.npmjs.com/package/yt-dlp-wrap-extended)
+
+## License
+
+MIT
+
+---
+
+<a name="español"></a>
+
 # TubeGrab
 
 Descargador local de videos y audio de YouTube. Funciona completamente en tu máquina — sin servidores externos, sin trackers, con privacidad total.
@@ -31,32 +104,9 @@ docker compose up
 # Abre http://localhost:3000
 ```
 
-## Estructura
-
-```
-AA/
-├── server.js          # Servidor Express + lógica yt-dlp
-├── electron-main.js   # Entrada Electron (opcional)
-├── build-launcher.cs  # Launcher C# para distribución portable
-├── build-portable.js  # Script para construir la versión portable
-├── public/
-│   ├── index.html
-│   ├── app.js
-│   └── style.css
-├── Dockerfile
-└── docker-compose.yml
-```
-
 ## Cookies (opcional)
 
 Para videos con restricciones, coloca un archivo `cookies.txt` (formato Netscape) en la raíz del proyecto junto a `server.js`.
-
-## Dependencias
-
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-- [ffmpeg-static](https://www.npmjs.com/package/ffmpeg-static)
-- [Express](https://expressjs.com/)
-- [yt-dlp-wrap-extended](https://www.npmjs.com/package/yt-dlp-wrap-extended)
 
 ## Licencia
 
