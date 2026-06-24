@@ -60,4 +60,6 @@ Para videos con restricciones, coloca un archivo `cookies.txt` (formato Netscape
 
 ## Licencia
 
-ISC
+© 2026 Cid736. Todos los derechos reservados.
+
+Este proyecto está bajo la licencia **ISC** — puedes usar, copiar, modificar y distribuir el código libremente siempre que mantengas este aviso de copyright.
