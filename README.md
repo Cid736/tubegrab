@@ -60,4 +60,4 @@ Para videos con restricciones, coloca un archivo `cookies.txt` (formato Netscape
 
 ## Licencia
 
-ISC
+MIT
