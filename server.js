@@ -149,6 +149,7 @@ app.get('/api/stream', async (req, res) => {
   if (!url) return res.status(400).send('URL missing');
   const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\/.+/i;
   if (!ytRegex.test(url)) return res.status(400).send('Invalid URL');
+  if (!['audio', 'video'].includes(mode)) return res.status(400).send('Invalid mode');
 
   console.log(`[STREAM] Iniciando descarga: ${filename} (${mode})`);
 
