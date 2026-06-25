@@ -65,12 +65,27 @@ if (isPkg) {
 
 const ytDlpWrap = new YTDlpWrap(ytDlpPath);
 
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+
+app.use(helmet());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+const _apiLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please wait a minute.' }
+});
+app.use('/api/', _apiLimiter);
 
 // Main API endpoint to verify URL and get metadata
 app.post('/api/download', async (req, res) => {
   const { url, mode, quality, audioBitrate } = req.body;
+  if (!['audio', 'video'].includes(mode))
+    return res.status(400).json({ error: 'Invalid mode. Use audio or video.' });
 
   if (!url) {
     return res.status(400).json({ error: 'URL es requerida' });
@@ -254,8 +269,11 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🎵 TubeGrab Pro (yt-dlp) corriendo en http://localhost:${PORT}`);
   console.log(`🔒 Máxima seguridad: Ejecución local, IP protegida por tu propia conexión.\n`);
   
-  // Abrir el navegador automáticamente (compatible con pkg)
-  execFile('cmd', ['/c', 'start', `http://localhost:${PORT}`]);
+  if (isWindows && !isPkg) {
+    execFile('cmd', ['/c', 'start', `http://localhost:${PORT}`], (err) => {
+      if (err) console.warn('[WARN] Could not open browser:', err.message);
+    });
+  }
 });
 
 server.on('error', (err) => {
