@@ -69,7 +69,9 @@ MIT
 
 ## Security
 
-Automated security reviews are powered by [Claude](https://claude.ai) (Anthropic AI) and run on every significant change to detect vulnerabilities, insecure patterns and dependency risks. Findings are tracked in `BUGLOG.md`.
+Automated security reviews are powered by [Claude](https://claude.ai) (Anthropic AI) and run on every significant change to detect vulnerabilities, insecure patterns and dependency risks. Findings are tracked in [`BUGLOG.md`](BUGLOG.md).
+
+**Last review:** 2026-06-25 — 5 issues found (2 high, 1 medium, 2 low) — all patched.
 
 Found a vulnerability? Open an issue or contact directly.
 
@@ -116,7 +118,9 @@ Para videos con restricciones, coloca un archivo `cookies.txt` (formato Netscape
 
 ## Seguridad
 
-Las revisiones de seguridad automatizadas utilizan [Claude](https://claude.ai) (Anthropic AI) y se ejecutan en cada cambio significativo para detectar vulnerabilidades, patrones inseguros y riesgos en dependencias. Los hallazgos se registran en `BUGLOG.md`.
+Las revisiones de seguridad automatizadas utilizan [Claude](https://claude.ai) (Anthropic AI) y se ejecutan en cada cambio significativo para detectar vulnerabilidades, patrones inseguros y riesgos en dependencias. Los hallazgos se registran en [`BUGLOG.md`](BUGLOG.md).
+
+**Última revisión:** 2026-06-25 — 5 vulnerabilidades encontradas (2 altas, 1 media, 2 bajas) — todas parcheadas.
 
 ¿Encontraste una vulnerabilidad? Abre un issue o contacta directamente.
 ## Licencia
