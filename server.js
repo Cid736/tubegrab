@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const YTDlpWrap = require('yt-dlp-wrap-extended').default;
 const ffmpegPath = require('ffmpeg-static');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 
@@ -146,7 +146,7 @@ app.get('/api/stream', async (req, res) => {
     if (hasCookies) args.push('--cookies', cookiesPath);
 
     res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
 
     try {
       const ytDlpProcess = ytDlpWrap.execStream(args);
@@ -215,7 +215,7 @@ app.get('/api/stream', async (req, res) => {
     console.log(`[VIDEO] Descarga completada (${(stat.size / 1024 / 1024).toFixed(1)} MB). Enviando al cliente...`);
 
     res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.setHeader('Content-Length', stat.size);
 
     const fileStream = fs.createReadStream(tmpFile);
@@ -241,23 +241,13 @@ app.get('/api/stream', async (req, res) => {
   }
 });
 
-// Proxy-download is now redundant but we'll keep it as a wrapper for /api/stream if needed 
-// or just point the frontend directly to /api/stream
-app.get('/api/proxy-download', (req, res) => {
-  const { url } = req.query;
-  // If it's already a relative /api/stream URL, redirect to it
-  if (url && url.startsWith('/api/stream')) {
-    return res.redirect(url);
-  }
-  res.status(404).send('Not found');
-});
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🎵 TubeGrab Pro (yt-dlp) corriendo en http://localhost:${PORT}`);
   console.log(`🔒 Máxima seguridad: Ejecución local, IP protegida por tu propia conexión.\n`);
   
   // Abrir el navegador automáticamente (compatible con pkg)
-  exec(`cmd /c start http://localhost:${PORT}`);
+  execFile('cmd', ['/c', 'start', `http://localhost:${PORT}`]);
 });
 
 server.on('error', (err) => {
