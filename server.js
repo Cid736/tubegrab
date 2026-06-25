@@ -123,9 +123,13 @@ app.post('/api/download', async (req, res) => {
 
 // Streaming endpoint
 app.get('/api/stream', async (req, res) => {
-  const { url, mode, quality, bitrate, filename } = req.query;
+  const { url, mode, quality, bitrate } = req.query;
+  const rawFilename = req.query.filename || '';
+  const filename = rawFilename.replace(/[^\w\s.\-]/gi, '').trim() || 'download';
 
   if (!url) return res.status(400).send('URL missing');
+  const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\/.+/i;
+  if (!ytRegex.test(url)) return res.status(400).send('Invalid URL');
 
   console.log(`[STREAM] Iniciando descarga: ${filename} (${mode})`);
 

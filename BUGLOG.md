@@ -1,15 +1,24 @@
 # Bug Log — TubeGrab (AA)
 
-## 2026-06-25
+## 2026-06-25 — Revisión 1
 
 ### [HIGH] exec() con interpolación de string — inyección de shell
-- **Archivo:** `server.js`
-- **Fix:** Reemplazado `exec(\`cmd /c start...\`)` por `execFile('cmd', ['/c', 'start', url])` para evitar inyección si PORT contiene metacaracteres.
+- **Fix:** Reemplazado `exec()` por `execFile()`.
 
 ### [HIGH] Open redirect en `/api/proxy-download`
-- **Archivo:** `server.js`
-- **Fix:** Eliminado el endpoint `/api/proxy-download` (era redundante; el frontend ya llama directamente a `/api/stream`).
+- **Fix:** Eliminado el endpoint.
 
-### [MEDIUM] Filename sin codificar en cabecera `Content-Disposition`
+### [MEDIUM] Filename sin codificar en `Content-Disposition`
+- **Fix:** Cambiado a `filename*=UTF-8''<encoded>` (RFC 5987).
+
+---
+
+## 2026-06-25 — Revisión 2
+
+### [LOW] `/api/stream` no validaba la URL de YouTube
 - **Archivo:** `server.js`
-- **Fix:** Cambiado `filename="..."` por `filename*=UTF-8''<encoded>` siguiendo RFC 5987 en ambos modos audio y video.
+- **Fix:** Añadida la misma validación `ytRegex` que en `/api/download` antes de pasar la URL a yt-dlp.
+
+### [LOW] `filename` del query string sin sanitizar en `/api/stream`
+- **Archivo:** `server.js`
+- **Fix:** El filename del query string se limpia con regex antes de usarse en el header.
