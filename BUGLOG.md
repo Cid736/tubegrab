@@ -22,3 +22,11 @@
 ### [LOW] `filename` del query string sin sanitizar en `/api/stream`
 - **Archivo:** `server.js`
 - **Fix:** El filename del query string se limpia con regex antes de usarse en el header.
+
+---
+
+## 2026-06-25 — Revisión 3
+
+### [LOW] `bitrate` y `quality` pasados a yt-dlp sin validación
+- **Archivo:** `server.js` líneas 148, 191
+- **Fix:** Allowlist explícita: `quality` en `['360','480','720','1080','1440','2160']`, `bitrate` en `['64','96','128','192','256','320']`. Valores fuera del set se ignoran y se usa el por defecto (`1080` / `128`).

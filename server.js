@@ -123,7 +123,11 @@ app.post('/api/download', async (req, res) => {
 
 // Streaming endpoint
 app.get('/api/stream', async (req, res) => {
-  const { url, mode, quality, bitrate } = req.query;
+  const VALID_QUALITIES = ['360', '480', '720', '1080', '1440', '2160'];
+  const VALID_BITRATES  = ['64', '96', '128', '192', '256', '320'];
+  const { url, mode } = req.query;
+  const quality = VALID_QUALITIES.includes(req.query.quality) ? req.query.quality : '1080';
+  const bitrate = VALID_BITRATES.includes(req.query.bitrate)   ? req.query.bitrate  : '128';
   const rawFilename = req.query.filename || '';
   const filename = rawFilename.replace(/[^\w\s.\-]/gi, '').trim() || 'download';
 

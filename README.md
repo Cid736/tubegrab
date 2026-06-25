@@ -120,7 +120,7 @@ Para videos con restricciones, coloca un archivo `cookies.txt` (formato Netscape
 
 Las revisiones de seguridad automatizadas utilizan [Claude](https://claude.ai) (Anthropic AI) y se ejecutan en cada cambio significativo para detectar vulnerabilidades, patrones inseguros y riesgos en dependencias. Los hallazgos se registran en [`BUGLOG.md`](BUGLOG.md).
 
-**Última revisión:** 2026-06-25 — 5 vulnerabilidades encontradas (2 altas, 1 media, 2 bajas) — todas parcheadas.
+**Última revisión:** 2026-06-25 (rev 3) — 6 vulnerabilidades totales (2 altas, 1 media, 3 bajas) — todas parcheadas. Revisión 3: `bitrate`/`quality` de yt-dlp ahora validados contra allowlist.
 
 ¿Encontraste una vulnerabilidad? Abre un issue o contacta directamente.
 ## Licencia
