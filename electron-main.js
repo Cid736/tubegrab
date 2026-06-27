@@ -1,9 +1,31 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
+const http = require('http');
 
 let mainWindow;
 let serverProcess;
+
+/** Poll http://localhost:PORT until it responds or maxAttempts is exceeded */
+function waitForServer(port, maxAttempts, interval, callback) {
+  let attempts = 0;
+  const check = () => {
+    attempts++;
+    const req = http.get(`http://127.0.0.1:${port}`, (res) => {
+      res.resume();
+      callback(null);
+    });
+    req.on('error', () => {
+      if (attempts >= maxAttempts) {
+        callback(new Error(`Server did not start after ${maxAttempts} attempts`));
+      } else {
+        setTimeout(check, interval);
+      }
+    });
+    req.setTimeout(interval, () => { req.destroy(); });
+  };
+  check();
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -23,10 +45,14 @@ function createWindow() {
     env: { ...process.env, NODE_ENV: 'production' }
   });
 
-  // Wait a bit for the server to start, then load the URL
-  setTimeout(() => {
-    mainWindow.loadURL('http://localhost:3000');
-  }, 1500);
+  // Wait for the server to be ready before loading the URL (avoids race condition)
+  const PORT = process.env.PORT || 3000;
+  waitForServer(PORT, 30, 200, (err) => {
+    if (err) {
+      console.error('[Electron] Server failed to start:', err.message);
+    }
+    if (mainWindow) mainWindow.loadURL(`http://localhost:${PORT}`);
+  });
 
   mainWindow.on('closed', function () {
     mainWindow = null;

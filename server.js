@@ -266,9 +266,9 @@ app.get('/api/stream', async (req, res) => {
 });
 
 
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`\n🎵 TubeGrab Pro (yt-dlp) corriendo en http://localhost:${PORT}`);
-  console.log(`🔒 Máxima seguridad: Ejecución local, IP protegida por tu propia conexión.\n`);
+  console.log(`🔒 Máxima seguridad: Ejecución local, solo accesible desde esta máquina.\n`);
   
   if (isWindows && !isPkg) {
     execFile('cmd', ['/c', 'start', `http://localhost:${PORT}`], (err) => {
