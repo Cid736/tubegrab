@@ -8,19 +8,29 @@
 
 # TubeGrab
 
-Local YouTube video/audio downloader **and** audio/video format converter. Runs entirely on your machine — no external servers, no trackers, full privacy. Also downloadable as a self-contained desktop app, and deployable to your own server if you want it reachable outside your machine.
+Local video/audio downloader **and** format converter with a job queue. Runs entirely on your machine — no external servers, no trackers. Available as a self-updating Windows desktop app, and deployable to your own server.
 
 ## Features
 
-- **Download from YouTube** in MP4 (up to 4K) or MP3/OGG (64–320 kbps), with a live preview (title, thumbnail, duration) before downloading
-- **Convert your own files** (drag-and-drop) to 11 audio formats (MP3, AAC, M4A, OGG, OPUS, WMA, AC3, FLAC, ALAC, WAV, AIFF) or 12 video formats (MP4 H.264, MP4 H.265/HEVC, WEBM, MKV, MOV, AVI, WMV, FLV, MPG, 3GP, OGV, animated GIF). Audio settings: bitrate, sample rate, mono/stereo, loudness normalization; video settings: resolution, quality, frame rate, strip audio; trim start/end for both. Extract the audio track from any video.
-- Local download/conversion history (kept in your browser only)
-- 100% local processing using [yt-dlp](https://github.com/yt-dlp/yt-dlp) + ffmpeg — nothing is uploaded to a third party
-- Cookie support for age-restricted videos
-- Available as:
-  - a **desktop app** for Windows (single `.exe`, no install, no console window), with a built-in updater — it checks GitHub Releases on launch and lets you update in one click, no manual re-download
-  - a **Docker** container
-  - a **web app** you can self-host (e.g. on [Render](https://render.com), free tier)
+**Downloads**
+- YouTube and 20+ sites: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
+- Several links at once (one per line) and **whole playlists**
+- Audio: MP3, M4A, OPUS, OGG, FLAC, WAV or the **original stream without re-encoding** (96–320 kbps)
+- Video: best available up to 4K/8K or a fixed resolution, as MP4, MKV or WEBM
+- Embedded **cover art, metadata and chapters**, embedded **subtitles** (ES/EN), and **SponsorBlock** to cut sponsor segments
+- Live preview (title, thumbnail, duration) for a single link
+
+**Conversion**
+- **Batch**: convert many files in one go
+- 11 audio formats (MP3, AAC, M4A, OGG, OPUS, WMA, AC3, FLAC, ALAC, WAV, AIFF) and 12 video formats (MP4 H.264, MP4 H.265/HEVC, WEBM, MKV, MOV, AVI, WMV, FLV, MPG, 3GP, OGV, animated GIF)
+- **Presets**: WhatsApp, Instagram/TikTok, YouTube, email, iPhone/Apple (HEVC), web, GIF; podcast, audiobook, voice note, lossless…
+- Audio: bitrate, sample rate, mono/stereo, loudness normalization. Video: resolution, quality, frame rate, rotate/mirror, strip audio. Both: speed (0.5×–2×) and trim start/end. Extract the audio from any video.
+
+**Queue & desktop app**
+- Job queue with **real progress**, speed and time left; several downloads run in parallel; cancel any job
+- Desktop app: saves straight to a folder you choose (with "Show in folder" / "Open folder"), taskbar progress, notifications when a job finishes
+- **Self-updating**: the app updates itself from GitHub Releases in one click (SHA-256 verified), and keeps its download engine (yt-dlp) up to date automatically — sites like YouTube break old versions within weeks
+- Local history of finished jobs (stored only on your device)
 
 ## Usage
 
@@ -40,7 +50,6 @@ To build it yourself:
 
 ```bash
 npm run build          # Electron app -> dist/TubeGrab.exe (the real desktop app)
-npm run build:exe      # pkg console build -> dist/TubeGrab.exe (lightweight, shows a terminal)
 ```
 
 Building with `npm run build` needs Windows Developer Mode enabled (Settings → Privacy & security → For developers) so electron-builder can create symlinks without admin rights.
@@ -61,10 +70,16 @@ The repo includes a `Dockerfile` and `render.yaml`. On Render: create a Web Serv
 ## Structure
 
 ```
-├── server.js              # Express server: YouTube download, format conversion, metadata preview
-├── electron-main.js       # Desktop app entry point (Electron)
+├── server.js              # Express server: job API (SSE progress), metadata preview, security guards
+├── lib/
+│   ├── jobs.js            # Job queue: concurrency, progress, cancel, cleanup
+│   ├── download.js        # yt-dlp: site allowlist, options, progress parsing, playlists
+│   └── convert.js         # ffmpeg: formats, presets' settings, progress parsing
+├── electron-main.js       # Desktop app: window, app updater, yt-dlp auto-update, save-to-folder
+├── preload.js             # Minimal bridge exposed to the page (updater + desktop features)
 ├── scripts/
-│   └── postinstall.js     # Fetches a Linux yt-dlp binary on non-Windows npm installs
+│   ├── postinstall.js     # Linux: fetches yt-dlp · Windows: runs fetch-ffprobe.js
+│   └── fetch-ffprobe.js   # Windows: ffprobe next to ffmpeg (SHA-256 pinned)
 ├── public/
 │   ├── index.html
 │   ├── app.js
@@ -84,8 +99,8 @@ For restricted videos, place a `cookies.txt` file (Netscape format) in the proje
 - [ffmpeg-static](https://www.npmjs.com/package/ffmpeg-static)
 - [Express](https://expressjs.com/) + [helmet](https://www.npmjs.com/package/helmet) + [express-rate-limit](https://www.npmjs.com/package/express-rate-limit)
 - [multer](https://www.npmjs.com/package/multer) (file uploads for the converter)
-- [yt-dlp-wrap-extended](https://www.npmjs.com/package/yt-dlp-wrap-extended)
-- [Electron](https://www.electronjs.org/) (desktop app only)
+- [Electron](https://www.electronjs.org/) 44 (desktop app only)
+- Node.js 22+ (its permission model sandboxes the JavaScript yt-dlp runs to solve YouTube's challenges)
 
 ## License
 
@@ -95,7 +110,7 @@ MIT
 
 Security reviews are AI-assisted (Claude, Anthropic) and run on significant changes to check for injection risks, insecure defaults and dependency vulnerabilities. Findings are tracked in [`BUGLOG.md`](BUGLOG.md).
 
-**Last review:** 2026-09-27 (review #6) — covered the new in-app updater and the local server. Fixed: the updater now verifies each download's sha256 against GitHub's published digest and only talks to GitHub over HTTPS; the install script no longer interpolates file paths (command-injection fix); the app window can't navigate away from its own local UI, and updater IPC only accepts calls from it; the local server rejects DNS-rebinding and cross-site requests. Known limits: the `.exe` isn't code-signed, so a compromised GitHub account could still ship a malicious update, and Electron 34 should be upgraded. Details in `BUGLOG.md`.
+**Last review:** 2026-09-27 (review #7, v2.0.0) — covered the new job API, multi-site downloads and the desktop features. 0 known vulnerabilities in dependencies (`npm audit`); Electron upgraded 34 → 44; unused and unmaintained packages removed. Downloads only accept an allowlist of sites (yt-dlp's generic extractor is disabled, so no SSRF), yt-dlp ignores local config files, and the JavaScript it runs for YouTube is sandboxed by Node's permission model (verified). Uploaded files can only be opened by real media demuxers without network access (blocks the HLS/concat "fake video" file-read trick). Jobs are private to the browser/app that created them. Known limits: the `.exe` isn't code-signed. Details in `BUGLOG.md`.
 
 Found a vulnerability? Open an issue or contact directly.
 
@@ -105,19 +120,29 @@ Found a vulnerability? Open an issue or contact directly.
 
 # TubeGrab
 
-Descargador local de vídeo/audio de YouTube **y** conversor de formatos de audio/vídeo. Funciona completamente en tu máquina — sin servidores externos, sin trackers, con privacidad total. También disponible como app de escritorio autónoma, y desplegable en tu propio servidor si quieres tenerlo accesible fuera de tu máquina.
+Descargador de vídeo/audio **y** conversor de formatos con cola de trabajos. Funciona completamente en tu equipo — sin servidores externos, sin trackers. Disponible como app de escritorio para Windows que se actualiza sola, y desplegable en tu propio servidor.
 
 ## Características
 
-- **Descarga de YouTube** en MP4 (hasta 4K) o MP3/OGG (64–320 kbps), con vista previa (título, miniatura, duración) antes de descargar
-- **Convierte tus propios archivos** (arrastrando y soltando) a 11 formatos de audio (MP3, AAC, M4A, OGG, OPUS, WMA, AC3, FLAC, ALAC, WAV, AIFF) o 12 de vídeo (MP4 H.264, MP4 H.265/HEVC, WEBM, MKV, MOV, AVI, WMV, FLV, MPG, 3GP, OGV, GIF animado). Ajustes de audio: calidad, frecuencia, mono/estéreo y normalizar volumen; de vídeo: resolución, calidad, fotogramas y quitar el audio; recorte de inicio/fin en ambos. Extrae el audio de cualquier vídeo.
-- Historial local de descargas/conversiones (guardado solo en tu navegador)
-- Procesamiento 100% local usando [yt-dlp](https://github.com/yt-dlp/yt-dlp) + ffmpeg — nada se sube a terceros
-- Compatible con cookies para vídeos con restricción de edad
-- Disponible como:
-  - **app de escritorio** para Windows (un único `.exe`, sin instalación, sin ventana de consola), con actualizador integrado — comprueba los Releases de GitHub al abrir y te deja actualizar con un clic, sin descargar el .exe a mano
-  - contenedor **Docker**
-  - **app web** autoalojable (por ejemplo en [Render](https://render.com), plan gratuito)
+**Descargas**
+- YouTube y más de 20 sitios: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
+- Varios enlaces a la vez (uno por línea) y **playlists completas**
+- Audio: MP3, M4A, OPUS, OGG, FLAC, WAV o el **audio original sin recomprimir** (96–320 kbps)
+- Vídeo: la mejor calidad disponible (hasta 4K/8K) o una resolución fija, en MP4, MKV o WEBM
+- **Portada, metadatos y capítulos** incrustados, **subtítulos** incrustados (ES/EN) y **SponsorBlock** para quitar patrocinios
+- Vista previa (título, miniatura, duración) de un enlace
+
+**Conversión**
+- **Por lotes**: convierte muchos archivos de una vez
+- 11 formatos de audio (MP3, AAC, M4A, OGG, OPUS, WMA, AC3, FLAC, ALAC, WAV, AIFF) y 12 de vídeo (MP4 H.264, MP4 H.265/HEVC, WEBM, MKV, MOV, AVI, WMV, FLV, MPG, 3GP, OGV, GIF animado)
+- **Preajustes**: WhatsApp, Instagram/TikTok, YouTube, email, iPhone/Apple (HEVC), web, GIF; podcast, audiolibro, nota de voz, sin pérdida…
+- Audio: calidad, frecuencia, mono/estéreo, normalizar volumen. Vídeo: resolución, calidad, fotogramas, girar/espejo, quitar audio. Ambos: velocidad (0,5×–2×) y recorte de inicio/fin. Extrae el audio de cualquier vídeo.
+
+**Cola y app de escritorio**
+- Cola de trabajos con **progreso real**, velocidad y tiempo restante; varias descargas en paralelo; cancelar cualquier trabajo
+- App de escritorio: guarda directamente en la carpeta que elijas (con "Mostrar en carpeta" / "Abrir carpeta"), progreso en la barra de tareas y notificación al terminar
+- **Se actualiza sola**: la app se actualiza desde GitHub Releases con un clic (verificada por SHA-256) y mantiene al día su motor de descargas (yt-dlp) automáticamente — sitios como YouTube rompen las versiones antiguas en semanas
+- Historial local de trabajos terminados (solo en tu equipo)
 
 ## Modos de uso
 
@@ -137,7 +162,6 @@ Para construirla tú mismo:
 
 ```bash
 npm run build          # App de Electron -> dist/TubeGrab.exe (la app de escritorio real)
-npm run build:exe      # Build de consola con pkg -> dist/TubeGrab.exe (ligero, muestra terminal)
 ```
 
 Para `npm run build` necesitas el Modo Desarrollador de Windows activado (Configuración → Privacidad y seguridad → Para desarrolladores), para que electron-builder pueda crear symlinks sin permisos de administrador.
@@ -163,7 +187,7 @@ Para vídeos con restricciones, coloca un archivo `cookies.txt` (formato Netscap
 
 Las revisiones de seguridad son asistidas por IA (Claude, Anthropic) y se ejecutan en cambios significativos para detectar riesgos de inyección, configuraciones inseguras y vulnerabilidades en dependencias. Los hallazgos se registran en [`BUGLOG.md`](BUGLOG.md).
 
-**Última revisión:** 2026-09-27 (revisión 6) — revisados el nuevo actualizador integrado y el servidor local. Corregido: el actualizador verifica ahora el sha256 de cada descarga contra el digest publicado por GitHub y solo se conecta a GitHub por HTTPS; el script de instalación ya no interpola rutas (fix de inyección de comandos); la ventana de la app no puede navegar fuera de su propia interfaz local y el IPC del actualizador solo acepta llamadas de ella; el servidor local rechaza DNS rebinding y peticiones cross-site. Límites conocidos: el `.exe` no está firmado, así que una cuenta de GitHub comprometida aún podría publicar una actualización maliciosa, y conviene actualizar Electron 34. Detalles en `BUGLOG.md`.
+**Última revisión:** 2026-09-27 (revisión 7, v2.0.0) — cubre la nueva API de trabajos, las descargas de varios sitios y las funciones de escritorio. 0 vulnerabilidades conocidas en dependencias (npm audit); Electron actualizado de 34 a 44; eliminados paquetes sin uso o sin mantenimiento. Las descargas solo aceptan una lista de sitios permitidos (el extractor genérico de yt-dlp está desactivado, así que no hay SSRF), yt-dlp ignora archivos de configuración locales, y el JavaScript que ejecuta para YouTube queda aislado por el modelo de permisos de Node (verificado). Los archivos subidos solo los pueden abrir demuxers multimedia reales y sin acceso a red (bloquea el truco del "vídeo falso" HLS/concat para leer archivos). Los trabajos son privados del navegador o app que los creó. Límite conocido: el .exe no está firmado. Detalles en BUGLOG.md.
 
 ¿Encontraste una vulnerabilidad? Abre un issue o contacta directamente.
 

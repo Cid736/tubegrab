@@ -1,41 +1,71 @@
-// === DOM Elements ===
-const urlInput = document.getElementById('urlInput');
-const btnClear = document.getElementById('btnClear');
-const audioBitrate = document.getElementById('audioBitrate');
-const audioFormat = document.getElementById('audioFormat');
-const videoQuality = document.getElementById('videoQuality');
-const btnDownload = document.getElementById('btnDownload');
-const btnText = document.getElementById('btnText');
-const statusMessage = document.getElementById('statusMessage');
-const progressBar = document.getElementById('progressBar');
-const progressFill = document.getElementById('progressFill');
-const formatToggle = document.getElementById('formatToggle');
-const btnAudio = document.getElementById('btnAudio');
-const btnVideo = document.getElementById('btnVideo');
-const btnConvert = document.getElementById('btnConvert');
-const audioOptions = document.getElementById('audioOptions');
-const videoOptions = document.getElementById('videoOptions');
-const convertOptions = document.getElementById('convertOptions');
-const convertFormat = document.getElementById('convertFormat');
-const inputGroup = document.getElementById('inputGroup');
-const uploadGroup = document.getElementById('uploadGroup');
-const fileDrop = document.getElementById('fileDrop');
-const fileInput = document.getElementById('fileInput');
-const fileDropText = document.getElementById('fileDropText');
-const previewCard = document.getElementById('previewCard');
-const previewThumb = document.getElementById('previewThumb');
-const previewTitle = document.getElementById('previewTitle');
-const previewMeta = document.getElementById('previewMeta');
-const convertKindToggle = document.getElementById('convertKindToggle');
-const historySection = document.getElementById('historySection');
-const historyList = document.getElementById('historyList');
-const btnClearHistory = document.getElementById('btnClearHistory');
-const btnDesktopDownload = document.getElementById('btnDesktopDownload');
+// === DOM ===
+const $ = (id) => document.getElementById(id);
+const urlInput = $('urlInput');
+const btnClear = $('btnClear');
+const urlHint = $('urlHint');
+const audioFormat = $('audioFormat');
+const audioBitrate = $('audioBitrate');
+const videoQuality = $('videoQuality');
+const videoContainer = $('videoContainer');
+const optMetadata = $('optMetadata');
+const optPlaylist = $('optPlaylist');
+const optSubtitles = $('optSubtitles');
+const optSubtitlesWrap = $('optSubtitlesWrap');
+const optSponsorblock = $('optSponsorblock');
+const btnDownload = $('btnDownload');
+const btnText = $('btnText');
+const btnLoadingText = $('btnLoadingText');
+const statusMessage = $('statusMessage');
+const formatToggle = $('formatToggle');
+const audioOptions = $('audioOptions');
+const videoOptions = $('videoOptions');
+const downloadExtras = $('downloadExtras');
+const convertOptions = $('convertOptions');
+const convertFormat = $('convertFormat');
+const convertPreset = $('convertPreset');
+const inputGroup = $('inputGroup');
+const uploadGroup = $('uploadGroup');
+const fileDrop = $('fileDrop');
+const fileInput = $('fileInput');
+const fileDropText = $('fileDropText');
+const fileList = $('fileList');
+const previewCard = $('previewCard');
+const previewThumb = $('previewThumb');
+const previewTitle = $('previewTitle');
+const previewMeta = $('previewMeta');
+const convertKindToggle = $('convertKindToggle');
+const audioConvertSettings = $('audioConvertSettings');
+const videoConvertSettings = $('videoConvertSettings');
+const convertBitrate = $('convertBitrate');
+const convertSampleRate = $('convertSampleRate');
+const convertChannels = $('convertChannels');
+const convertNormalize = $('convertNormalize');
+const convertResolution = $('convertResolution');
+const convertQuality = $('convertQuality');
+const convertQualitySetting = $('convertQualitySetting');
+const convertFps = $('convertFps');
+const convertRotate = $('convertRotate');
+const convertRemoveAudio = $('convertRemoveAudio');
+const convertRemoveAudioOption = $('convertRemoveAudioOption');
+const convertSpeed = $('convertSpeed');
+const convertTrimStart = $('convertTrimStart');
+const convertTrimEnd = $('convertTrimEnd');
+const convertHint = $('convertHint');
+const queueList = $('queueList');
+const queueEmpty = $('queueEmpty');
+const queueCount = $('queueCount');
+const btnClearFinished = $('btnClearFinished');
+const historySection = $('historySection');
+const historyList = $('historyList');
+const btnClearHistory = $('btnClearHistory');
+const btnDesktopDownload = $('btnDesktopDownload');
 
-let currentMode = 'audio'; // 'audio', 'video' or 'convert'
-let currentConvertKind = 'audio'; // 'audio' or 'video'
-let selectedFile = null;
+let currentMode = 'audio'; // 'audio' | 'video' | 'convert'
+let currentConvertKind = 'audio';
+let selectedFiles = [];
+let busy = false;
 
+// === Formats & presets ===
 // `ext` is the downloaded file's extension (ALAC and HEVC reuse m4a/mp4).
 const CONVERT_FORMAT_OPTIONS = {
   audio: [
@@ -67,16 +97,62 @@ const CONVERT_FORMAT_OPTIONS = {
   ],
 };
 
-function currentConvertOption() {
-  return CONVERT_FORMAT_OPTIONS[currentConvertKind].find((opt) => opt.value === convertFormat.value)
-    || CONVERT_FORMAT_OPTIONS[currentConvertKind][0];
+const PRESETS = {
+  audio: [
+    { id: 'custom', label: 'Personalizado' },
+    { id: 'music', label: 'Música — alta calidad', set: { format: 'mp3', bitrate: '320', sampleRate: '44100', channels: '2', normalize: false } },
+    { id: 'apple', label: 'iPhone / Apple Music', set: { format: 'm4a', bitrate: '256', sampleRate: '44100', channels: '2', normalize: false } },
+    { id: 'podcast', label: 'Podcast / voz', set: { format: 'mp3', bitrate: '96', sampleRate: '44100', channels: '1', normalize: true } },
+    { id: 'audiobook', label: 'Audiolibro — ligero', set: { format: 'm4a', bitrate: '64', sampleRate: '', channels: '1', normalize: true } },
+    { id: 'voice', label: 'Nota de voz (OPUS)', set: { format: 'opus', bitrate: '64', sampleRate: '', channels: '1', normalize: true } },
+    { id: 'lossless', label: 'Archivo sin pérdida', set: { format: 'flac', bitrate: '', sampleRate: '', channels: '', normalize: false } },
+  ],
+  video: [
+    { id: 'custom', label: 'Personalizado' },
+    { id: 'whatsapp', label: 'WhatsApp — ligero', set: { format: 'mp4', resolution: '480', quality: 'baja', fps: '30' } },
+    { id: 'social', label: 'Instagram / TikTok', set: { format: 'mp4', resolution: '1080', quality: 'alta', fps: '30' } },
+    { id: 'youtube', label: 'YouTube — máxima calidad', set: { format: 'mp4', resolution: '', quality: 'alta', fps: '' } },
+    { id: 'email', label: 'Email — lo más ligero', set: { format: 'mp4', resolution: '360', quality: 'baja', fps: '24' } },
+    { id: 'iphone', label: 'iPhone / Apple (HEVC)', set: { format: 'hevc', resolution: '1080', quality: 'media', fps: '' } },
+    { id: 'web', label: 'Web (WEBM)', set: { format: 'webm', resolution: '720', quality: 'media', fps: '' } },
+    { id: 'gif', label: 'GIF para redes', set: { format: 'gif', resolution: '360', quality: 'media', fps: '15' } },
+  ],
+};
+
+const AUDIO_DL_LABELS = { best: 'Original', mp3: 'MP3', m4a: 'M4A', opus: 'OPUS', ogg: 'OGG', flac: 'FLAC', wav: 'WAV' };
+const LOSSLESS_DL = new Set(['best', 'flac', 'wav']);
+
+// === Client identity (jobs are private to it) ===
+function randomHex(bytes) {
+  const a = new Uint8Array(bytes);
+  crypto.getRandomValues(a);
+  return [...a].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const CLIENT_ID = (() => {
+  try {
+    let id = localStorage.getItem('tubegrab_client');
+    if (!/^[a-f0-9]{32}$/.test(id || '')) {
+      id = randomHex(16);
+      localStorage.setItem('tubegrab_client', id);
+    }
+    return id;
+  } catch {
+    return randomHex(16);
+  }
+})();
+
+async function api(path, options = {}) {
+  const res = await fetch(path, { ...options, headers: { ...(options.headers || {}), 'x-client-id': CLIENT_ID } });
+  let data = null;
+  try { data = await res.json(); } catch { /* empty body */ }
+  if (!res.ok) throw new Error((data && data.error) || `Error ${res.status}`);
+  return data;
 }
 
-// === Desktop app banner: only makes sense in the browser. Running inside the
-// Electron app itself, you're already using it, so hide the "download it"
-// pitch entirely rather than show a pointless self-referential banner.
+// === Environment ===
 const isElectronApp = navigator.userAgent.toLowerCase().includes('electron');
-const desktopBanner = document.getElementById('desktopBanner');
+const desktopApi = window.desktop || null;
+const desktopBanner = $('desktopBanner');
 if (isElectronApp) {
   desktopBanner.remove();
   document.body.classList.add('is-desktop-app');
@@ -84,18 +160,17 @@ if (isElectronApp) {
   btnDesktopDownload.href = 'https://github.com/Cid736/tubegrab/releases/latest/download/TubeGrab.exe';
 }
 
-// === Auto-updater (desktop app only) ===
-// window.updater is only exposed by preload.js inside Electron; on the plain
-// website this stays undefined and the whole block is skipped.
+// === App updater (desktop app only) ===
+// `desktopApi`, not `desktop`: a top-level const can't shadow the global the
+// preload exposes through contextBridge (it throws and stops the whole script).
 if (window.updater) {
-  const updateBanner = document.getElementById('updateBanner');
-  const updateBannerSubtitle = document.getElementById('updateBannerSubtitle');
-  const btnUpdate = document.getElementById('btnUpdate');
-  const updateProgress = document.getElementById('updateProgress');
-  const updateProgressFill = document.getElementById('updateProgressFill');
-  const updateProgressLabel = document.getElementById('updateProgressLabel');
-
-  const versionChip = document.getElementById('versionChip');
+  const updateBanner = $('updateBanner');
+  const updateBannerSubtitle = $('updateBannerSubtitle');
+  const btnUpdate = $('btnUpdate');
+  const updateProgress = $('updateProgress');
+  const updateProgressFill = $('updateProgressFill');
+  const updateProgressLabel = $('updateProgressLabel');
+  const versionChip = $('versionChip');
   const STATUS_LABELS = {
     checking: 'Buscando actualizaciones…',
     'up-to-date': 'Última versión',
@@ -103,38 +178,32 @@ if (window.updater) {
     dev: 'Modo desarrollo',
   };
 
-  function renderUpdateState(state) {
+  const renderUpdateState = (state) => {
     if (!state) return;
     const label = state.status === 'available' ? `Nueva: v${state.latest}` : STATUS_LABELS[state.status];
     versionChip.textContent = label ? `v${state.current} · ${label}` : `v${state.current}`;
     versionChip.dataset.status = state.status;
-    versionChip.title = state.status === 'error'
-      ? `${state.error} — pulsa para reintentar`
-      : 'Pulsa para buscar actualizaciones';
+    versionChip.title = state.status === 'error' ? `${state.error} — pulsa para reintentar` : 'Pulsa para buscar actualizaciones';
     versionChip.classList.remove('hidden');
-
     if (state.status === 'available') {
       updateBannerSubtitle.textContent = `Versión ${state.latest} lista para descargar (tienes la ${state.current}).`;
       updateBanner.classList.remove('hidden');
     }
-  }
+  };
 
   window.updater.onState(renderUpdateState);
   window.updater.getState().then(renderUpdateState);
   versionChip.addEventListener('click', () => window.updater.check());
-
   window.updater.onProgress(({ percent }) => {
     updateProgressFill.style.width = `${percent}%`;
     updateProgressLabel.textContent = `${percent}%`;
   });
-
   window.updater.onDownloaded(() => {
     updateProgress.classList.add('hidden');
     btnUpdate.disabled = false;
     btnUpdate.textContent = 'Reiniciar y actualizar';
     btnUpdate.dataset.stage = 'downloaded';
   });
-
   window.updater.onError((message) => {
     updateBannerSubtitle.textContent = `No se pudo actualizar: ${message}`;
     btnUpdate.disabled = false;
@@ -142,12 +211,8 @@ if (window.updater) {
     btnUpdate.dataset.stage = 'available';
     updateProgress.classList.add('hidden');
   });
-
   btnUpdate.addEventListener('click', () => {
-    if (btnUpdate.dataset.stage === 'downloaded') {
-      window.updater.quitAndInstall();
-      return;
-    }
+    if (btnUpdate.dataset.stage === 'downloaded') { window.updater.quitAndInstall(); return; }
     btnUpdate.disabled = true;
     btnUpdate.textContent = 'Descargando...';
     updateProgress.classList.remove('hidden');
@@ -155,65 +220,151 @@ if (window.updater) {
   });
 }
 
-// === Format Toggle ===
+// === Desktop settings (download folder, engine) ===
+if (desktopApi) {
+  $('settingsSection').classList.remove('hidden');
+  const dirLabel = $('downloadDirLabel');
+  const engineLabel = $('engineLabel');
+  const btnUpdateEngine = $('btnUpdateEngine');
+  const showDir = (s) => { if (s) { dirLabel.textContent = s.downloadDir; dirLabel.title = s.downloadDir; } };
+  const showEngine = (s) => {
+    if (!s) return;
+    engineLabel.textContent = s.updating ? 'Comprobando actualizaciones…' : (s.error || (s.version ? `Versión ${s.version}` : '—'));
+    btnUpdateEngine.disabled = Boolean(s.updating);
+  };
+  desktopApi.getSettings().then(showDir);
+  desktopApi.getEngine().then(showEngine);
+  desktopApi.onEngine(showEngine);
+  $('btnChooseFolder').addEventListener('click', async () => showDir(await desktopApi.chooseFolder()));
+  $('btnOpenFolder').addEventListener('click', () => desktopApi.openFolder());
+  btnUpdateEngine.addEventListener('click', () => desktopApi.updateEngine());
+}
+
+// === Mode toggle ===
 formatToggle.addEventListener('click', (e) => {
   const btn = e.target.closest('.format-btn');
   if (!btn || btn.classList.contains('active')) return;
-
-  const mode = btn.dataset.mode;
-  currentMode = mode;
-
-  // Toggle active class
-  document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+  currentMode = btn.dataset.mode;
+  document.querySelectorAll('.format-btn').forEach((b) => b.classList.remove('active'));
   btn.classList.add('active');
-
-  // Move slider
-  const slider = document.getElementById('toggleSlider');
-  const sliderPositions = { audio: '0', video: '100%', convert: '200%' };
-  slider.style.transform = `translateX(${sliderPositions[mode]})`;
-
-  // Toggle URL input vs file upload
-  inputGroup.classList.toggle('hidden', mode === 'convert');
-  uploadGroup.classList.toggle('hidden', mode !== 'convert');
-  if (mode === 'convert') hidePreview();
-
-  // Toggle options visibility
-  audioOptions.classList.toggle('hidden', mode !== 'audio');
-  videoOptions.classList.toggle('hidden', mode !== 'video');
-  convertOptions.classList.toggle('hidden', mode !== 'convert');
-
-  if (mode === 'audio') {
-    btnText.textContent = 'Descargar ' + audioFormat.value.toUpperCase();
-  } else if (mode === 'video') {
-    btnText.textContent = 'Descargar MP4';
-  } else {
-    refreshConvertUI();
-  }
-
+  $('toggleSlider').style.transform = `translateX(${{ audio: '0', video: '100%', convert: '200%' }[currentMode]})`;
+  applyMode();
   clearStatus();
 });
 
+function applyMode() {
+  const isConvert = currentMode === 'convert';
+  inputGroup.classList.toggle('hidden', isConvert);
+  uploadGroup.classList.toggle('hidden', !isConvert);
+  if (isConvert) hidePreview(); else updateUrlState();
+  audioOptions.classList.toggle('hidden', currentMode !== 'audio');
+  videoOptions.classList.toggle('hidden', currentMode !== 'video');
+  downloadExtras.classList.toggle('hidden', isConvert);
+  optSubtitlesWrap.classList.toggle('hidden', currentMode !== 'video');
+  convertOptions.classList.toggle('hidden', !isConvert);
+  refreshButton();
+}
+
+function refreshButton() {
+  if (currentMode === 'convert') {
+    const opt = currentConvertOption();
+    const n = selectedFiles.length;
+    btnText.textContent = n > 1 ? `Convertir ${n} archivos a ${opt.short}` : `Convertir a ${opt.short}`;
+    return;
+  }
+  const n = parseUrls(urlInput.value).length;
+  const what = currentMode === 'audio' ? AUDIO_DL_LABELS[audioFormat.value] : videoContainer.value.toUpperCase();
+  btnText.textContent = n > 1 ? `Descargar ${n} enlaces (${what})` : `Descargar ${what}`;
+}
+
+audioFormat.addEventListener('change', () => {
+  audioBitrate.disabled = LOSSLESS_DL.has(audioFormat.value);
+  refreshButton();
+});
+videoContainer.addEventListener('change', refreshButton);
+
+// === URLs ===
+function parseUrls(text) {
+  return String(text || '').split(/[\s,]+/).map((s) => s.trim()).filter((s) => /^(https?:\/\/)?[\w-]+(\.[\w-]+)+\/?\S*$/i.test(s));
+}
+
+function autoGrow() {
+  urlInput.style.height = 'auto';
+  if (!urlInput.value) return; // keep the single-row height the placeholder fits in
+  urlInput.style.height = `${Math.min(urlInput.scrollHeight, 160)}px`;
+}
+
+let previewDebounce = null;
+let previewRequestId = 0;
+
+function updateUrlState() {
+  const urls = parseUrls(urlInput.value);
+  btnClear.classList.toggle('visible', urlInput.value.length > 0);
+  urlHint.textContent = urls.length > 1
+    ? `${urls.length} enlaces — se añadirán todos a la cola.`
+    : 'YouTube, Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Reddit, Bandcamp…';
+  clearTimeout(previewDebounce);
+  if (urls.length !== 1) { hidePreview(); } else { previewDebounce = setTimeout(() => fetchPreview(urls[0]), 700); }
+  refreshButton();
+}
+
+urlInput.addEventListener('input', () => { autoGrow(); updateUrlState(); });
+urlInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
+});
+btnClear.addEventListener('click', () => {
+  urlInput.value = '';
+  autoGrow();
+  updateUrlState();
+  urlInput.focus();
+  clearStatus();
+});
+
+// Paste from clipboard on focus when empty.
+urlInput.addEventListener('focus', async () => {
+  if (urlInput.value) return;
+  try {
+    const text = (await navigator.clipboard.readText()).trim();
+    if (parseUrls(text).length && text.length < 20000) {
+      urlInput.value = text;
+      autoGrow();
+      updateUrlState();
+      showStatus('Enlace detectado en el portapapeles ✨', 'success');
+    }
+  } catch { /* clipboard permission denied */ }
+});
+
+async function fetchPreview(url) {
+  const requestId = ++previewRequestId;
+  try {
+    const data = await api('/api/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+    if (requestId !== previewRequestId) return;
+    previewThumb.src = data.thumbnail || '';
+    previewThumb.style.visibility = data.thumbnail ? 'visible' : 'hidden';
+    previewTitle.textContent = data.title;
+    previewMeta.textContent = [data.site, data.uploader, formatDuration(data.duration)].filter(Boolean).join(' · ');
+    previewCard.classList.remove('hidden');
+  } catch {
+    if (requestId === previewRequestId) hidePreview();
+  }
+}
+
+function hidePreview() {
+  previewRequestId += 1;
+  previewCard.classList.add('hidden');
+}
+
 // === Convert settings ===
-const audioConvertSettings = document.getElementById('audioConvertSettings');
-const videoConvertSettings = document.getElementById('videoConvertSettings');
-const convertBitrate = document.getElementById('convertBitrate');
-const convertSampleRate = document.getElementById('convertSampleRate');
-const convertChannels = document.getElementById('convertChannels');
-const convertNormalize = document.getElementById('convertNormalize');
-const convertResolution = document.getElementById('convertResolution');
-const convertQuality = document.getElementById('convertQuality');
-const convertQualitySetting = document.getElementById('convertQualitySetting');
-const convertFps = document.getElementById('convertFps');
-const convertRemoveAudio = document.getElementById('convertRemoveAudio');
-const convertRemoveAudioOption = document.getElementById('convertRemoveAudioOption');
-const convertTrimStart = document.getElementById('convertTrimStart');
-const convertTrimEnd = document.getElementById('convertTrimEnd');
-const convertHint = document.getElementById('convertHint');
+function currentConvertOption() {
+  return CONVERT_FORMAT_OPTIONS[currentConvertKind].find((opt) => opt.value === convertFormat.value)
+    || CONVERT_FORMAT_OPTIONS[currentConvertKind][0];
+}
 
 function renderConvertFormats() {
   convertFormat.innerHTML = CONVERT_FORMAT_OPTIONS[currentConvertKind]
-    .map((opt) => `<option value="${opt.value}">${opt.label}</option>`)
-    .join('');
+    .map((opt) => `<option value="${opt.value}">${opt.label}</option>`).join('');
+  convertPreset.innerHTML = PRESETS[currentConvertKind]
+    .map((p) => `<option value="${p.id}">${p.label}</option>`).join('');
 }
 
 function refreshConvertUI() {
@@ -221,399 +372,431 @@ function refreshConvertUI() {
   const isAudio = currentConvertKind === 'audio';
   audioConvertSettings.classList.toggle('hidden', !isAudio);
   videoConvertSettings.classList.toggle('hidden', isAudio);
-
   convertBitrate.disabled = Boolean(opt.lossless);
   if (opt.lossless) convertBitrate.value = '';
   convertQualitySetting.classList.toggle('hidden', Boolean(opt.gif));
   convertRemoveAudioOption.classList.toggle('hidden', Boolean(opt.gif));
 
-  if (opt.lossless) {
-    convertHint.textContent = 'Formato sin pérdida: la calidad en kbps no aplica.';
-  } else if (opt.gif) {
-    convertHint.textContent = 'El GIF no lleva sonido. Sin resolución elegida se limita a 480 px de ancho y 12 fps; recórtalo para que no pese demasiado.';
-  } else if (isAudio) {
-    convertHint.textContent = 'Si eliges un vídeo, se extrae solo su audio.';
-  } else {
-    convertHint.textContent = '';
-  }
-
-  if (currentMode === 'convert') btnText.textContent = 'Convertir a ' + opt.short;
+  if (opt.lossless) convertHint.textContent = 'Formato sin pérdida: la calidad en kbps no aplica.';
+  else if (opt.gif) convertHint.textContent = 'El GIF no lleva sonido. Sin resolución elegida se limita a 480 px de ancho y 12 fps; recórtalo para que no pese demasiado.';
+  else if (isAudio) convertHint.textContent = 'Si eliges un vídeo, se extrae solo su audio.';
+  else convertHint.textContent = '';
+  refreshButton();
 }
 
-convertFormat.addEventListener('change', refreshConvertUI);
+function applyPreset(id) {
+  const preset = PRESETS[currentConvertKind].find((p) => p.id === id);
+  if (!preset || !preset.set) return;
+  const s = preset.set;
+  convertFormat.value = s.format;
+  if (currentConvertKind === 'audio') {
+    convertBitrate.value = s.bitrate;
+    convertSampleRate.value = s.sampleRate;
+    convertChannels.value = s.channels;
+    convertNormalize.checked = s.normalize;
+  } else {
+    convertResolution.value = s.resolution;
+    convertQuality.value = s.quality;
+    convertFps.value = s.fps;
+    convertRotate.value = '';
+    convertRemoveAudio.checked = false;
+  }
+  refreshConvertUI();
+}
 
-// === Convert Kind Toggle (Audio / Vídeo) ===
+convertPreset.addEventListener('change', () => applyPreset(convertPreset.value));
+// Touching any individual setting means it's no longer the preset as-is.
+[convertFormat, convertBitrate, convertSampleRate, convertChannels, convertNormalize, convertResolution, convertQuality, convertFps, convertRotate, convertRemoveAudio]
+  .forEach((el) => el.addEventListener('change', () => { convertPreset.value = 'custom'; refreshConvertUI(); }));
+
 convertKindToggle.addEventListener('click', (e) => {
   const btn = e.target.closest('.kind-btn');
   if (!btn || btn.classList.contains('active')) return;
-
   currentConvertKind = btn.dataset.kind;
-  document.querySelectorAll('.kind-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.kind-btn').forEach((b) => b.classList.remove('active'));
   btn.classList.add('active');
-
   renderConvertFormats();
   refreshConvertUI();
 });
 
-renderConvertFormats();
-refreshConvertUI();
-
-// === File Drop / Selection ===
-fileDrop.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  fileDrop.classList.add('dragover');
-});
+// === Files ===
+fileDrop.addEventListener('dragover', (e) => { e.preventDefault(); fileDrop.classList.add('dragover'); });
 fileDrop.addEventListener('dragleave', () => fileDrop.classList.remove('dragover'));
 fileDrop.addEventListener('drop', (e) => {
   e.preventDefault();
   fileDrop.classList.remove('dragover');
-  if (e.dataTransfer.files.length) {
-    fileInput.files = e.dataTransfer.files;
-    handleFileSelect(e.dataTransfer.files[0]);
-  }
+  if (e.dataTransfer.files.length) setFiles([...e.dataTransfer.files]);
 });
-fileInput.addEventListener('change', () => {
-  if (fileInput.files.length) handleFileSelect(fileInput.files[0]);
-});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) setFiles([...fileInput.files]); });
 
-function handleFileSelect(file) {
-  selectedFile = file;
-  const sizeMb = (file.size / 1024 / 1024).toFixed(1);
-  fileDropText.textContent = `${file.name} (${sizeMb} MB)`;
+function setFiles(files) {
+  selectedFiles = files.slice(0, 50);
+  const total = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+  fileDropText.textContent = selectedFiles.length === 1
+    ? `${selectedFiles[0].name} (${formatBytes(total)})`
+    : `${selectedFiles.length} archivos (${formatBytes(total)}) — haz clic para cambiar`;
+  fileList.innerHTML = selectedFiles.length > 1
+    ? selectedFiles.map((f) => `<li><span>${escapeHtml(f.name)}</span><span>${formatBytes(f.size)}</span></li>`).join('')
+    : '';
+  fileList.classList.toggle('hidden', selectedFiles.length < 2);
   clearStatus();
+  refreshButton();
 }
 
-// === Audio Format Change ===
-audioFormat.addEventListener('change', () => {
-  if (currentMode === 'audio') {
-    btnText.textContent = 'Descargar ' + audioFormat.value.toUpperCase();
-  }
-});
+// === Submit ===
+btnDownload.addEventListener('click', handleSubmit);
 
-// === URL Input Events ===
-let previewDebounce = null;
-let previewRequestId = 0;
-
-urlInput.addEventListener('input', () => {
-  btnClear.classList.toggle('visible', urlInput.value.length > 0);
-
-  clearTimeout(previewDebounce);
-  const url = urlInput.value.trim();
-  if (!isYouTubeUrl(url)) {
-    hidePreview();
-    return;
-  }
-  previewDebounce = setTimeout(() => fetchPreview(url), 700);
-});
-
-btnClear.addEventListener('click', () => {
-  urlInput.value = '';
-  btnClear.classList.remove('visible');
-  urlInput.focus();
-  clearStatus();
-  hidePreview();
-});
-
-async function fetchPreview(url) {
-  const requestId = ++previewRequestId;
-  try {
-    const res = await fetch('/api/info', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
-    if (requestId !== previewRequestId) return; // stale response, a newer URL was typed since
-    if (!res.ok) { hidePreview(); return; }
-
-    const data = await res.json();
-    if (requestId !== previewRequestId) return;
-
-    previewThumb.src = data.thumbnail || '';
-    previewThumb.style.visibility = data.thumbnail ? 'visible' : 'hidden';
-    previewTitle.textContent = data.title;
-    previewMeta.textContent = [data.uploader, formatDuration(data.duration)].filter(Boolean).join(' · ');
-    previewCard.classList.remove('hidden');
-  } catch (e) {
-    hidePreview();
-  }
+async function handleSubmit() {
+  if (busy) return;
+  if (currentMode === 'convert') return submitConvert();
+  return submitDownload();
 }
 
-function hidePreview() {
-  previewCard.classList.add('hidden');
-}
-
-function formatDuration(seconds) {
-  if (!seconds) return '';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-// Paste from clipboard on focus if input is empty
-urlInput.addEventListener('focus', async () => {
-  if (urlInput.value) return;
-  try {
-    const text = await navigator.clipboard.readText();
-    if (isYouTubeUrl(text)) {
-      urlInput.value = text;
-      btnClear.classList.add('visible');
-      showStatus('URL detectada en el portapapeles ✨', 'success');
-    }
-  } catch (e) { /* clipboard permission denied, ignore */ }
-});
-
-// === Download ===
-btnDownload.addEventListener('click', handleDownload);
-urlInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') handleDownload();
-});
-
-async function handleDownload() {
-  if (currentMode === 'convert') {
-    return handleConvert();
-  }
-
-  const url = urlInput.value.trim();
-  if (!url) {
-    showStatus('Pega un link de YouTube primero', 'error');
+async function submitDownload() {
+  const urls = parseUrls(urlInput.value);
+  if (!urls.length) {
+    showStatus('Pega al menos un enlace', 'error');
     shakeInput();
     return;
   }
-  if (!isYouTubeUrl(url)) {
-    showStatus('Eso no parece un link válido de YouTube', 'error');
-    shakeInput();
-    return;
-  }
-
-  setLoading(true);
-  clearStatus();
-  showProgress();
-
+  setBusy(true, optPlaylist.checked ? 'Leyendo playlist…' : 'Añadiendo…');
   try {
-    const body = {
-      url,
-      mode: currentMode,
-      quality: videoQuality.value,
-      audioBitrate: audioBitrate.value,
-      audioFormat: audioFormat.value,
-    };
-
-    const formatLabel = currentMode === 'audio' ? audioFormat.value.toUpperCase() : 'MP4';
-    showStatus('Conectando con servidor seguro...', '');
-    animateProgress(10);
-
-    const res = await fetch('/api/download', {
+    const data = await api('/api/jobs/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        urls,
+        mode: currentMode,
+        audioFormat: audioFormat.value,
+        audioBitrate: audioBitrate.value,
+        quality: videoQuality.value,
+        container: videoContainer.value,
+        metadata: optMetadata.checked,
+        playlist: optPlaylist.checked,
+        subtitles: optSubtitles.checked,
+        sponsorblock: optSponsorblock.checked,
+      }),
     });
-
-    const data = await res.json();
-
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || data.suggestion || 'Error desconocido');
-    }
-
-    animateProgress(20);
-    const defaultFilename = currentMode === 'audio' ? `audio.${audioFormat.value}` : 'video.mp4';
-    const downloadFilename = data.filename || defaultFilename;
-
-    if (data.downloadUrl) {
-      const downloadUrl = data.downloadUrl.startsWith('/api/') 
-        ? data.downloadUrl 
-        : `/api/proxy-download?url=${encodeURIComponent(data.downloadUrl)}&filename=${encodeURIComponent(downloadFilename)}`;
-
-      // Both audio and video are fully processed server-side (yt-dlp download +
-      // ffmpeg re-encode/merge) before anything is sent, so both use the same
-      // fetch-with-progress flow rather than a bare <a href> download link.
-      const isAudio = currentMode === 'audio';
-      const label = isAudio ? formatLabel : 'MP4';
-      const verb = isAudio ? 'Extrayendo y convirtiendo audio' : 'Descargando y fusionando vídeo + audio';
-      showStatus(`${verb}... esto puede tardar`, '');
-      animateProgress(25);
-
-      const streamRes = await fetch(downloadUrl);
-
-      if (!streamRes.ok) {
-        throw new Error(`Error al descargar el ${isAudio ? 'audio' : 'vídeo'} del servidor`);
-      }
-
-      const contentLength = streamRes.headers.get('Content-Length');
-      const total = contentLength ? parseInt(contentLength, 10) : 0;
-      const mimeType = streamRes.headers.get('Content-Type') || (isAudio ? 'audio/mpeg' : 'video/mp4');
-
-      const reader = streamRes.body.getReader();
-      const chunks = [];
-      let received = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.length;
-
-        const mb = (received / 1024 / 1024).toFixed(1);
-        if (total > 0) {
-          const pct = Math.min(25 + Math.round((received / total) * 70), 95);
-          animateProgress(pct);
-          const totalMb = (total / 1024 / 1024).toFixed(1);
-          showStatus(`Descargando... ${mb} / ${totalMb} MB`, 'success');
-        } else {
-          showStatus(`Descargando... ${mb} MB`, 'success');
-        }
-      }
-
-      animateProgress(100);
-      showStatus(`¡Descarga ${label} completada! 🎉`, 'success');
-      addToHistory(downloadFilename, label, isAudio ? 'Audio' : 'Vídeo');
-
-      // Create blob and trigger download
-      const blob = new Blob(chunks, { type: mimeType });
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = downloadFilename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    }
+    const skipped = data.rejected && data.rejected.length ? ` · ${data.rejected.length} enlace(s) no soportado(s)` : '';
+    showStatus(`${data.created === 1 ? 'Añadido' : `${data.created} añadidos`} a la cola${skipped}`, 'success');
+    urlInput.value = '';
+    autoGrow();
+    updateUrlState();
   } catch (err) {
     showStatus(err.message, 'error');
   } finally {
-    setLoading(false);
-    setTimeout(hideProgress, 2000);
+    setBusy(false);
   }
 }
 
-async function handleConvert() {
-  if (!selectedFile) {
-    showStatus('Elige un archivo de audio o vídeo primero', 'error');
+function uploadOne(file, fields, onProgress) {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    Object.entries(fields).forEach(([k, v]) => form.append(k, v));
+    form.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/jobs/convert');
+    xhr.setRequestHeader('x-client-id', CLIENT_ID);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch { /* ignore */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new Error((data && data.error) || `Error ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error('No se pudo subir el archivo.'));
+    xhr.send(form);
+  });
+}
+
+async function submitConvert() {
+  if (!selectedFiles.length) {
+    showStatus('Elige uno o varios archivos primero', 'error');
     return;
   }
-
   const opt = currentConvertOption();
-  const targetFormat = opt.value;
-  setLoading(true);
-  clearStatus();
-  showProgress();
-
-  try {
-    showStatus(`Convirtiendo a ${opt.short}...`, '');
-    animateProgress(20);
-
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('targetFormat', targetFormat);
-    formData.append('trimStart', convertTrimStart.value.trim());
-    formData.append('trimEnd', convertTrimEnd.value.trim());
-    if (currentConvertKind === 'audio') {
-      formData.append('audioBitrate', convertBitrate.value);
-      formData.append('sampleRate', convertSampleRate.value);
-      formData.append('channels', convertChannels.value);
-      formData.append('normalize', String(convertNormalize.checked));
-    } else {
-      formData.append('resolution', convertResolution.value);
-      formData.append('quality', convertQuality.value);
-      formData.append('fps', convertFps.value);
-      formData.append('removeAudio', String(convertRemoveAudio.checked));
-    }
-
-    const res = await fetch('/api/convert', {
-      method: 'POST',
-      body: formData,
+  const fields = {
+    targetFormat: opt.value,
+    trimStart: convertTrimStart.value.trim(),
+    trimEnd: convertTrimEnd.value.trim(),
+    speed: convertSpeed.value,
+  };
+  if (currentConvertKind === 'audio') {
+    Object.assign(fields, {
+      audioBitrate: convertBitrate.value, sampleRate: convertSampleRate.value,
+      channels: convertChannels.value, normalize: String(convertNormalize.checked),
     });
+  } else {
+    Object.assign(fields, {
+      resolution: convertResolution.value, quality: convertQuality.value, fps: convertFps.value,
+      rotate: convertRotate.value, removeAudio: String(convertRemoveAudio.checked),
+    });
+  }
 
-    animateProgress(60);
-
-    if (!res.ok) {
-      let errMsg = 'Error al convertir el archivo';
-      try {
-        const data = await res.json();
-        errMsg = data.error || errMsg;
-      } catch (e) { /* ignore parse error */ }
-      throw new Error(errMsg);
+  setBusy(true, 'Subiendo…');
+  const files = selectedFiles.slice();
+  let ok = 0;
+  const failures = [];
+  for (let i = 0; i < files.length; i++) {
+    const prefix = files.length > 1 ? `${i + 1}/${files.length} · ` : '';
+    try {
+      await uploadOne(files[i], fields, (pct) => {
+        btnLoadingText.textContent = `Subiendo ${prefix}${pct}%`;
+      });
+      ok += 1;
+    } catch (err) {
+      failures.push(`${files[i].name}: ${err.message}`);
     }
+  }
+  setBusy(false);
+  if (failures.length) showStatus(`${ok} en cola · ${failures.length} con error — ${failures[0]}`, 'error');
+  else showStatus(`${ok === 1 ? 'Añadido' : `${ok} añadidos`} a la cola`, 'success');
+}
 
-    const blob = await res.blob();
-    animateProgress(90);
+// === Queue ===
+const jobs = new Map();          // id -> job (from the server)
+const liveJobs = new Set();      // ids we saw while still active (eligible for auto-save)
+const saved = new Map();         // id -> 'saving' | 'saved' | 'failed'
+const rows = new Map();          // id -> <li>
+const ACTIVE = new Set(['queued', 'running', 'processing']);
 
-    const baseName = selectedFile.name.replace(/\.[^/.]+$/, '') || 'audio';
-    const downloadFilename = `${baseName}.${opt.ext}`;
+function connectEvents() {
+  const es = new EventSource(`/api/jobs/events?client=${CLIENT_ID}`);
+  es.addEventListener('snapshot', (e) => {
+    const list = JSON.parse(e.data);
+    const ids = new Set(list.map((j) => j.id));
+    for (const id of [...jobs.keys()]) if (!ids.has(id)) removeRow(id);
+    list.forEach((job) => onJob(job, false));
+    renderQueueMeta();
+  });
+  es.addEventListener('job', (e) => { onJob(JSON.parse(e.data), true); renderQueueMeta(); });
+  es.addEventListener('removed', (e) => { removeRow(JSON.parse(e.data).id); renderQueueMeta(); });
+}
 
-    const blobUrl = URL.createObjectURL(blob);
+function onJob(job, live) {
+  const prev = jobs.get(job.id);
+  jobs.set(job.id, job);
+  if (ACTIVE.has(job.status)) liveJobs.add(job.id);
+  const justFinished = live && prev && ACTIVE.has(prev.status) && job.status === 'done';
+  if (justFinished && liveJobs.has(job.id)) {
+    autoSave(job);
+    addToHistory(job.fileName || job.title, job.detail);
+    notify(job);
+  }
+  if (live && prev && ACTIVE.has(prev.status) && job.status === 'error') notify(job);
+  renderRow(job);
+}
+
+function fileUrl(job) {
+  return `/api/jobs/${job.id}/file?client=${CLIENT_ID}`;
+}
+
+function autoSave(job) {
+  if (desktopApi) {
+    saved.set(job.id, 'saving');
+    desktopApi.saveJob(job.id, CLIENT_ID);
+  } else {
     const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = downloadFilename;
+    a.href = fileUrl(job);
+    a.download = job.fileName || '';
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-
-    animateProgress(100);
-    showStatus(`¡Conversión a ${opt.short} completada! 🎉`, 'success');
-    addToHistory(downloadFilename, opt.short, 'Conversión');
-  } catch (err) {
-    showStatus(err.message, 'error');
-  } finally {
-    setLoading(false);
-    setTimeout(hideProgress, 2000);
+    a.remove();
+    saved.set(job.id, 'saved');
   }
 }
+
+if (desktopApi) {
+  desktopApi.onSaved(({ jobId, ok, error }) => {
+    saved.set(jobId, ok ? 'saved' : 'failed');
+    if (ok) {
+      // The file now lives in the user's folder; free the temp copy.
+      api(`/api/jobs/${jobId}/file`, { method: 'DELETE' }).catch(() => {});
+    } else if (error) {
+      showStatus(error, 'error');
+    }
+    const job = jobs.get(jobId);
+    if (job) renderRow(job);
+  });
+}
+
+function notify(job) {
+  if (!isElectronApp || document.hasFocus() || typeof Notification === 'undefined') return;
+  const title = job.status === 'done' ? (job.type === 'convert' ? 'Conversión terminada' : 'Descarga terminada') : 'Algo falló';
+  try { new Notification(title, { body: job.status === 'done' ? (job.fileName || job.title) : `${job.title}: ${job.error}`, silent: false }); } catch { /* ignore */ }
+}
+
+function statusLine(job) {
+  switch (job.status) {
+    case 'queued': return 'En cola';
+    case 'running':
+    case 'processing': {
+      const parts = [job.stage];
+      if (job.progress !== null && job.progress !== undefined) parts.push(`${job.progress}%`);
+      if (job.speed) parts.push(`${formatBytes(job.speed)}/s`);
+      if (job.eta) parts.push(`quedan ${formatEta(job.eta)}`);
+      return parts.join(' · ');
+    }
+    case 'done': {
+      const s = saved.get(job.id);
+      const size = job.fileSize ? formatBytes(job.fileSize) : '';
+      if (s === 'saving') return `Guardando… ${size}`;
+      if (s === 'saved') return desktopApi ? `Guardado · ${size}` : `Completado · ${size}`;
+      if (s === 'failed') return 'No se pudo guardar';
+      return `Completado · ${size}`;
+    }
+    case 'canceled': return 'Cancelado';
+    case 'error': return job.error || 'Error';
+    default: return job.stage || '';
+  }
+}
+
+function renderRow(job) {
+  let li = rows.get(job.id);
+  if (!li) {
+    li = document.createElement('li');
+    li.className = 'queue-item';
+    li.innerHTML = `
+      <div class="queue-top">
+        <span class="queue-badge"></span>
+        <span class="queue-title"></span>
+        <div class="queue-actions"></div>
+      </div>
+      <div class="queue-bar"><div class="queue-fill"></div></div>
+      <div class="queue-status"></div>`;
+    rows.set(job.id, li);
+    queueList.prepend(li);
+  }
+  li.dataset.status = job.status;
+  li.querySelector('.queue-badge').textContent = job.type === 'convert' ? 'CONV' : 'DESC';
+  const title = li.querySelector('.queue-title');
+  title.textContent = job.fileName || job.title;
+  title.title = `${job.title}\n${job.detail || ''}`;
+  const pct = job.status === 'done' ? 100 : (job.progress ?? 0);
+  const fill = li.querySelector('.queue-fill');
+  fill.style.width = `${pct}%`;
+  li.classList.toggle('indeterminate', ACTIVE.has(job.status) && job.status !== 'queued' && (job.progress === null || job.progress === undefined));
+  li.querySelector('.queue-status').textContent = `${job.detail ? `${job.detail} · ` : ''}${statusLine(job)}`;
+
+  const actions = li.querySelector('.queue-actions');
+  actions.innerHTML = '';
+  const addBtn = (label, title, onClick, cls = '') => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `queue-btn ${cls}`;
+    b.textContent = label;
+    b.title = title;
+    b.addEventListener('click', onClick);
+    actions.appendChild(b);
+  };
+  if (ACTIVE.has(job.status)) {
+    addBtn('Cancelar', 'Cancelar', () => api(`/api/jobs/${job.id}/cancel`, { method: 'POST' }).catch((e) => showStatus(e.message, 'error')));
+  } else {
+    if (job.status === 'done') {
+      if (desktopApi && saved.get(job.id) === 'saved') {
+        addBtn('Mostrar', 'Mostrar en la carpeta', () => desktopApi.showInFolder(job.id), 'primary');
+      } else if (!job.released) {
+        addBtn('Guardar', 'Guardar el archivo', () => autoSave(job), 'primary');
+      }
+    }
+    addBtn('✕', 'Quitar de la lista', () => api(`/api/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {}), 'icon');
+  }
+}
+
+function removeRow(id) {
+  const li = rows.get(id);
+  if (li) li.remove();
+  rows.delete(id);
+  jobs.delete(id);
+  saved.delete(id);
+  liveJobs.delete(id);
+}
+
+function renderQueueMeta() {
+  const all = [...jobs.values()];
+  const active = all.filter((j) => ACTIVE.has(j.status));
+  queueEmpty.classList.toggle('hidden', all.length > 0);
+  btnClearFinished.classList.toggle('hidden', all.length === active.length);
+  queueCount.textContent = active.length ? `· ${active.length} en curso` : (all.length ? `· ${all.length}` : '');
+
+  if (desktopApi) {
+    const running = active.filter((j) => j.status !== 'queued');
+    if (!active.length) desktopApi.setProgress(-1);
+    else if (!running.some((j) => typeof j.progress === 'number')) desktopApi.setProgress(2); // indeterminate
+    else desktopApi.setProgress(running.reduce((acc, j) => acc + (j.progress || 0), 0) / running.length / 100);
+  }
+}
+
+btnClearFinished.addEventListener('click', () => {
+  for (const job of jobs.values()) {
+    if (!ACTIVE.has(job.status)) api(`/api/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
+  }
+});
 
 // === History (stored locally in this browser only) ===
 const HISTORY_KEY = 'tubegrab_history';
-const HISTORY_MAX = 8;
+const HISTORY_MAX = 15;
 
 function getHistory() {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
-  } catch (e) {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; }
 }
 
-function addToHistory(name, badge, kind) {
+function addToHistory(name, badge) {
   try {
     const history = getHistory();
-    history.unshift({ name, badge, kind, date: Date.now() });
+    history.unshift({ name, badge, date: Date.now() });
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_MAX)));
-    renderHistory();
-  } catch (e) { /* localStorage unavailable, ignore */ }
+  } catch { /* localStorage unavailable */ }
+  renderHistory();
 }
 
 function renderHistory() {
   const history = getHistory();
   historySection.classList.toggle('hidden', history.length === 0);
-  historyList.innerHTML = history.map(item => `
+  historyList.innerHTML = history.map((item) => `
     <li class="history-item">
       <span class="history-item-name">${escapeHtml(item.name)}</span>
-      <span class="history-item-badge">${escapeHtml(item.badge)}</span>
-    </li>
-  `).join('');
+      <span class="history-item-badge">${escapeHtml(item.badge || '')}</span>
+    </li>`).join('');
 }
 
 btnClearHistory.addEventListener('click', () => {
-  try { localStorage.removeItem(HISTORY_KEY); } catch (e) { /* ignore */ }
+  try { localStorage.removeItem(HISTORY_KEY); } catch { /* ignore */ }
   renderHistory();
 });
 
+// === Helpers ===
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = String(str ?? '');
   return div.innerHTML;
 }
 
-renderHistory();
+function formatDuration(seconds) {
+  if (!seconds) return '';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
 
-// === Helpers ===
-function isYouTubeUrl(url) {
-  return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com|m\.youtube\.com)\/.+/i.test(url);
+function formatEta(seconds) {
+  if (seconds < 60) return `${seconds} s`;
+  return formatDuration(seconds);
+}
+
+function formatBytes(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1).replace('.', ',')} ${units[i]}`;
 }
 
 function showStatus(msg, type) {
   statusMessage.textContent = msg;
-  statusMessage.className = 'status-message' + (type ? ` ${type}` : '');
+  statusMessage.className = `status-message${type ? ` ${type}` : ''}`;
 }
 
 function clearStatus() {
@@ -621,36 +804,21 @@ function clearStatus() {
   statusMessage.className = 'status-message';
 }
 
-function setLoading(loading) {
-  btnDownload.classList.toggle('loading', loading);
-}
-
-function showProgress() {
-  progressBar.classList.remove('hidden');
-  progressFill.style.width = '0%';
-}
-
-function hideProgress() {
-  progressBar.classList.add('hidden');
-}
-
-function animateProgress(percent) {
-  progressFill.style.width = percent + '%';
+function setBusy(on, label) {
+  busy = on;
+  btnDownload.classList.toggle('loading', on);
+  if (label) btnLoadingText.textContent = label;
 }
 
 function shakeInput() {
   const wrapper = document.querySelector('.input-wrapper');
   wrapper.style.animation = 'shake 0.4s ease';
-  setTimeout(() => wrapper.style.animation = '', 400);
+  setTimeout(() => { wrapper.style.animation = ''; }, 400);
 }
 
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-6px); }
-    50% { transform: translateX(6px); }
-    75% { transform: translateX(-4px); }
-  }
-`;
-document.head.appendChild(style);
+// === Init ===
+renderConvertFormats();
+refreshConvertUI();
+applyMode();
+renderHistory();
+connectEvents();

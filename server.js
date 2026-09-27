@@ -1,12 +1,16 @@
 const express = require('express');
 const path = require('path');
-const YTDlpWrap = require('yt-dlp-wrap-extended').default;
 const ffmpegPath = require('ffmpeg-static');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
-const crypto = require('crypto');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+
+const { JobManager } = require('./lib/jobs');
+const download = require('./lib/download');
+const convert = require('./lib/convert');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,76 +19,38 @@ const PORT = process.env.PORT || 3000;
 // HOST=0.0.0.0 itself — inside a container, binding to 127.0.0.1 is unreachable
 // from outside even with host-level port publishing restricted to localhost.
 const HOST = process.env.HOST || '127.0.0.1';
+const IS_DESKTOP = Boolean(process.env.TUBEGRAB_ELECTRON);
 
 // Initialize yt-dlp and ffmpeg paths
 let ytDlpPath;
-let currentFfmpegPath = ffmpegPath;
+const currentFfmpegPath = ffmpegPath;
 
-// Check if running inside pkg
-const isPkg = typeof process.pkg !== 'undefined';
 const isWindows = process.platform === 'win32';
 
-if (isPkg) {
-  try {
-    console.log('[INIT] Ejecutando en modo standalone. Preparando herramientas...');
-    
-    // Extract yt-dlp.exe
-    const ytDlpTemp = path.join(os.tmpdir(), isWindows ? 'yt-dlp.exe' : 'yt-dlp');
-    if (!fs.existsSync(ytDlpTemp)) {
-      const source = path.join(__dirname, isWindows ? 'yt-dlp.exe' : 'yt-dlp');
-      console.log(`[INIT] Extrayendo yt-dlp desde ${source}...`);
-      fs.writeFileSync(ytDlpTemp, fs.readFileSync(source));
-      if (!isWindows) fs.chmodSync(ytDlpTemp, 0o755);
-    }
-    ytDlpPath = ytDlpTemp;
-
-    // Extract ffmpeg.exe
-    const ffmpegFileName = isWindows ? 'ffmpeg.exe' : 'ffmpeg';
-    const ffmpegTemp = path.join(os.tmpdir(), ffmpegFileName);
-    if (!fs.existsSync(ffmpegTemp)) {
-      const bundledFfmpeg = path.join(__dirname, 'node_modules', 'ffmpeg-static', ffmpegFileName);
-      if (fs.existsSync(bundledFfmpeg)) {
-        console.log(`[INIT] Extrayendo ffmpeg desde ${bundledFfmpeg}...`);
-        fs.writeFileSync(ffmpegTemp, fs.readFileSync(bundledFfmpeg));
-        if (!isWindows) fs.chmodSync(ffmpegTemp, 0o755);
-      } else {
-        console.warn('[WARN] No se encontró ffmpeg en el paquete. Las conversiones podrían fallar.');
-      }
-    }
-    currentFfmpegPath = ffmpegTemp;
-  } catch (err) {
-    console.error('[FATAL] Error crítico al inicializar herramientas:', err.message);
-    if (isWindows) {
-      process.stdin.resume(); // Keep window open
-      setTimeout(() => process.exit(1), 10000);
-    }
-  }
+if (process.env.TUBEGRAB_YTDLP && fs.existsSync(process.env.TUBEGRAB_YTDLP)) {
+  // Desktop app: a self-updating copy kept in the user's app-data folder.
+  ytDlpPath = process.env.TUBEGRAB_YTDLP;
+} else if (isWindows) {
+  ytDlpPath = path.join(__dirname, 'yt-dlp.exe');
 } else {
-  // If not in pkg, use local .exe on Windows, or system path on Linux
-  if (isWindows) {
-    ytDlpPath = path.join(__dirname, 'yt-dlp.exe');
-  } else {
-    // On Linux hosts (Render, Railway, Docker), scripts/postinstall.js downloads
-    // a local yt-dlp binary at npm-install time. Fall back to PATH if missing.
-    const localYtDlp = path.join(__dirname, 'yt-dlp');
-    ytDlpPath = fs.existsSync(localYtDlp) ? localYtDlp : 'yt-dlp';
-    // ffmpeg-static usually handles the path correctly on Linux too
-  }
+  // On Linux hosts (Render, Railway, Docker), scripts/postinstall.js downloads
+  // a local yt-dlp binary at npm-install time. Fall back to PATH if missing.
+  const localYtDlp = path.join(__dirname, 'yt-dlp');
+  ytDlpPath = fs.existsSync(localYtDlp) ? localYtDlp : 'yt-dlp';
 }
 
-const ytDlpWrap = new YTDlpWrap(ytDlpPath);
+const cookiesPath = path.join(__dirname, 'cookies.txt');
+// YouTube needs a JavaScript runtime to solve its player challenges. Whatever
+// runs this server (Node, or Electron acting as Node inside the desktop app —
+// ELECTRON_RUN_AS_NODE is inherited by yt-dlp's child) is one.
+const ytEnv = () => ({
+  ytDlpPath,
+  ffmpegPath: currentFfmpegPath,
+  jsRuntime: process.execPath,
+  cookiesPath: fs.existsSync(cookiesPath) ? cookiesPath : null,
+});
 
-// yt-dlp-wrap's own getVideoInfo() doesn't forward spawn options, so it can't
-// take windowsHide — reimplement it here (same logic) using execPromise
-// directly so metadata lookups never flash a console window either.
-async function getVideoInfo(args) {
-  if (!args.includes('-f') && !args.includes('--format')) args = args.concat(['-f', 'best']);
-  const stdout = await ytDlpWrap.execPromise(args.concat(['--dump-json']), { windowsHide: true });
-  return JSON.parse(stdout);
-}
-
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
+const jobs = new JobManager(IS_DESKTOP ? { maxPerClient: 1000, maxTotal: 1000 } : { maxPerClient: 50, maxTotal: 300 });
 
 // Render/Railway/most PaaS put the app behind a reverse proxy; trust its
 // X-Forwarded-For so express-rate-limit and req.ip work correctly there.
@@ -92,7 +58,13 @@ if (process.env.TRUST_PROXY) {
   app.set('trust proxy', 1);
 }
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    // Video thumbnails come from the source site's CDN.
+    directives: { 'img-src': ["'self'", 'data:', 'https:'] },
+  },
+}));
 
 // DNS-rebinding guard: when bound to localhost, a malicious site could point its
 // own domain at 127.0.0.1 and then read this server's responses from the
@@ -108,8 +80,8 @@ if (HOST === '127.0.0.1') {
 }
 
 // Cross-site request guard: any web page the user visits can fire requests at
-// this server (e.g. a multipart POST to /api/convert or a GET to /api/stream).
-// Browsers attach Origin to those; reject any that isn't this same host.
+// this server (e.g. a multipart POST). Browsers attach Origin to those; reject
+// any that isn't this same host.
 app.use('/api/', (req, res, next) => {
   const origin = req.headers.origin;
   if (origin) {
@@ -122,88 +94,154 @@ app.use('/api/', (req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const _apiLimiter = rateLimit({
+const limiter = (max) => rateLimit({
   windowMs: 60_000,
-  max: 10,
+  max,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please wait a minute.' }
+  message: { error: 'Demasiadas peticiones, espera un minuto.' },
 });
-app.use('/api/', _apiLimiter);
+app.use('/api/', limiter(600));
+const createLimiter = limiter(IS_DESKTOP ? 600 : 60);
+const infoLimiter = limiter(IS_DESKTOP ? 300 : 40);
 
-// === Format conversion (local file upload) ===
-// Keys are what the client sends as targetFormat; `ext` is the output file
-// extension (several formats share one, e.g. m4a for both AAC and ALAC).
-const AUDIO_CONVERT_FORMATS = {
-  mp3: { ext: 'mp3', codec: 'libmp3lame', contentType: 'audio/mpeg', lossy: true },
-  aac: { ext: 'aac', codec: 'aac', contentType: 'audio/aac', lossy: true },
-  m4a: { ext: 'm4a', codec: 'aac', contentType: 'audio/mp4', lossy: true },
-  ogg: { ext: 'ogg', codec: 'libvorbis', contentType: 'audio/ogg', lossy: true },
-  // libopus only accepts its own sample rates; ffmpeg resamples automatically
-  // as long as we don't force -ar.
-  opus: { ext: 'opus', codec: 'libopus', contentType: 'audio/opus', lossy: true, fixedSampleRate: true },
-  wma: { ext: 'wma', codec: 'wmav2', contentType: 'audio/x-ms-wma', lossy: true },
-  ac3: { ext: 'ac3', codec: 'ac3', contentType: 'audio/ac3', lossy: true },
-  flac: { ext: 'flac', codec: 'flac', contentType: 'audio/flac', lossy: false },
-  alac: { ext: 'm4a', codec: 'alac', contentType: 'audio/mp4', lossy: false },
-  wav: { ext: 'wav', codec: 'pcm_s16le', contentType: 'audio/wav', lossy: false },
-  aiff: { ext: 'aiff', codec: 'pcm_s16be', contentType: 'audio/aiff', lossy: false },
-};
-// `family` selects how the quality setting maps onto the encoder's own scale.
-const VIDEO_CONVERT_FORMATS = {
-  mp4: { ext: 'mp4', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/mp4', extra: ['-pix_fmt', 'yuv420p', '-movflags', '+faststart'] },
-  hevc: { ext: 'mp4', vcodec: 'libx265', acodec: 'aac', family: 'x265', contentType: 'video/mp4', extra: ['-preset', 'fast', '-pix_fmt', 'yuv420p', '-tag:v', 'hvc1', '-movflags', '+faststart'] },
-  webm: { ext: 'webm', vcodec: 'libvpx-vp9', acodec: 'libopus', family: 'vp9', contentType: 'video/webm', extra: ['-b:v', '0', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '4'] },
-  mkv: { ext: 'mkv', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/x-matroska', extra: ['-pix_fmt', 'yuv420p'] },
-  mov: { ext: 'mov', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/quicktime', extra: ['-pix_fmt', 'yuv420p'] },
-  avi: { ext: 'avi', vcodec: 'mpeg4', acodec: 'libmp3lame', family: 'qscale', contentType: 'video/x-msvideo' },
-  wmv: { ext: 'wmv', vcodec: 'wmv2', acodec: 'wmav2', family: 'qscale', contentType: 'video/x-ms-wmv' },
-  flv: { ext: 'flv', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/x-flv', extra: ['-pix_fmt', 'yuv420p'] },
-  // MPEG-2 only allows a fixed set of frame rates.
-  mpg: { ext: 'mpg', vcodec: 'mpeg2video', acodec: 'mp2', family: 'qscale', contentType: 'video/mpeg', allowedFps: ['24', '30', '60'], defaultFps: '25' },
-  '3gp': { ext: '3gp', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/3gpp', extra: ['-pix_fmt', 'yuv420p'] },
-  ogv: { ext: 'ogv', vcodec: 'libtheora', acodec: 'libvorbis', family: 'theora', contentType: 'video/ogg' },
-  gif: { ext: 'gif', vcodec: 'gif', acodec: null, family: 'gif', contentType: 'image/gif' },
-};
-const VIDEO_QUALITY_SCALES = {
-  x264: { alta: ['-crf', '18'], media: ['-crf', '23'], baja: ['-crf', '28'] },
-  x265: { alta: ['-crf', '22'], media: ['-crf', '28'], baja: ['-crf', '32'] },
-  vp9: { alta: ['-crf', '24'], media: ['-crf', '32'], baja: ['-crf', '40'] },
-  qscale: { alta: ['-q:v', '2'], media: ['-q:v', '5'], baja: ['-q:v', '10'] },
-  theora: { alta: ['-q:v', '9'], media: ['-q:v', '7'], baja: ['-q:v', '5'] },
-};
-const AUDIO_BITRATES = ['64', '96', '128', '160', '192', '256', '320'];
-const SAMPLE_RATES = ['44100', '48000'];
-const CHANNELS = ['1', '2'];
-const RESOLUTIONS = ['2160', '1440', '1080', '720', '480', '360', '240'];
-const QUALITIES = ['alta', 'media', 'baja'];
-const FPS_VALUES = ['60', '30', '24', '15', '10'];
-const GIF_MAX_FPS = 30;
-const MAX_CONVERT_SIZE = 300 * 1024 * 1024; // 300MB
-
-const pick = (value, allowed) => (allowed.includes(String(value)) ? String(value) : null);
-
-/** "90", "1:30", "0:01:30.5" -> seconds; '' -> null; anything else -> NaN. */
-function parseTimestamp(raw) {
-  const value = String(raw || '').trim();
-  if (!value) return null;
-  if (!/^\d{1,5}(:[0-5]?\d){0,2}(\.\d{1,3})?$/.test(value)) return NaN;
-  const seconds = value.split(':').reduce((acc, part) => acc * 60 + parseFloat(part), 0);
-  return seconds <= 24 * 3600 ? seconds : NaN;
+// Each browser/app instance generates its own random id; jobs are only ever
+// visible to the id that created them (matters when self-hosted publicly).
+const CLIENT_ID_RE = /^[a-f0-9]{32}$/;
+function clientIdFrom(req) {
+  const id = String(req.get('x-client-id') || req.query.client || '');
+  return CLIENT_ID_RE.test(id) ? id : null;
+}
+function requireClient(req, res, next) {
+  req.clientId = clientIdFrom(req);
+  if (!req.clientId) return res.status(400).json({ error: 'Falta el identificador de cliente.' });
+  next();
+}
+function requireJob(req, res, next) {
+  const job = /^[a-f0-9]{32}$/.test(req.params.id) ? jobs.get(req.params.id, req.clientId) : null;
+  if (!job) return res.status(404).json({ error: 'Trabajo no encontrado.' });
+  req.job = job;
+  next();
 }
 
+// === Media info preview (title, thumbnail, duration) ===
+app.post('/api/info', infoLimiter, (req, res) => {
+  const url = download.normalizeMediaUrl((req.body || {}).url);
+  if (!url) return res.status(400).json({ error: 'Enlace no válido o sitio no soportado.' });
+
+  const env = ytEnv();
+  const args = ['--ignore-config', '--no-playlist', '--ies', 'default,-generic', '--dump-json', '--skip-download', '--no-warnings'];
+  if (env.jsRuntime) args.push('--js-runtimes', `node:${env.jsRuntime}`);
+  if (env.cookiesPath) args.push('--cookies', env.cookiesPath);
+  args.push('--', url);
+
+  execFile(ytDlpPath, args, { windowsHide: true, timeout: 60_000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout) => {
+    if (err) return res.status(500).json({ error: 'No se pudo obtener información del enlace.' });
+    try {
+      const data = JSON.parse(stdout);
+      const thumbnail = typeof data.thumbnail === 'string' && data.thumbnail.startsWith('https://') ? data.thumbnail : null;
+      return res.json({
+        title: data.title || 'Sin título',
+        thumbnail,
+        duration: data.duration || null,
+        uploader: data.uploader || data.channel || null,
+        site: data.extractor_key || null,
+      });
+    } catch {
+      return res.status(500).json({ error: 'No se pudo obtener información del enlace.' });
+    }
+  });
+});
+
+// === Jobs ===
+const sseConnections = new Map(); // clientId -> open count
+let sseTotal = 0;
+const SSE_MAX_PER_CLIENT = 5;
+const SSE_MAX_TOTAL = IS_DESKTOP ? 20 : 500;
+
+app.get('/api/jobs/events', requireClient, (req, res) => {
+  const mine = sseConnections.get(req.clientId) || 0;
+  if (mine >= SSE_MAX_PER_CLIENT || sseTotal >= SSE_MAX_TOTAL) {
+    return res.status(429).json({ error: 'Demasiadas conexiones abiertas.' });
+  }
+  sseConnections.set(req.clientId, mine + 1);
+  sseTotal += 1;
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  send('snapshot', jobs.listFor(req.clientId));
+
+  const onUpdate = (clientId, job) => { if (clientId === req.clientId) send('job', job); };
+  const onRemoved = (clientId, id) => { if (clientId === req.clientId) send('removed', { id }); };
+  jobs.on('update', onUpdate);
+  jobs.on('removed', onRemoved);
+  const heartbeat = setInterval(() => res.write(': ping\n\n'), 25_000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    jobs.off('update', onUpdate);
+    jobs.off('removed', onRemoved);
+    const left = (sseConnections.get(req.clientId) || 1) - 1;
+    if (left > 0) sseConnections.set(req.clientId, left); else sseConnections.delete(req.clientId);
+    sseTotal -= 1;
+  });
+});
+
+app.post('/api/jobs/download', createLimiter, requireClient, async (req, res) => {
+  const body = req.body || {};
+  const opts = download.parseDownloadOptions(body);
+  // Each playlist is a yt-dlp run of up to 90 s before anything is queued.
+  const maxUrls = opts.playlist ? (IS_DESKTOP ? 10 : 3) : (IS_DESKTOP ? 100 : 20);
+  const rawUrls = Array.isArray(body.urls) ? body.urls.slice(0, maxUrls) : [];
+  const urls = [];
+  const rejected = [];
+  for (const raw of rawUrls) {
+    const url = download.normalizeMediaUrl(raw);
+    if (url) urls.push(url); else rejected.push(String(raw).slice(0, 200));
+  }
+  if (!urls.length) {
+    return res.status(400).json({ error: 'Ningún enlace válido. Sitios soportados: YouTube, Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp y más.', rejected });
+  }
+
+  const env = ytEnv();
+  const items = [];
+  for (const url of urls) {
+    const expanded = opts.playlist ? await download.expandPlaylist(url, env) : null;
+    if (expanded && expanded.entries.length) {
+      for (const entry of expanded.entries) items.push({ url: entry.url, title: entry.title || entry.url });
+    } else {
+      items.push({ url, title: url });
+    }
+  }
+  if (!jobs.canCreate(req.clientId, items.length)) {
+    return res.status(429).json({ error: 'Hay demasiados trabajos en la cola. Elimina algunos terminados e inténtalo de nuevo.' });
+  }
+
+  const detail = download.describeOptions(opts);
+  for (const item of items) {
+    jobs.create({
+      clientId: req.clientId,
+      type: 'download',
+      title: item.title,
+      detail,
+      run: download.runDownload(item.url, opts, env),
+    });
+  }
+  res.json({ created: items.length, rejected });
+});
+
+const MAX_UPLOAD_SIZE = (IS_DESKTOP ? 4096 : 300) * 1024 * 1024;
 // Reject uploads that are clearly not media before they ever reach ffmpeg.
-// The client-supplied mimetype isn't cryptographically trustworthy, and
-// browsers/tools are inconsistent about setting it for less common audio/
-// video formats (some send 'application/octet-stream' even for a real .mp3
-// or .mkv) — so an empty/generic mimetype is allowed through as long as the
-// extension matches a format this app actually supports, rather than
-// rejecting legitimate files. This still blocks the obvious case (a .txt,
-// .exe, .pdf, etc. with its own real mimetype) from ever reaching ffmpeg.
-// See BUGLOG.md, revisión 5.
+// The client-supplied mimetype isn't trustworthy, and browsers are
+// inconsistent for less common formats (some send 'application/octet-stream'
+// even for a real .mkv) — so a generic mimetype is allowed through only when
+// the extension matches a supported media format. See BUGLOG.md, revisión 5.
 const ALLOWED_UPLOAD_EXTENSIONS = new Set([
   'mp3', 'aac', 'm4a', 'ogg', 'oga', 'opus', 'wma', 'ac3', 'flac', 'wav', 'aiff', 'aif', 'amr', 'mka',
   'mp4', 'm4v', 'webm', 'mkv', 'mov', 'avi', 'wmv', 'flv', 'mpg', 'mpeg', '3gp', 'ogv', 'ts', 'mts', 'gif',
@@ -212,7 +250,7 @@ const GENERIC_MIMETYPES = new Set(['application/octet-stream', 'application/x-ma
 
 const upload = multer({
   dest: os.tmpdir(),
-  limits: { fileSize: MAX_CONVERT_SIZE, files: 1 },
+  limits: { fileSize: MAX_UPLOAD_SIZE, files: 1, fields: 30 },
   fileFilter: (req, file, cb) => {
     // Animated GIFs are accepted as a video source (e.g. GIF -> MP4).
     const isMediaMime = /^(audio|video)\//.test(file.mimetype) || file.mimetype === 'image/gif';
@@ -225,361 +263,73 @@ const upload = multer({
   },
 });
 
-function buildAudioArgs(config, body) {
-  const args = ['-vn', '-c:a', config.codec];
-  const bitrate = config.lossy ? pick(body.audioBitrate, AUDIO_BITRATES) : null;
-  if (bitrate) args.push('-b:a', `${bitrate}k`);
-  let sampleRate = config.fixedSampleRate ? null : pick(body.sampleRate, SAMPLE_RATES);
-  if (body.normalize === 'true') {
-    args.push('-af', 'loudnorm=I=-16:TP=-1.5:LRA=11');
-    // loudnorm works at 192 kHz internally; bring it back to a normal rate.
-    if (!sampleRate && !config.fixedSampleRate) sampleRate = '44100';
-  }
-  if (sampleRate) args.push('-ar', sampleRate);
-  const channels = pick(body.channels, CHANNELS);
-  if (channels) args.push('-ac', channels);
-  return args;
-}
-
-function buildVideoArgs(config, body) {
-  const resolution = pick(body.resolution, RESOLUTIONS);
-  let fps = pick(body.fps, FPS_VALUES);
-
-  if (config.family === 'gif') {
-    const gifFps = Math.min(Number(fps || 12), GIF_MAX_FPS);
-    const scale = resolution
-      ? `scale=-2:'min(${resolution},ih)':flags=lanczos`
-      : `scale='min(480,iw)':-2:flags=lanczos`;
-    // Two-pass palette in one graph: far better colours than GIF's default palette.
-    return ['-vf', `fps=${gifFps},${scale},split[a][b];[a]palettegen[p];[b][p]paletteuse`, '-loop', '0', '-an'];
-  }
-
-  // Most encoders need even dimensions; never upscale when a height is chosen.
-  const scale = resolution
-    ? `scale=-2:'min(${resolution},trunc(ih/2)*2)'`
-    : 'scale=trunc(iw/2)*2:trunc(ih/2)*2';
-  if (config.allowedFps) fps = fps && config.allowedFps.includes(fps) ? fps : config.defaultFps;
-  const quality = pick(body.quality, QUALITIES) || 'media';
-
-  const args = ['-vf', scale];
-  if (fps) args.push('-r', fps);
-  args.push('-c:v', config.vcodec, ...VIDEO_QUALITY_SCALES[config.family][quality], ...(config.extra || []));
-  if (body.removeAudio === 'true') args.push('-an');
-  else args.push('-c:a', config.acodec);
-  return args;
-}
-
-app.post('/api/convert', upload.single('file'), (req, res) => {
-  const cleanupInput = () => { if (req.file) fs.unlink(req.file.path, () => {}); };
+app.post('/api/jobs/convert', createLimiter, requireClient, upload.single('file'), (req, res) => {
+  const discard = () => { if (req.file) fs.unlink(req.file.path, () => {}); };
   const body = req.body || {};
-
   const targetFormat = String(body.targetFormat || '').toLowerCase();
-  const audioConfig = Object.prototype.hasOwnProperty.call(AUDIO_CONVERT_FORMATS, targetFormat) ? AUDIO_CONVERT_FORMATS[targetFormat] : null;
-  const videoConfig = Object.prototype.hasOwnProperty.call(VIDEO_CONVERT_FORMATS, targetFormat) ? VIDEO_CONVERT_FORMATS[targetFormat] : null;
-  if (!audioConfig && !videoConfig) {
-    cleanupInput();
+  const format = convert.formatFor(targetFormat);
+  if (!format) {
+    discard();
     return res.status(400).json({ error: 'Formato de destino no soportado.' });
   }
-  if (!req.file) {
-    return res.status(400).json({ error: 'No se recibió ningún archivo.' });
-  }
+  if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo.' });
 
-  const trimStart = parseTimestamp(body.trimStart);
-  const trimEnd = parseTimestamp(body.trimEnd);
+  const trimStart = convert.parseTimestamp(body.trimStart);
+  const trimEnd = convert.parseTimestamp(body.trimEnd);
   if (Number.isNaN(trimStart) || Number.isNaN(trimEnd) || (trimStart !== null && trimEnd !== null && trimEnd <= trimStart)) {
-    cleanupInput();
+    discard();
     return res.status(400).json({ error: 'Tiempo de recorte no válido. Usa segundos o mm:ss, y que "Hasta" sea mayor que "Desde".' });
   }
+  if (!jobs.canCreate(req.clientId)) {
+    discard();
+    return res.status(429).json({ error: 'Hay demasiados trabajos en la cola. Elimina algunos terminados e inténtalo de nuevo.' });
+  }
 
-  const config = audioConfig || videoConfig;
-  const outId = `convert_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-  const outputPath = path.join(os.tmpdir(), `${outId}.${config.ext}`);
+  const originalName = String(req.file.originalname || 'archivo').slice(0, 255);
+  const job = jobs.create({
+    clientId: req.clientId,
+    type: 'convert',
+    title: originalName,
+    detail: convert.describeConvert(format.kind, format.config, body),
+    run: convert.runConvert({ inputPath: req.file.path, originalName, targetFormat, body, ffmpegPath: currentFfmpegPath }),
+    cleanupInput: discard,
+  });
+  res.json({ id: job.id });
+});
 
-  const originalName = (req.file.originalname || (audioConfig ? 'audio' : 'video')).replace(/[^\w\s.-]/gi, '').trim() || 'archivo';
-  const baseName = originalName.replace(/\.[^/.]+$/, '') || 'archivo';
-  const outputFilename = `${baseName}.${config.ext}`;
-  const contentType = config.contentType;
+app.post('/api/jobs/:id/cancel', requireClient, requireJob, (req, res) => {
+  jobs.cancel(req.job);
+  res.json({ ok: true });
+});
 
-  const args = ['-y'];
-  if (trimStart !== null) args.push('-ss', String(trimStart));
-  if (trimEnd !== null) args.push('-to', String(trimEnd));
-  args.push('-i', req.file.path, '-map_metadata', '-1');
-  args.push(...(audioConfig ? buildAudioArgs(audioConfig, body) : buildVideoArgs(videoConfig, body)));
-  args.push(outputPath);
+app.delete('/api/jobs/:id', requireClient, requireJob, (req, res) => {
+  jobs.remove(req.job);
+  res.json({ ok: true });
+});
 
-  console.log(`[CONVERT] ${originalName} -> ${targetFormat}`);
+app.delete('/api/jobs/:id/file', requireClient, requireJob, (req, res) => {
+  jobs.releaseFile(req.job);
+  res.json({ ok: true });
+});
 
-  // HEVC/VP9 on long videos can take a while.
-  execFile(currentFfmpegPath, args, { timeout: 30 * 60 * 1000, windowsHide: true }, (err) => {
-    cleanupInput();
+app.get('/api/jobs/:id/file', requireClient, requireJob, (req, res) => {
+  const filePath = jobs.filePath(req.job);
+  if (!filePath) return res.status(404).json({ error: 'El archivo ya no está disponible.' });
+  const stat = fs.statSync(filePath);
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Length', stat.size);
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(filePath))}`);
+  const stream = fs.createReadStream(filePath);
+  stream.pipe(res);
+  stream.on('error', () => { if (!res.headersSent) res.status(500).end(); else res.destroy(); });
+});
 
-    if (err) {
-      console.error('[CONVERT ERROR]', err.message);
-      fs.unlink(outputPath, () => {});
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'No se pudo convertir el archivo. Verifica que sea un archivo de audio/vídeo válido.' });
-      }
-      return;
-    }
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(outputFilename)}`);
-
-    const fileStream = fs.createReadStream(outputPath);
-    fileStream.pipe(res);
-    fileStream.on('close', () => fs.unlink(outputPath, () => {}));
-    fileStream.on('error', (streamErr) => {
-      console.error('[CONVERT STREAM ERROR]', streamErr.message);
-      fs.unlink(outputPath, () => {});
-      if (!res.headersSent) res.status(500).json({ error: 'Error al enviar el archivo convertido.' });
-    });
+// Download engine version (shown in the desktop app's settings).
+app.get('/api/engine', (req, res) => {
+  execFile(ytDlpPath, ['--version'], { windowsHide: true, timeout: 30_000 }, (err, stdout) => {
+    res.json({ ytDlp: err ? null : stdout.trim() });
   });
 });
-
-// Video metadata preview (title, thumbnail, duration) before downloading
-app.post('/api/info', async (req, res) => {
-  const { url } = req.body || {};
-  const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\/.+/i;
-  if (!url || !ytRegex.test(url)) {
-    return res.status(400).json({ error: 'URL inválida' });
-  }
-
-  try {
-    const metadataArgs = [
-      '--no-playlist',
-      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ];
-    if (fs.existsSync(path.join(__dirname, 'cookies.txt'))) {
-      metadataArgs.push('--cookies', path.join(__dirname, 'cookies.txt'));
-    }
-    const metadata = await getVideoInfo([url, ...metadataArgs]);
-    return res.json({
-      title: metadata.title || 'Sin título',
-      thumbnail: metadata.thumbnail || null,
-      duration: metadata.duration || null,
-      uploader: metadata.uploader || null,
-    });
-  } catch (err) {
-    console.error('[INFO ERROR]', err.message);
-    return res.status(500).json({ error: 'No se pudo obtener información del vídeo.' });
-  }
-});
-
-
-// Main API endpoint to verify URL and get metadata
-app.post('/api/download', async (req, res) => {
-  const { url, mode, quality, audioBitrate, audioFormat } = req.body;
-  if (!['audio', 'video'].includes(mode))
-    return res.status(400).json({ error: 'Invalid mode. Use audio or video.' });
-
-  const VALID_AUDIO_FORMATS = ['mp3', 'ogg'];
-  const safeAudioFormat = VALID_AUDIO_FORMATS.includes(audioFormat) ? audioFormat : 'mp3';
-
-  if (!url) {
-    return res.status(400).json({ error: 'URL es requerida' });
-  }
-
-  const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\/.+/i;
-  if (!ytRegex.test(url)) {
-    return res.status(400).json({ error: 'Por favor, introduce una URL válida de YouTube' });
-  }
-
-  try {
-    console.log(`[INFO] Obteniendo info para: ${url}`);
-    
-    // Get metadata to confirm it's valid and get a filename
-    // Get metadata with stealth flags
-    const metadataArgs = [
-      '--no-playlist',
-      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ];
-    if (fs.existsSync(path.join(__dirname, 'cookies.txt'))) {
-      metadataArgs.push('--cookies', path.join(__dirname, 'cookies.txt'));
-    }
-    
-    const metadata = await getVideoInfo([url, ...metadataArgs]);
-    const title = metadata.title || 'video';
-    
-    // Clean filename
-    const safeTitle = title.replace(/[^\w\s-]/gi, '').trim();
-    const ext = mode === 'audio' ? safeAudioFormat : 'mp4';
-    const filename = `${safeTitle}.${ext}`;
-
-    // Return a URL that the frontend will use to start the stream
-    const streamUrl = `/api/stream?url=${encodeURIComponent(url)}&mode=${mode}&quality=${quality}&bitrate=${audioBitrate}&format=${safeAudioFormat}&filename=${encodeURIComponent(filename)}`;
-
-    return res.json({
-      success: true,
-      downloadUrl: streamUrl,
-      filename: filename,
-      status: 'ready',
-      instance: 'Local (yt-dlp)'
-    });
-  } catch (err) {
-    console.error('[ERROR] Metadata fetch failed:', err.message);
-    return res.status(500).json({ 
-      error: 'No se pudo obtener información del video. YouTube podría estar bloqueando peticiones temporales.',
-      suggestion: 'Intenta de nuevo en unos momentos.'
-    });
-  }
-});
-
-// Streaming endpoint
-app.get('/api/stream', async (req, res) => {
-  const VALID_QUALITIES = ['360', '480', '720', '1080', '1440', '2160'];
-  const VALID_BITRATES  = ['64', '96', '128', '192', '256', '320'];
-  const VALID_AUDIO_FORMATS = ['mp3', 'ogg'];
-  const { url, mode } = req.query;
-  const quality = VALID_QUALITIES.includes(req.query.quality) ? req.query.quality : '1080';
-  const bitrate = VALID_BITRATES.includes(req.query.bitrate)   ? req.query.bitrate  : '128';
-  const audioFormat = VALID_AUDIO_FORMATS.includes(req.query.format) ? req.query.format : 'mp3';
-  const rawFilename = req.query.filename || '';
-  const filename = rawFilename.replace(/[^\w\s.\-]/gi, '').trim() || 'download';
-
-  if (!url) return res.status(400).send('URL missing');
-  const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\/.+/i;
-  if (!ytRegex.test(url)) return res.status(400).send('Invalid URL');
-  if (!['audio', 'video'].includes(mode)) return res.status(400).send('Invalid mode');
-
-  console.log(`[STREAM] Iniciando descarga: ${filename} (${mode})`);
-
-  const cookiesPath = path.join(__dirname, 'cookies.txt');
-  const hasCookies = fs.existsSync(cookiesPath);
-
-  // ── AUDIO MODE: download + extract to a temp file, then send ──
-  // yt-dlp's -x/--audio-format post-processing (the actual mp3/ogg re-encode)
-  // does not run when the output goes to stdout ('-o -'); it silently returns
-  // the raw stream instead (e.g. opus/webm mislabeled as .mp3). Writing to a
-  // real file first lets ffmpeg post-processing run correctly, same as video.
-  if (mode === 'audio') {
-    const tmpDir = os.tmpdir();
-    const tmpId = `tubegrab_audio_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const tmpTemplate = path.join(tmpDir, `${tmpId}.%(ext)s`);
-    const tmpFile = path.join(tmpDir, `${tmpId}.${audioFormat}`);
-
-    let args = [
-      url,
-      '--no-playlist',
-      '--ffmpeg-location', currentFfmpegPath,
-      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      '--referer', 'https://www.google.com/',
-      '-x', '--audio-format', audioFormat, '--audio-quality', bitrate || '128',
-      '-o', tmpTemplate,
-    ];
-    if (hasCookies) args.push('--cookies', cookiesPath);
-
-    console.log(`[AUDIO] Descargando a archivo temporal: ${tmpFile}`);
-
-    let clientDisconnected = false;
-    req.on('close', () => { clientDisconnected = true; });
-
-    try {
-      await ytDlpWrap.execPromise(args, { windowsHide: true });
-
-      if (clientDisconnected) {
-        console.log('[AUDIO] Cliente desconectó durante la descarga, limpiando temp...');
-        fs.unlink(tmpFile, () => {});
-        return;
-      }
-
-      if (!fs.existsSync(tmpFile)) {
-        console.error('[AUDIO] Archivo temporal no encontrado tras descarga');
-        if (!res.headersSent) res.status(500).send('Error: el archivo de audio no se generó');
-        return;
-      }
-
-      const AUDIO_CONTENT_TYPES = { mp3: 'audio/mpeg', ogg: 'audio/ogg' };
-      const stat = fs.statSync(tmpFile);
-      res.setHeader('Content-Type', AUDIO_CONTENT_TYPES[audioFormat]);
-      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
-      res.setHeader('Content-Length', stat.size);
-
-      const fileStream = fs.createReadStream(tmpFile);
-      fileStream.pipe(res);
-      fileStream.on('end', () => fs.unlink(tmpFile, () => {}));
-      fileStream.on('error', (streamErr) => {
-        console.error('[AUDIO FILE ERROR]', streamErr.message);
-        fs.unlink(tmpFile, () => {});
-        if (!res.headersSent) res.status(500).send('Error al leer archivo de audio');
-      });
-    } catch (err) {
-      console.error('[ERROR] Audio download failed:', err.message);
-      fs.unlink(tmpFile, () => {});
-      if (!res.headersSent) res.status(500).send('Error al descargar el audio.');
-    }
-    return;
-  }
-
-  // ── VIDEO MODE: download to temp file, then send ──
-  // yt-dlp cannot merge bestvideo+bestaudio to stdout, so we write to a temp file first.
-  const tmpDir = os.tmpdir();
-  const tmpId = `tubegrab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const tmpFile = path.join(tmpDir, `${tmpId}.mp4`);
-
-  const h = quality || '1080';
-  let args = [
-    url,
-    '--no-playlist',
-    '--ffmpeg-location', currentFfmpegPath,
-    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    '--referer', 'https://www.google.com/',
-    '-f', `bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}]+bestaudio/best[ext=mp4]/best`,
-    '--merge-output-format', 'mp4',
-    '-o', tmpFile
-  ];
-  if (hasCookies) args.push('--cookies', cookiesPath);
-
-  console.log(`[VIDEO] Descargando a archivo temporal: ${tmpFile}`);
-
-  let clientDisconnected = false;
-  req.on('close', () => { clientDisconnected = true; });
-
-  try {
-    // Use exec instead of execStream so yt-dlp can write to a file
-    await ytDlpWrap.execPromise(args, { windowsHide: true });
-
-    if (clientDisconnected) {
-      console.log('[VIDEO] Cliente desconectó durante la descarga, limpiando temp...');
-      fs.unlink(tmpFile, () => {});
-      return;
-    }
-
-    if (!fs.existsSync(tmpFile)) {
-      console.error('[VIDEO] Archivo temporal no encontrado tras descarga');
-      if (!res.headersSent) res.status(500).send('Error: el archivo de vídeo no se generó');
-      return;
-    }
-
-    const stat = fs.statSync(tmpFile);
-    console.log(`[VIDEO] Descarga completada (${(stat.size / 1024 / 1024).toFixed(1)} MB). Enviando al cliente...`);
-
-    res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.setHeader('Content-Length', stat.size);
-
-    const fileStream = fs.createReadStream(tmpFile);
-    fileStream.pipe(res);
-
-    fileStream.on('end', () => {
-      console.log('[VIDEO] Envío completado, eliminando temporal...');
-      fs.unlink(tmpFile, (err) => { if (err) console.warn('[CLEANUP]', err.message); });
-    });
-
-    fileStream.on('error', (err) => {
-      console.error('[VIDEO FILE ERROR]', err.message);
-      fs.unlink(tmpFile, () => {});
-      if (!res.headersSent) res.status(500).send('Error al leer archivo de vídeo');
-    });
-
-  } catch (err) {
-    console.error('[ERROR] Video download failed:', err.message);
-    fs.unlink(tmpFile, () => {}); // cleanup on failure
-    if (!res.headersSent) {
-      res.status(500).send('Error al descargar el vídeo. Intenta con una calidad menor.');
-    }
-  }
-});
-
 
 app.use((err, req, res, next) => {
   if (err.message === 'INVALID_FILE_TYPE') {
@@ -587,9 +337,12 @@ app.use((err, req, res, next) => {
   }
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ error: 'El archivo es demasiado grande (máx. 300MB).' });
+      return res.status(413).json({ error: `El archivo es demasiado grande (máx. ${MAX_UPLOAD_SIZE / 1024 / 1024} MB).` });
     }
     return res.status(400).json({ error: 'Error al subir el archivo.' });
+  }
+  if (err.type === 'entity.too.large' || err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Petición no válida.' });
   }
   console.error('[UNHANDLED ERROR]', err.message);
   if (!res.headersSent) res.status(500).json({ error: 'Error interno del servidor.' });
@@ -600,12 +353,11 @@ const server = app.listen(PORT, HOST, () => {
   console.log(HOST === '0.0.0.0'
     ? '🔒 Modo despliegue: accesible externamente (contenedor/proxy).\n'
     : '🔒 Máxima seguridad: Ejecución local, solo accesible desde esta máquina.\n');
-  
+
   // Only auto-open the system browser for the standalone console build.
   // The Electron desktop app forks this file itself and already shows its
-  // own native window pointed at this same URL — opening a browser tab on
-  // top of that would be a redundant, distinctly un-premium duplicate.
-  if (isWindows && !process.env.TUBEGRAB_ELECTRON) {
+  // own native window pointed at this same URL.
+  if (isWindows && !IS_DESKTOP) {
     execFile('cmd', ['/c', 'start', `http://localhost:${PORT}`], (err) => {
       if (err) console.warn('[WARN] Could not open browser:', err.message);
     });
@@ -619,9 +371,5 @@ server.on('error', (err) => {
   } else {
     console.error(`\n[ERROR] No se pudo iniciar el servidor:`, err.message);
   }
-  
-  if (isPkg) {
-    console.log('Esta ventana se cerrará en 15 segundos...');
-    setTimeout(() => process.exit(1), 15000);
-  }
+
 });

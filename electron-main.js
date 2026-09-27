@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, dialog } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -227,6 +227,185 @@ ipcMain.on('updater:install', (event) => {
   app.quit();
 });
 
+// === Settings (userData/settings.json) ===
+const SETTINGS_PATH = () => path.join(app.getPath('userData'), 'settings.json');
+let settingsCache = null;
+
+function getSettings() {
+  if (!settingsCache) {
+    try { settingsCache = JSON.parse(fs.readFileSync(SETTINGS_PATH(), 'utf8')); } catch { settingsCache = {}; }
+    if (typeof settingsCache.downloadDir !== 'string' || !path.isAbsolute(settingsCache.downloadDir)) {
+      settingsCache.downloadDir = path.join(app.getPath('downloads'), 'TubeGrab');
+    }
+  }
+  return settingsCache;
+}
+
+function saveSettings(patch) {
+  settingsCache = { ...getSettings(), ...patch };
+  try {
+    fs.mkdirSync(path.dirname(SETTINGS_PATH()), { recursive: true });
+    fs.writeFileSync(SETTINGS_PATH(), JSON.stringify(settingsCache, null, 2));
+  } catch (err) {
+    console.error('[Settings] save failed:', err.message);
+  }
+  return settingsCache;
+}
+
+// === Download engine (yt-dlp) ===
+// The copy bundled in the portable .exe is re-extracted on every launch, so
+// it can never update itself. Keep a copy in the user's app-data folder,
+// seed it from the bundled one, and let `yt-dlp -U` keep it current: sites
+// like YouTube break old versions within weeks.
+const ENGINE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+let engineState = { version: null, updating: false, error: null };
+
+function engineUserPath() {
+  return path.join(app.getPath('userData'), 'bin', 'yt-dlp.exe');
+}
+
+function ensureEngine() {
+  if (process.platform !== 'win32') return null;
+  const bundled = path.join(__dirname, 'yt-dlp.exe');
+  const target = engineUserPath();
+  try {
+    if (!fs.existsSync(target) && fs.existsSync(bundled)) {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(bundled, target);
+    }
+    return fs.existsSync(target) ? target : null;
+  } catch (err) {
+    console.error('[Engine] seed failed:', err.message);
+    return null;
+  }
+}
+
+function engineVersion(exePath) {
+  return new Promise((resolve) => {
+    execFile(exePath, ['--version'], { windowsHide: true, timeout: 60_000 }, (err, stdout) => resolve(err ? null : stdout.trim()));
+  });
+}
+
+const versionParts = (v) => String(v || '').split('.').map((n) => parseInt(n, 10) || 0);
+function isNewerEngine(a, b) {
+  const x = versionParts(a); const y = versionParts(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  }
+  return false;
+}
+
+function setEngineState(patch) {
+  engineState = { ...engineState, ...patch };
+  sendToRenderer('engine:state', engineState);
+}
+
+async function maintainEngine(force) {
+  const target = engineUserPath();
+  if (process.platform !== 'win32' || engineState.updating || !fs.existsSync(target)) return;
+  setEngineState({ updating: true, error: null });
+  try {
+    // A newer app release may ship a newer yt-dlp than the user's copy.
+    const bundled = path.join(__dirname, 'yt-dlp.exe');
+    const [current, shipped] = await Promise.all([engineVersion(target), engineVersion(bundled)]);
+    if (shipped && isNewerEngine(shipped, current)) {
+      try { fs.copyFileSync(bundled, target); } catch { /* in use by a running download; next launch */ }
+    }
+    const last = Number(getSettings().engineCheckedAt || 0);
+    if (force || Date.now() - last > ENGINE_CHECK_INTERVAL_MS) {
+      // yt-dlp -U only installs releases it verifies against the published SHA-256 sums.
+      await new Promise((resolve) => execFile(target, ['-U'], { windowsHide: true, timeout: 180_000 }, (err, stdout, stderr) => {
+        if (err) setEngineState({ error: 'No se pudo actualizar el motor de descargas.' });
+        if (stderr && /ERROR/.test(stderr)) console.error('[Engine] update:', stderr.trim().split('\n').pop());
+        resolve();
+      }));
+      saveSettings({ engineCheckedAt: Date.now() });
+    }
+    setEngineState({ version: await engineVersion(target) });
+  } finally {
+    setEngineState({ updating: false });
+  }
+}
+
+ipcMain.handle('engine:getState', (event) => (isTrustedSender(event) ? engineState : null));
+ipcMain.on('engine:update', (event) => { if (isTrustedSender(event)) maintainEngine(true); });
+
+// === Saving finished jobs straight into the chosen folder ===
+const JOB_FILE_RE = new RegExp(`^${APP_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/jobs/([a-f0-9]{32})/file\\?client=[a-f0-9]{32}$`);
+const savedFiles = new Map(); // jobId -> absolute path we wrote
+
+function safeFileName(name) {
+  const cleaned = path.basename(String(name || '')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^[.\s]+|[.\s]+$/g, '');
+  return cleaned.slice(0, 200) || 'descarga';
+}
+
+function uniquePath(dir, fileName) {
+  const ext = path.extname(fileName);
+  const base = fileName.slice(0, fileName.length - ext.length);
+  let candidate = path.join(dir, fileName);
+  for (let i = 1; fs.existsSync(candidate); i++) candidate = path.join(dir, `${base} (${i})${ext}`);
+  return candidate;
+}
+
+function setupDownloads() {
+  mainWindow.webContents.session.on('will-download', (event, item) => {
+    const match = JOB_FILE_RE.exec(item.getURL());
+    if (!match) return; // anything else keeps Electron's normal save dialog
+    const jobId = match[1];
+    const dir = getSettings().downloadDir;
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* reported on failure below */ }
+    const target = uniquePath(dir, safeFileName(item.getFilename()));
+    item.setSavePath(target);
+    item.once('done', (_e, state) => {
+      if (state === 'completed') {
+        savedFiles.set(jobId, target);
+        sendToRenderer('desktop:saved', { jobId, ok: true, path: target });
+      } else {
+        sendToRenderer('desktop:saved', { jobId, ok: false, error: state === 'cancelled' ? 'Guardado cancelado' : 'No se pudo guardar el archivo' });
+      }
+    });
+  });
+}
+
+ipcMain.handle('desktop:getSettings', (event) => (isTrustedSender(event) ? { downloadDir: getSettings().downloadDir } : null));
+
+ipcMain.handle('desktop:chooseFolder', async (event) => {
+  if (!isTrustedSender(event)) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Carpeta donde guardar las descargas',
+    defaultPath: getSettings().downloadDir,
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths[0]) return { downloadDir: getSettings().downloadDir };
+  return { downloadDir: saveSettings({ downloadDir: result.filePaths[0] }).downloadDir };
+});
+
+ipcMain.on('desktop:openFolder', (event) => {
+  if (!isTrustedSender(event)) return;
+  const dir = getSettings().downloadDir;
+  fs.mkdirSync(dir, { recursive: true });
+  shell.openPath(dir);
+});
+
+ipcMain.on('desktop:saveJob', (event, payload) => {
+  if (!isTrustedSender(event) || !payload) return;
+  const { jobId, clientId } = payload;
+  if (!/^[a-f0-9]{32}$/.test(String(jobId)) || !/^[a-f0-9]{32}$/.test(String(clientId))) return;
+  mainWindow.webContents.downloadURL(`${APP_ORIGIN}/api/jobs/${jobId}/file?client=${clientId}`);
+});
+
+ipcMain.on('desktop:showInFolder', (event, jobId) => {
+  // Only paths this process itself saved; the renderer never supplies a path.
+  if (!isTrustedSender(event) || !savedFiles.has(jobId)) return;
+  shell.showItemInFolder(savedFiles.get(jobId));
+});
+
+ipcMain.on('desktop:setProgress', (event, value) => {
+  if (!isTrustedSender(event) || !mainWindow) return;
+  const v = Number(value);
+  mainWindow.setProgressBar(Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : -1);
+});
+
 /**
  * Kill the server process AND every child it spawned (yt-dlp.exe, ffmpeg.exe),
  * without touching unrelated processes elsewhere on the system. `serverProcess`
@@ -286,6 +465,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
     autoHideMenuBar: true
@@ -303,12 +483,15 @@ function createWindow() {
     if (!url.startsWith(`${APP_ORIGIN}/`)) event.preventDefault();
   });
 
+  setupDownloads();
+
   // Start the Express server. windowsHide keeps this (and anything it in turn
   // spawns, like yt-dlp.exe/ffmpeg.exe) from ever flashing a console window.
+  const enginePath = ensureEngine();
   serverProcess = fork(path.join(__dirname, 'server.js'), [], {
     // TUBEGRAB_ELECTRON tells server.js it already has a native window on the
     // way, so it must not also launch the system browser (see server.js).
-    env: { ...process.env, NODE_ENV: 'production', TUBEGRAB_ELECTRON: '1' },
+    env: { ...process.env, NODE_ENV: 'production', TUBEGRAB_ELECTRON: '1', ...(enginePath ? { TUBEGRAB_YTDLP: enginePath } : {}) },
     windowsHide: true,
   });
 
@@ -319,6 +502,7 @@ function createWindow() {
     }
     if (mainWindow) mainWindow.loadURL(APP_ORIGIN);
     checkForUpdates();
+    maintainEngine(false);
   });
 
   mainWindow.on('closed', function () {

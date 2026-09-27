@@ -9,7 +9,8 @@ const { execSync } = require('child_process');
 const isWindows = process.platform === 'win32';
 if (isWindows) {
   console.log('[postinstall] Windows detectado, se omite la descarga de yt-dlp (usa yt-dlp.exe local).');
-  process.exit(0);
+  require('./fetch-ffprobe');
+  return;
 }
 
 // The Dockerfile already installs yt-dlp system-wide via apt/curl — don't

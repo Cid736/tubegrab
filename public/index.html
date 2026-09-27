@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TubeGrab — YouTube, MP3, MP4 y Conversor</title>
-  <meta name="description" content="Descarga audio y vídeo de YouTube y convierte tus propios archivos entre formatos de audio y vídeo, de forma segura y privada.">
+  <title>TubeGrab — Descargador y conversor de audio y vídeo</title>
+  <meta name="description" content="Descarga audio y vídeo de YouTube y más de 20 sitios, y convierte tus archivos entre 23 formatos, con cola de trabajos y todo en tu equipo.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -29,50 +29,24 @@
         <div class="header-badge"><span class="badge-dot"></span>Privacidad Total</div>
       </div>
     </header>
+
     <main class="main-card" id="mainCard">
       <div class="card-glow"></div>
-      <h1 class="main-title">YouTube<span class="title-accent">en Alta Calidad</span></h1>
-      <p class="main-subtitle">Descargas anónimas. MP3 o MP4, tú eliges el formato.</p>
-      
-      <div class="input-group" id="inputGroup">
-        <div class="input-wrapper">
-          <svg class="input-icon" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <input type="url" id="urlInput" placeholder="Pega el link del video aquí..." autocomplete="off" spellcheck="false">
-          <button class="btn-clear" id="btnClear" title="Limpiar"><svg viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-        </div>
-      </div>
+      <h1 class="main-title">Descarga y convierte<span class="title-accent">audio y vídeo</span></h1>
+      <p class="main-subtitle">YouTube y más de 20 sitios · 23 formatos · todo en tu equipo.</p>
 
-      <!-- Video Preview -->
-      <div class="preview-card hidden" id="previewCard">
-        <img class="preview-thumb" id="previewThumb" alt="Miniatura del vídeo">
-        <div class="preview-info">
-          <p class="preview-title" id="previewTitle"></p>
-          <p class="preview-meta" id="previewMeta"></p>
-        </div>
-      </div>
-
-      <!-- File Upload (Convert mode) -->
-      <div class="input-group hidden" id="uploadGroup">
-        <label class="file-drop" id="fileDrop" for="fileInput">
-          <input type="file" id="fileInput" accept="audio/*,video/*,image/gif,.mp3,.aac,.m4a,.ogg,.opus,.wma,.ac3,.flac,.wav,.aiff,.aif,.amr,.mp4,.m4v,.webm,.mkv,.mov,.avi,.wmv,.flv,.mpg,.mpeg,.3gp,.ogv,.ts,.mts,.gif" hidden>
-          <svg class="upload-icon" viewBox="0 0 24 24" fill="none"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span class="file-drop-text" id="fileDropText">Arrastra un archivo o haz clic para elegirlo</span>
-          <span class="file-drop-hint">Casi cualquier audio o vídeo (y GIF). De un vídeo puedes sacar solo el audio.</span>
-        </label>
-      </div>
-
-      <!-- Format Toggle -->
+      <!-- Mode -->
       <div class="format-toggle-section">
         <div class="format-toggle" id="formatToggle">
-          <button class="format-btn active" data-mode="audio" id="btnAudio">
+          <button class="format-btn active" data-mode="audio" id="btnAudio" type="button">
             <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="2"/></svg>
             Audio
           </button>
-          <button class="format-btn" data-mode="video" id="btnVideo">
+          <button class="format-btn" data-mode="video" id="btnVideo" type="button">
             <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><polygon points="23 7 16 12 23 17 23 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2" stroke="currentColor" stroke-width="2"/></svg>
             Vídeo
           </button>
-          <button class="format-btn" data-mode="convert" id="btnConvert">
+          <button class="format-btn" data-mode="convert" id="btnConvert" type="button">
             <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M17 2l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12v-2a4 4 0 0 1 4-4h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 22l-4-4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12v2a4 4 0 0 1-4 4H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Convertir
           </button>
@@ -80,56 +54,125 @@
         </div>
       </div>
 
+      <!-- URLs (download modes) -->
+      <div class="input-group" id="inputGroup">
+        <div class="input-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <textarea id="urlInput" rows="1" placeholder="Pega uno o varios enlaces…" autocomplete="off" spellcheck="false"></textarea>
+          <button class="btn-clear" id="btnClear" title="Limpiar" type="button"><svg viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        </div>
+        <p class="input-hint" id="urlHint">YouTube, Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Reddit, Bandcamp…</p>
+      </div>
+
+      <div class="preview-card hidden" id="previewCard">
+        <img class="preview-thumb" id="previewThumb" alt="Miniatura">
+        <div class="preview-info">
+          <p class="preview-title" id="previewTitle"></p>
+          <p class="preview-meta" id="previewMeta"></p>
+        </div>
+      </div>
+
+      <!-- Files (convert mode) -->
+      <div class="input-group hidden" id="uploadGroup">
+        <label class="file-drop" id="fileDrop" for="fileInput">
+          <input type="file" id="fileInput" multiple accept="audio/*,video/*,image/gif,.mp3,.aac,.m4a,.ogg,.opus,.wma,.ac3,.flac,.wav,.aiff,.aif,.amr,.mp4,.m4v,.webm,.mkv,.mov,.avi,.wmv,.flv,.mpg,.mpeg,.3gp,.ogv,.ts,.mts,.gif" hidden>
+          <svg class="upload-icon" viewBox="0 0 24 24" fill="none"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span class="file-drop-text" id="fileDropText">Arrastra archivos o haz clic para elegirlos</span>
+          <span class="file-drop-hint">Varios a la vez · casi cualquier audio o vídeo (y GIF)</span>
+        </label>
+        <ul class="file-list hidden" id="fileList"></ul>
+      </div>
+
       <div class="format-section">
-        <!-- Audio Options -->
+        <!-- Audio download -->
         <div class="option-group" id="audioOptions">
-          <div class="option-block">
-            <label class="option-label">Formato de Audio</label>
-            <div class="select-wrapper">
-              <select id="audioFormat">
-                <option value="mp3" selected>MP3</option>
-                <option value="ogg">OGG (Vorbis)</option>
-              </select>
+          <div class="settings-grid two">
+            <div class="setting">
+              <label class="option-label" for="audioFormat">Formato</label>
+              <div class="select-wrapper">
+                <select id="audioFormat">
+                  <option value="mp3" selected>MP3 — el más compatible</option>
+                  <option value="m4a">M4A (AAC)</option>
+                  <option value="opus">OPUS</option>
+                  <option value="ogg">OGG (Vorbis)</option>
+                  <option value="flac">FLAC — sin pérdida</option>
+                  <option value="wav">WAV — sin comprimir</option>
+                  <option value="best">Original — sin recomprimir</option>
+                </select>
+              </div>
             </div>
-          </div>
-          <div class="option-block">
-            <label class="option-label">Calidad de Audio</label>
-            <div class="select-wrapper">
-              <select id="audioBitrate">
-                <option value="320">320 kbps — Calidad Original</option>
-                <option value="256">256 kbps — Alta Fidelidad</option>
-                <option value="128" selected>128 kbps — Estándar</option>
-                <option value="96">96 kbps — Ahorro de Espacio</option>
-              </select>
+            <div class="setting">
+              <label class="option-label" for="audioBitrate">Calidad</label>
+              <div class="select-wrapper">
+                <select id="audioBitrate">
+                  <option value="320">320 kbps — máxima</option>
+                  <option value="256">256 kbps</option>
+                  <option value="192" selected>192 kbps — recomendada</option>
+                  <option value="160">160 kbps</option>
+                  <option value="128">128 kbps</option>
+                  <option value="96">96 kbps — ahorro</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
-        <!-- Video Options -->
+
+        <!-- Video download -->
         <div class="option-group hidden" id="videoOptions">
-          <label class="option-label">Calidad de Vídeo</label>
-          <div class="select-wrapper">
-            <select id="videoQuality">
-              <option value="2160">4K (2160p) — Ultra HD</option>
-              <option value="1440">2K (1440p) — QHD</option>
-              <option value="1080" selected>1080p — Full HD</option>
-              <option value="720">720p — HD</option>
-              <option value="480">480p — SD</option>
-              <option value="360">360p — Ahorro de Datos</option>
-            </select>
+          <div class="settings-grid two">
+            <div class="setting">
+              <label class="option-label" for="videoQuality">Calidad</label>
+              <div class="select-wrapper">
+                <select id="videoQuality">
+                  <option value="best">La mejor disponible</option>
+                  <option value="2160">4K (2160p)</option>
+                  <option value="1440">2K (1440p)</option>
+                  <option value="1080" selected>1080p — Full HD</option>
+                  <option value="720">720p — HD</option>
+                  <option value="480">480p</option>
+                  <option value="360">360p — ahorro</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting">
+              <label class="option-label" for="videoContainer">Formato</label>
+              <div class="select-wrapper">
+                <select id="videoContainer">
+                  <option value="mp4" selected>MP4 — el más compatible</option>
+                  <option value="mkv">MKV — máxima calidad</option>
+                  <option value="webm">WEBM</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
-        <!-- Convert Options -->
+
+        <!-- Download extras -->
+        <div class="checks" id="downloadExtras">
+          <label class="check-option"><input type="checkbox" id="optMetadata" checked><span>Portada y metadatos</span></label>
+          <label class="check-option"><input type="checkbox" id="optPlaylist"><span>Playlist completa</span></label>
+          <label class="check-option" id="optSubtitlesWrap"><input type="checkbox" id="optSubtitles"><span>Subtítulos (ES/EN)</span></label>
+          <label class="check-option" title="Quita patrocinios y autopromociones de vídeos de YouTube usando SponsorBlock"><input type="checkbox" id="optSponsorblock"><span>Quitar patrocinios</span></label>
+        </div>
+
+        <!-- Convert -->
         <div class="option-group hidden" id="convertOptions">
           <div class="convert-kind-toggle" id="convertKindToggle">
-            <button class="kind-btn active" data-kind="audio" id="btnConvertAudio">Audio</button>
-            <button class="kind-btn" data-kind="video" id="btnConvertVideo">Vídeo</button>
-          </div>
-          <label class="option-label" for="convertFormat">Convertir a</label>
-          <div class="select-wrapper">
-            <select id="convertFormat"></select>
+            <button class="kind-btn active" data-kind="audio" id="btnConvertAudio" type="button">Audio</button>
+            <button class="kind-btn" data-kind="video" id="btnConvertVideo" type="button">Vídeo</button>
           </div>
 
-          <!-- Audio target settings -->
+          <div class="settings-grid two">
+            <div class="setting">
+              <label class="option-label" for="convertPreset">Preajuste</label>
+              <div class="select-wrapper"><select id="convertPreset"></select></div>
+            </div>
+            <div class="setting">
+              <label class="option-label" for="convertFormat">Convertir a</label>
+              <div class="select-wrapper"><select id="convertFormat"></select></div>
+            </div>
+          </div>
+
           <div class="settings-grid" id="audioConvertSettings">
             <div class="setting">
               <label class="option-label" for="convertBitrate">Calidad</label>
@@ -166,13 +209,9 @@
                 </select>
               </div>
             </div>
-            <label class="check-option">
-              <input type="checkbox" id="convertNormalize">
-              <span>Normalizar volumen</span>
-            </label>
+            <label class="check-option full"><input type="checkbox" id="convertNormalize"><span>Normalizar volumen</span></label>
           </div>
 
-          <!-- Video target settings -->
           <div class="settings-grid hidden" id="videoConvertSettings">
             <div class="setting">
               <label class="option-label" for="convertResolution">Resolución</label>
@@ -212,14 +251,36 @@
                 </select>
               </div>
             </div>
-            <label class="check-option" id="convertRemoveAudioOption">
-              <input type="checkbox" id="convertRemoveAudio">
-              <span>Quitar el audio</span>
-            </label>
+            <div class="setting">
+              <label class="option-label" for="convertRotate">Girar</label>
+              <div class="select-wrapper">
+                <select id="convertRotate">
+                  <option value="">No</option>
+                  <option value="90">90° derecha</option>
+                  <option value="270">90° izquierda</option>
+                  <option value="180">180°</option>
+                  <option value="hflip">Espejo horizontal</option>
+                  <option value="vflip">Espejo vertical</option>
+                </select>
+              </div>
+            </div>
+            <label class="check-option full" id="convertRemoveAudioOption"><input type="checkbox" id="convertRemoveAudio"><span>Quitar el audio</span></label>
           </div>
 
-          <!-- Trim (both) -->
-          <div class="trim-row">
+          <div class="settings-grid">
+            <div class="setting">
+              <label class="option-label" for="convertSpeed">Velocidad</label>
+              <div class="select-wrapper">
+                <select id="convertSpeed">
+                  <option value="0.5">0,5×</option>
+                  <option value="0.75">0,75×</option>
+                  <option value="" selected>Normal</option>
+                  <option value="1.25">1,25×</option>
+                  <option value="1.5">1,5×</option>
+                  <option value="2">2×</option>
+                </select>
+              </div>
+            </div>
             <div class="setting">
               <label class="option-label" for="convertTrimStart">Recortar desde</label>
               <input class="text-input" type="text" id="convertTrimStart" placeholder="0:00" inputmode="decimal" autocomplete="off">
@@ -233,66 +294,99 @@
         </div>
       </div>
 
-      <button class="btn-download" id="btnDownload">
-        <span class="btn-content"><svg class="btn-icon" viewBox="0 0 24 24" fill="none"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="btnText">Descargar MP3</span></span>
-        <span class="btn-loading"><div class="spinner"></div>Procesando...</span>
+      <button class="btn-download" id="btnDownload" type="button">
+        <span class="btn-content"><svg class="btn-icon" viewBox="0 0 24 24" fill="none"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="btnText">Descargar</span></span>
+        <span class="btn-loading"><div class="spinner"></div><span id="btnLoadingText">Añadiendo…</span></span>
       </button>
 
       <div class="status-area" id="statusArea">
         <div class="status-message" id="statusMessage"></div>
       </div>
-      <div class="progress-bar hidden" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
     </main>
 
     <aside class="side-panel">
-    <!-- Recent History -->
-    <section class="history-section hidden" id="historySection">
-      <div class="history-header">
-        <h3>Recientes</h3>
-        <button class="btn-clear-history" id="btnClearHistory">Limpiar</button>
-      </div>
-      <ul class="history-list" id="historyList"></ul>
-    </section>
-
-    <!-- Update Banner (desktop app only, shown when electron-updater finds a newer release) -->
-    <section class="update-banner hidden" id="updateBanner">
-      <div class="update-banner-text">
-        <h3 id="updateBannerTitle">Nueva versión disponible</h3>
-        <p id="updateBannerSubtitle">Descarga e instala la actualización sin salir de la app.</p>
-      </div>
-      <div class="update-banner-actions">
-        <button class="btn-update" id="btnUpdate" data-stage="available">Actualizar</button>
-        <div class="update-progress hidden" id="updateProgress">
-          <div class="update-progress-bar"><div class="update-progress-fill" id="updateProgressFill"></div></div>
-          <span id="updateProgressLabel">0%</span>
+      <!-- Update Banner (desktop app only, shown when a newer release exists) -->
+      <section class="update-banner hidden" id="updateBanner">
+        <div class="update-banner-text">
+          <h3 id="updateBannerTitle">Nueva versión disponible</h3>
+          <p id="updateBannerSubtitle">Descarga e instala la actualización sin salir de la app.</p>
         </div>
-      </div>
-    </section>
+        <div class="update-banner-actions">
+          <button class="btn-update" id="btnUpdate" data-stage="available" type="button">Actualizar</button>
+          <div class="update-progress hidden" id="updateProgress">
+            <div class="update-progress-bar"><div class="update-progress-fill" id="updateProgressFill"></div></div>
+            <span id="updateProgressLabel">0%</span>
+          </div>
+        </div>
+      </section>
 
-    <!-- Desktop App Banner (removed automatically when running inside the desktop app itself) -->
-    <section class="desktop-banner" id="desktopBanner">
-      <div class="desktop-banner-text">
-        <h3>¿Prefieres usarlo sin navegador?</h3>
-        <p>Descarga la app de escritorio para Windows: un único .exe, sin instalación, sin dependencias.</p>
-      </div>
-      <div class="desktop-banner-actions">
-        <a class="btn-desktop-download" id="btnDesktopDownload" href="#" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          Descargar para Windows (.exe)
-        </a>
-        <p class="desktop-banner-note">Windows puede mostrar "Editor desconocido" (SmartScreen) por ser una app nueva sin firma digital de pago. No es un virus: pulsa <strong>"Ejecutar de todas formas"</strong>. Código fuente abierto en <a href="https://github.com/Cid736/tubegrab" target="_blank" rel="noopener">GitHub</a> si quieres verificarlo.</p>
-      </div>
-    </section>
+      <!-- Queue -->
+      <section class="panel queue-section" id="queueSection">
+        <div class="panel-header">
+          <h3>Cola <span class="panel-count" id="queueCount"></span></h3>
+          <button class="btn-link" id="btnClearFinished" type="button">Quitar terminados</button>
+        </div>
+        <p class="queue-empty" id="queueEmpty">Aquí verás el progreso de tus descargas y conversiones. Puedes añadir varias a la vez.</p>
+        <ul class="queue-list" id="queueList"></ul>
+      </section>
 
-    <section class="info-section">
-      <div class="info-card"><div class="info-icon">🛡️</div><h3>Sin Rastro</h3><p>Ejecución 100% local en tu máquina</p></div>
-      <div class="info-card"><div class="info-icon">⚡</div><h3>Veloz</h3><p>Conversión directa con yt-dlp + ffmpeg</p></div>
-      <div class="info-card"><div class="info-icon">🎬</div><h3>Audio & Vídeo</h3><p>MP3 hasta 320kbps · MP4 hasta 4K</p></div>
-      <div class="info-card"><div class="info-icon">🔄</div><h3>Conversor</h3><p>11 formatos de audio y 12 de vídeo, con recorte y ajustes</p></div>
-    </section>
+      <!-- Desktop settings -->
+      <section class="panel settings-section hidden" id="settingsSection">
+        <div class="panel-header"><h3>Ajustes</h3></div>
+        <div class="setting-row">
+          <div class="setting-row-text">
+            <span class="setting-row-label">Carpeta de descargas</span>
+            <span class="setting-row-value" id="downloadDirLabel">—</span>
+          </div>
+          <div class="setting-row-actions">
+            <button class="btn-small" id="btnOpenFolder" type="button">Abrir</button>
+            <button class="btn-small" id="btnChooseFolder" type="button">Cambiar</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-text">
+            <span class="setting-row-label">Motor de descargas (yt-dlp)</span>
+            <span class="setting-row-value" id="engineLabel">—</span>
+          </div>
+          <div class="setting-row-actions">
+            <button class="btn-small" id="btnUpdateEngine" type="button">Actualizar</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recent History -->
+      <section class="panel history-section hidden" id="historySection">
+        <div class="panel-header">
+          <h3>Recientes</h3>
+          <button class="btn-link" id="btnClearHistory" type="button">Limpiar</button>
+        </div>
+        <ul class="history-list" id="historyList"></ul>
+      </section>
+
+      <!-- Desktop App Banner (removed automatically inside the desktop app) -->
+      <section class="desktop-banner" id="desktopBanner">
+        <div class="desktop-banner-text">
+          <h3>¿Prefieres usarlo sin navegador?</h3>
+          <p>Descarga la app de escritorio para Windows: un único .exe, sin instalación, que se actualiza sola.</p>
+        </div>
+        <div class="desktop-banner-actions">
+          <a class="btn-desktop-download" id="btnDesktopDownload" href="#" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Descargar para Windows (.exe)
+          </a>
+          <p class="desktop-banner-note">Windows puede mostrar "Editor desconocido" (SmartScreen) por ser una app nueva sin firma digital de pago. No es un virus: pulsa <strong>"Ejecutar de todas formas"</strong>. Código fuente abierto en <a href="https://github.com/Cid736/tubegrab" target="_blank" rel="noopener">GitHub</a> si quieres verificarlo.</p>
+        </div>
+      </section>
+
+      <section class="info-section">
+        <div class="info-card"><div class="info-icon">🛡️</div><h3>Sin Rastro</h3><p>Todo se procesa en tu equipo</p></div>
+        <div class="info-card"><div class="info-icon">⚡</div><h3>Cola en paralelo</h3><p>Varias descargas a la vez, con progreso real</p></div>
+        <div class="info-card"><div class="info-icon">🌐</div><h3>+20 sitios</h3><p>YouTube, Vimeo, SoundCloud, TikTok, X…</p></div>
+        <div class="info-card"><div class="info-icon">🔄</div><h3>23 formatos</h3><p>Conversión con preajustes, recorte y ajustes</p></div>
+      </section>
     </aside>
 
-    <footer class="footer"><p>TubeGrab — Descargas privadas para uso personal.</p></footer>
+    <footer class="footer"><p>TubeGrab — Descargas privadas para uso personal. Respeta los derechos de autor.</p></footer>
   </div>
   <script src="app.js"></script>
 </body>

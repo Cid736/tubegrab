@@ -10,3 +10,16 @@ contextBridge.exposeInMainWorld('updater', {
   onDownloaded: (cb) => ipcRenderer.on('updater:downloaded', () => cb()),
   onError: (cb) => ipcRenderer.on('updater:error', (_e, message) => cb(message)),
 });
+
+contextBridge.exposeInMainWorld('desktop', {
+  getSettings: () => ipcRenderer.invoke('desktop:getSettings'),
+  chooseFolder: () => ipcRenderer.invoke('desktop:chooseFolder'),
+  openFolder: () => ipcRenderer.send('desktop:openFolder'),
+  saveJob: (jobId, clientId) => ipcRenderer.send('desktop:saveJob', { jobId, clientId }),
+  showInFolder: (jobId) => ipcRenderer.send('desktop:showInFolder', jobId),
+  setProgress: (value) => ipcRenderer.send('desktop:setProgress', value),
+  onSaved: (cb) => ipcRenderer.on('desktop:saved', (_e, info) => cb(info)),
+  getEngine: () => ipcRenderer.invoke('engine:getState'),
+  updateEngine: () => ipcRenderer.send('engine:update'),
+  onEngine: (cb) => ipcRenderer.on('engine:state', (_e, state) => cb(state)),
+});

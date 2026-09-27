@@ -122,3 +122,48 @@ Revisión manual completa de `server.js`, `public/app.js` y `electron-main.js` c
 ### [MEDIA — funcional] El aviso de nueva versión podía perderse
 - **Descripción:** El aviso se enviaba a la ventana en cuanto respondía GitHub. Si la página aún no había terminado de cargar, el mensaje se perdía.
 - **Fix:** El proceso principal guarda el estado del actualizador y la página lo pide al cargar (`updater:getState`), además de recibir los cambios. La cabecera muestra siempre la versión actual y su estado (`v1.6.0 · Última versión`, `Nueva: vX`, `No se pudo comprobar`); al pulsarla se vuelve a comprobar.
+
+---
+
+## 2026-09-27 — Revisión 7 (v2.0.0: cola de trabajos, multi-sitio, dependencias)
+
+### [ALTA — funcional] Las descargas de YouTube fallaban (HTTP 403)
+- **Descripción:** El yt-dlp incluido (2026.03.17) tenía más de 6 meses; YouTube lo bloqueaba con 403. Además, yt-dlp ya necesita un motor de JavaScript para los retos de YouTube.
+- **Fix:** yt-dlp actualizado a 2026.08.19. La app de escritorio mantiene una copia en su carpeta de datos que se actualiza sola una vez al día (`yt-dlp -U`) y se puede actualizar a mano desde Ajustes. Como motor JavaScript se usa el propio Node/Electron de la app (ver siguiente punto).
+
+### [ALTA] Electron 34 con vulnerabilidades conocidas (pendiente desde la revisión 5)
+- **Fix:** Actualizado a Electron 44.4.5 (Node 24) y electron-builder 26. `sandbox: true` explícito en la ventana.
+
+### [MEDIA] Código JavaScript de YouTube ejecutado por el motor de retos
+- **Descripción:** Para resolver los retos de YouTube, yt-dlp ejecuta JavaScript descargado de YouTube en el motor que se le da. Sin aislamiento, ese código tendría acceso completo al equipo.
+- **Verificación:** yt-dlp lanza Node con su modelo de permisos (`--permission`) y rechaza versiones sin soporte (<22). Comprobado que Electron 44 actuando como Node lo respeta: con `--permission`, leer `C:\Windows\win.ini` y lanzar procesos devuelve `ERR_ACCESS_DENIED` (sin la opción, ambos están permitidos). Docker pasa a `node:24-slim` por el mismo motivo.
+
+### [ALTA] Dependencias de producción con vulnerabilidades
+- **Descripción:** `npm audit --omit=dev`: `ip-address` (alta: bypass de clasificación de IPs/SSRF, vía express-rate-limit), `qs` (moderada: DoS), `body-parser` (baja: límite de tamaño).
+- **Fix:** `npm audit fix`. Eliminados paquetes sin uso tras la reescritura (`fluent-ffmpeg`, `node-fetch`, `yt-dlp-wrap-extended`, `open`) y `pkg` (abandonado, escalada de privilegios local sin arreglo; solo servía al antiguo build de consola, que se retira). Resultado: `npm audit` → 0 vulnerabilidades (producción y desarrollo).
+
+### [MEDIA — hardening] ffmpeg podía abrir un "vídeo" que en realidad es una lista HLS/concat
+- **Descripción:** Un archivo subido con extensión de vídeo puede ser una lista de reproducción que apunta a otros archivos locales o URLs; es un truco conocido para leer archivos del servidor a través de un conversor.
+- **Verificación:** Probado con cargas HLS (`file:///…`), `ffconcat` y HLS con URL de red: el ffmpeg 6.1.1 incluido ya las rechaza por sus valores por defecto ("Invalid data" / "Operation not permitted"), así que no había filtración explotable.
+- **Fix (defensa en profundidad):** ffmpeg abre la entrada con `-protocol_whitelist file` y `-format_whitelist` limitado a demuxers multimedia reales, para no depender de los valores por defecto de cada versión. Probado: los 40 archivos de prueba de todos los formatos siguen convirtiéndose; las cargas maliciosas se rechazan.
+
+### [MEDIA — hardening] Configuración local de yt-dlp
+- **Descripción:** yt-dlp lee archivos de configuración del usuario (p. ej. `%APPDATA%\yt-dlp\config`), que podrían añadir opciones como `--exec`.
+- **Fix:** `--ignore-config` en todas las llamadas.
+
+### [BAJA — DoS] Abuso de la nueva API de trabajos
+- **Fix:** Máximo de trabajos por cliente (50 en web / 1000 en escritorio) y en total; máximo de enlaces por petición (20 web / 100 escritorio) y de playlists por petición (3 / 10), porque cada una lanza un yt-dlp de hasta 90 s; máximo 5 conexiones de eventos (SSE) por cliente. Probado: la 6.ª conexión SSE recibe 429.
+
+### [ALTA — despliegue] El contenedor Docker no arrancaba y se ejecutaba como root
+- **Descripción:** El Dockerfile solo copiaba `server.js` y `public/` (faltaba `lib/`), usaba Node 20 y corría como root.
+- **Fix:** Copia `lib/`, `node:24-slim`, `USER node` y `FFMPEG_BIN=/usr/bin/ffmpeg` (el ffmpeg del sistema trae ffprobe).
+
+### [MEDIA — funcional] Faltaba ffprobe (portada en MKV y SponsorBlock fallaban)
+- **Fix:** `scripts/fetch-ffprobe.js` descarga el ffprobe 6.1.1 de la misma release que el ffmpeg de ffmpeg-static y solo lo acepta si su SHA-256 coincide con el fijado en el código.
+
+### Resultado de la auditoría del código nuevo
+- **SSRF / sitios:** solo URLs http(s) sin credenciales ni puerto, de una lista de dominios; extractor genérico desactivado (`--ies default,-generic`); `--` antes de la URL. Probado: `file://`, `127.0.0.1` y dominios ajenos se rechazan.
+- **Aislamiento de trabajos:** cada navegador/app usa un id aleatorio de 128 bits; otro id recibe 404 al pedir un archivo ajeno (probado). Los archivos solo se sirven si están dentro del directorio del propio trabajo.
+- **Escritorio:** guardado automático solo para URLs de la API de trabajos; "Mostrar en carpeta" solo abre rutas que la propia app guardó (el renderer nunca envía rutas); nombres de archivo saneados y sin sobrescribir.
+- **XSS:** todo dato remoto (títulos, nombres de archivo, errores) se inserta con `textContent`.
+- **Límite conocido:** el `.exe` sigue sin firma de código.
