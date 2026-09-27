@@ -95,7 +95,7 @@ MIT
 
 Security reviews are AI-assisted (Claude, Anthropic) and run on significant changes to check for injection risks, insecure defaults and dependency vulnerabilities. Findings are tracked in [`BUGLOG.md`](BUGLOG.md).
 
-**Last review:** 2026-09-27 — full manual review of `server.js`, `app.js` and `electron-main.js` (command injection, SSRF, XSS, path traversal) plus a dependency audit. No high-confidence exploitable vulnerabilities found in application code. One hardening recommendation: `/api/convert` doesn't validate uploaded file type before passing it to ffmpeg — low real-world risk locally, worth restricting if self-hosting publicly. `npm audit` flags several packages, but nearly all are `electron-builder`'s build-time-only dependencies (never deployed); the couple of runtime ones (`qs`, `body-parser`, pulled in by Express) are DoS-only or not reachable given how inputs are validated here.
+**Last review:** 2026-09-27 (review #6) — covered the new in-app updater and the local server. Fixed: the updater now verifies each download's sha256 against GitHub's published digest and only talks to GitHub over HTTPS; the install script no longer interpolates file paths (command-injection fix); the app window can't navigate away from its own local UI, and updater IPC only accepts calls from it; the local server rejects DNS-rebinding and cross-site requests. Known limits: the `.exe` isn't code-signed, so a compromised GitHub account could still ship a malicious update, and Electron 34 should be upgraded. Details in `BUGLOG.md`.
 
 Found a vulnerability? Open an issue or contact directly.
 
@@ -163,7 +163,7 @@ Para vídeos con restricciones, coloca un archivo `cookies.txt` (formato Netscap
 
 Las revisiones de seguridad son asistidas por IA (Claude, Anthropic) y se ejecutan en cambios significativos para detectar riesgos de inyección, configuraciones inseguras y vulnerabilidades en dependencias. Los hallazgos se registran en [`BUGLOG.md`](BUGLOG.md).
 
-**Última revisión:** 2026-09-27 — revisión manual completa de `server.js`, `app.js` y `electron-main.js` (inyección de comandos, SSRF, XSS, path traversal) más auditoría de dependencias. No se encontraron vulnerabilidades explotables de alta confianza en el código de la app. Una recomendación de hardening: `/api/convert` no valida el tipo de archivo subido antes de pasarlo a ffmpeg — riesgo real bajo en uso local, vale la pena restringirlo si se autoaloja públicamente. `npm audit` marca varios paquetes, pero casi todos son dependencias de build de `electron-builder` (nunca se despliegan); los pocos de producción (`qs`, `body-parser`, vía Express) son solo de denegación de servicio o no explotables dado cómo se valida la entrada aquí.
+**Última revisión:** 2026-09-27 (revisión 6) — revisados el nuevo actualizador integrado y el servidor local. Corregido: el actualizador verifica ahora el sha256 de cada descarga contra el digest publicado por GitHub y solo se conecta a GitHub por HTTPS; el script de instalación ya no interpola rutas (fix de inyección de comandos); la ventana de la app no puede navegar fuera de su propia interfaz local y el IPC del actualizador solo acepta llamadas de ella; el servidor local rechaza DNS rebinding y peticiones cross-site. Límites conocidos: el `.exe` no está firmado, así que una cuenta de GitHub comprometida aún podría publicar una actualización maliciosa, y conviene actualizar Electron 34. Detalles en `BUGLOG.md`.
 
 ¿Encontraste una vulnerabilidad? Abre un issue o contacta directamente.
 

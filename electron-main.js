@@ -1,10 +1,14 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const https = require('https');
+const crypto = require('crypto');
 const { fork, execFile, spawn } = require('child_process');
 const http = require('http');
+
+const PORT = process.env.PORT || 3000;
+const APP_ORIGIN = `http://localhost:${PORT}`;
 
 let mainWindow;
 let serverProcess;
@@ -20,59 +24,89 @@ let shuttingDown = false;
 // swaps the file, and relaunches it.
 const GITHUB_REPO = 'Cid736/tubegrab';
 const UPDATE_ASSET_NAME = 'TubeGrab.exe';
-let pendingUpdate = null; // { downloadUrl, version }
+// Only ever talk to GitHub (API + its release-asset CDN), over HTTPS, even when
+// following redirects.
+const ALLOWED_UPDATE_HOSTS = new Set([
+  'api.github.com',
+  'github.com',
+  'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
+]);
+const MAX_REDIRECTS = 5;
+let pendingUpdate = null; // { downloadUrl, version, sha256, size }
 let downloadedExePath = null;
+let downloadInProgress = false;
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
 
+function isTrustedSender(event) {
+  const url = event.senderFrame && event.senderFrame.url;
+  return typeof url === 'string' && url.startsWith(`${APP_ORIGIN}/`);
+}
+
+function assertAllowedUrl(rawUrl) {
+  const url = new URL(rawUrl);
+  if (url.protocol !== 'https:' || !ALLOWED_UPDATE_HOSTS.has(url.hostname)) {
+    throw new Error(`Origen de actualización no permitido: ${url.hostname}`);
+  }
+  return url;
+}
+
+function httpsGet(rawUrl, redirectsLeft, onResponse, onError) {
+  let url;
+  try { url = assertAllowedUrl(rawUrl); } catch (err) { onError(err); return; }
+  const req = https.get(url, { headers: { 'User-Agent': 'TubeGrab-Updater', Accept: 'application/json, application/octet-stream' } }, (res) => {
+    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+      res.resume();
+      if (redirectsLeft <= 0) { onError(new Error('Demasiadas redirecciones')); return; }
+      httpsGet(new URL(res.headers.location, url).toString(), redirectsLeft - 1, onResponse, onError);
+      return;
+    }
+    if (res.statusCode !== 200) {
+      res.resume();
+      onError(new Error(`GitHub respondió ${res.statusCode}`));
+      return;
+    }
+    onResponse(res);
+  });
+  req.on('error', onError);
+  req.setTimeout(30_000, () => req.destroy(new Error('Tiempo de espera agotado')));
+}
+
 function httpJson(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'TubeGrab-Updater' } }, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
-        httpJson(res.headers.location).then(resolve, reject);
-        return;
-      }
-      if (res.statusCode !== 200) {
-        res.resume();
-        reject(new Error(`GitHub respondió ${res.statusCode}`));
-        return;
-      }
+    httpsGet(url, MAX_REDIRECTS, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
+      res.on('error', reject);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); } catch (err) { reject(err); }
       });
-    }).on('error', reject);
+    }, reject);
   });
 }
 
+/** Streams to destPath and resolves with the file's sha256 (hex) and byte count. */
 function downloadToFile(url, destPath, onProgress) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'TubeGrab-Updater' } }, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
-        downloadToFile(res.headers.location, destPath, onProgress).then(resolve, reject);
-        return;
-      }
-      if (res.statusCode !== 200) {
-        res.resume();
-        reject(new Error(`Descarga respondió ${res.statusCode}`));
-        return;
-      }
+    httpsGet(url, MAX_REDIRECTS, (res) => {
       const total = parseInt(res.headers['content-length'] || '0', 10);
+      const hash = crypto.createHash('sha256');
       let downloaded = 0;
-      const file = fs.createWriteStream(destPath);
+      const file = fs.createWriteStream(destPath, { flags: 'wx' });
       res.on('data', (chunk) => {
         downloaded += chunk.length;
+        hash.update(chunk);
         if (total > 0 && onProgress) onProgress(Math.round((downloaded / total) * 100));
       });
+      res.on('aborted', () => reject(new Error('Descarga interrumpida')));
+      res.on('error', reject);
       res.pipe(file);
-      file.on('finish', () => file.close(() => resolve()));
+      file.on('finish', () => file.close(() => resolve({ sha256: hash.digest('hex'), size: downloaded })));
       file.on('error', reject);
-    }).on('error', reject);
+    }, reject);
   });
 }
 
@@ -92,49 +126,74 @@ async function checkForUpdates() {
 
   try {
     const release = await httpJson(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
+    // tag_name ends up in UI text and in comparisons; accept strict X.Y.Z only.
     const remoteVersion = String(release.tag_name || '').replace(/^v/, '');
-    if (!remoteVersion || !isNewerVersion(remoteVersion, app.getVersion())) return;
+    if (!/^\d+\.\d+\.\d+$/.test(remoteVersion)) return;
+    if (!isNewerVersion(remoteVersion, app.getVersion())) return;
 
     const asset = (release.assets || []).find((a) => a.name === UPDATE_ASSET_NAME);
-    if (!asset) return;
+    // GitHub publishes a sha256 digest per asset; without one we can't verify
+    // the download, so don't offer the update at all.
+    const digestMatch = asset && /^sha256:([0-9a-f]{64})$/i.exec(String(asset.digest || ''));
+    if (!asset || !digestMatch) return;
 
-    pendingUpdate = { downloadUrl: asset.browser_download_url, version: remoteVersion };
+    pendingUpdate = {
+      downloadUrl: asset.browser_download_url,
+      version: remoteVersion,
+      sha256: digestMatch[1].toLowerCase(),
+      size: asset.size,
+    };
     sendToRenderer('updater:available', { version: remoteVersion });
   } catch (err) {
     console.error('[Updater] check failed:', err.message);
   }
 }
 
-ipcMain.on('updater:download', async () => {
-  if (!pendingUpdate) return;
+ipcMain.on('updater:download', async (event) => {
+  if (!isTrustedSender(event) || !pendingUpdate || downloadInProgress || downloadedExePath) return;
+  downloadInProgress = true;
+  let destPath = null;
   try {
-    const destPath = path.join(os.tmpdir(), `TubeGrab-update-${pendingUpdate.version}.exe`);
-    await downloadToFile(pendingUpdate.downloadUrl, destPath, (percent) => sendToRenderer('updater:progress', { percent }));
+    // Fresh random directory instead of a predictable %TEMP% file name.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tubegrab-update-'));
+    destPath = path.join(dir, UPDATE_ASSET_NAME);
+    const result = await downloadToFile(pendingUpdate.downloadUrl, destPath, (percent) => sendToRenderer('updater:progress', { percent }));
+    if (result.sha256 !== pendingUpdate.sha256 || result.size !== pendingUpdate.size) {
+      throw new Error('el archivo descargado no coincide con la firma publicada (sha256)');
+    }
     downloadedExePath = destPath;
     sendToRenderer('updater:downloaded');
   } catch (err) {
+    if (destPath) fs.rm(path.dirname(destPath), { recursive: true, force: true }, () => {});
     sendToRenderer('updater:error', err.message);
+  } finally {
+    downloadInProgress = false;
   }
 });
 
-ipcMain.on('updater:install', () => {
-  if (!downloadedExePath) return;
+ipcMain.on('updater:install', (event) => {
+  if (!isTrustedSender(event) || !downloadedExePath) return;
 
   // electron-builder's portable launcher exposes the real on-disk exe path here;
   // process.execPath would instead point at the self-extracted temp copy.
   const targetExePath = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
-  const pid = process.pid;
+
+  // Paths go in through environment variables, never interpolated into the
+  // script text, so no file name can break out of the PowerShell command.
+  // The move is retried because the portable launcher stub keeps TubeGrab.exe
+  // locked for a moment after this process exits; if it never succeeds, the
+  // old version is relaunched rather than leaving the user with nothing.
   const psScript = [
-    `Wait-Process -Id ${pid} -ErrorAction SilentlyContinue`,
-    `Start-Sleep -Milliseconds 500`,
-    `Move-Item -Force '${downloadedExePath}' '${targetExePath}'`,
-    `Start-Process '${targetExePath}'`,
+    'Wait-Process -Id ([int]$env:TG_PID) -ErrorAction SilentlyContinue',
+    'for ($i = 0; $i -lt 30; $i++) { try { Move-Item -LiteralPath $env:TG_SRC -Destination $env:TG_DST -Force -ErrorAction Stop; break } catch { Start-Sleep -Milliseconds 500 } }',
+    'Start-Process -FilePath $env:TG_DST',
   ].join('; ');
 
-  const helper = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', psScript], {
+  const helper = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
+    env: { ...process.env, TG_PID: String(process.pid), TG_SRC: downloadedExePath, TG_DST: targetExePath },
   });
   helper.unref();
 
@@ -201,6 +260,18 @@ function createWindow() {
     autoHideMenuBar: true
   });
 
+  // The preload exposes window.updater to whatever this window displays, so it
+  // must only ever display our own local UI: no in-app navigation elsewhere, and
+  // external links go to the system browser instead of a new Electron window
+  // (which would otherwise inherit the same preload).
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(`${APP_ORIGIN}/`)) event.preventDefault();
+  });
+
   // Start the Express server. windowsHide keeps this (and anything it in turn
   // spawns, like yt-dlp.exe/ffmpeg.exe) from ever flashing a console window.
   serverProcess = fork(path.join(__dirname, 'server.js'), [], {
@@ -211,12 +282,11 @@ function createWindow() {
   });
 
   // Wait for the server to be ready before loading the URL (avoids race condition)
-  const PORT = process.env.PORT || 3000;
   waitForServer(PORT, 30, 200, (err) => {
     if (err) {
       console.error('[Electron] Server failed to start:', err.message);
     }
-    if (mainWindow) mainWindow.loadURL(`http://localhost:${PORT}`);
+    if (mainWindow) mainWindow.loadURL(APP_ORIGIN);
     checkForUpdates();
   });
 

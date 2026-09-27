@@ -93,6 +93,35 @@ if (process.env.TRUST_PROXY) {
 }
 
 app.use(helmet());
+
+// DNS-rebinding guard: when bound to localhost, a malicious site could point its
+// own domain at 127.0.0.1 and then read this server's responses from the
+// browser. Only answer requests actually addressed to localhost.
+if (HOST === '127.0.0.1') {
+  const allowedHosts = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
+  app.use((req, res, next) => {
+    if (!allowedHosts.has(String(req.headers.host || '').toLowerCase())) {
+      return res.status(403).send('Forbidden');
+    }
+    next();
+  });
+}
+
+// Cross-site request guard: any web page the user visits can fire requests at
+// this server (e.g. a multipart POST to /api/convert or a GET to /api/stream).
+// Browsers attach Origin to those; reject any that isn't this same host.
+app.use('/api/', (req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    let originHost = null;
+    try { originHost = new URL(origin).host; } catch { /* malformed → rejected below */ }
+    if (originHost !== req.headers.host) {
+      return res.status(403).json({ error: 'Origen no permitido.' });
+    }
+  }
+  next();
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
