@@ -16,8 +16,9 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
 # Directorio de trabajo
 WORKDIR /app
 
-# Copiar archivos de dependencias
+# Copiar archivos de dependencias (incluye scripts/ porque el postinstall lo necesita)
 COPY package*.json ./
+COPY scripts/ ./scripts/
 
 # Instalar solo dependencias de producción
 RUN npm install --omit=dev
@@ -28,6 +29,9 @@ COPY public/ ./public/
 
 # El puerto que Render usará (por defecto 10000, pero configuramos 3000)
 ENV PORT=3000
+# Dentro de un contenedor hay que escuchar en todas las interfaces: el mapeo
+# de puertos de Docker no llega a un proceso que solo escucha en 127.0.0.1.
+ENV HOST=0.0.0.0
 EXPOSE 3000
 
 # Comando para arrancar la app

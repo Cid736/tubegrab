@@ -4,12 +4,21 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const { execSync } = require('child_process');
 
 const isWindows = process.platform === 'win32';
 if (isWindows) {
   console.log('[postinstall] Windows detectado, se omite la descarga de yt-dlp (usa yt-dlp.exe local).');
   process.exit(0);
 }
+
+// The Dockerfile already installs yt-dlp system-wide via apt/curl — don't
+// re-download it if it's already reachable on PATH.
+try {
+  execSync('command -v yt-dlp', { stdio: 'ignore' });
+  console.log('[postinstall] yt-dlp ya está disponible en PATH, se omite la descarga.');
+  process.exit(0);
+} catch (e) { /* not on PATH, continue to download */ }
 
 const destPath = path.join(__dirname, '..', 'yt-dlp');
 if (fs.existsSync(destPath)) {

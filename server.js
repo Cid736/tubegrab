@@ -11,9 +11,10 @@ const multer = require('multer');
 const app = express();
 const PORT = process.env.PORT || 3000;
 // Bind to localhost only by default (this app is meant to run as a local/desktop
-// tool). TRUST_PROXY signals a real deployment (Render/Railway/Docker) behind a
-// reverse proxy, where the server must bind to all interfaces to be reachable.
-const HOST = process.env.TRUST_PROXY ? '0.0.0.0' : '127.0.0.1';
+// tool). Any container/host deployment (Docker, Render, Railway...) must set
+// HOST=0.0.0.0 itself — inside a container, binding to 127.0.0.1 is unreachable
+// from outside even with host-level port publishing restricted to localhost.
+const HOST = process.env.HOST || '127.0.0.1';
 
 // Initialize yt-dlp and ffmpeg paths
 let ytDlpPath;
@@ -374,8 +375,8 @@ app.use((err, req, res, next) => {
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`\n🎵 TubeGrab Pro (yt-dlp) corriendo en http://localhost:${PORT}`);
-  console.log(process.env.TRUST_PROXY
-    ? '🔒 Modo despliegue: accesible externamente detrás de un proxy.\n'
+  console.log(HOST === '0.0.0.0'
+    ? '🔒 Modo despliegue: accesible externamente (contenedor/proxy).\n'
     : '🔒 Máxima seguridad: Ejecución local, solo accesible desde esta máquina.\n');
   
   if (isWindows && !isPkg) {
