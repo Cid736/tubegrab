@@ -96,6 +96,19 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
   background: rgba(255,255,255,0.03); padding: 8px 16px; border-radius: 100px;
   border: 1px solid var(--border);
 }
+.header-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.version-chip {
+  font-family: inherit; font-size: 0.75rem; font-weight: 600;
+  color: var(--text-dim); background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border); border-radius: 100px;
+  padding: 8px 14px; cursor: pointer; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 260px;
+  transition: all 0.2s;
+}
+.version-chip:hover { color: var(--text); border-color: rgba(255,255,255,0.12); }
+.version-chip[data-status="available"] { color: var(--green); border-color: rgba(16, 185, 129, 0.4); }
+.version-chip[data-status="error"] { color: var(--red); border-color: rgba(244, 63, 94, 0.35); }
+.version-chip[data-status="checking"] { cursor: progress; }
 .badge-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; box-shadow: 0 0 10px var(--green); }
 
 /* ===== MAIN CARD ===== */
@@ -488,7 +501,11 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
   .btn-desktop-download, .btn-update { justify-content: center; }
   .desktop-banner-note { max-width: none; text-align: center; }
 }
+@media (max-width: 640px) {
+  .is-desktop-app .header-badge { display: none; }
+}
 @media (max-width: 480px) {
+  .version-chip { max-width: 190px; }
   .format-btn { padding: 12px 8px; font-size: 0.85rem; gap: 6px; }
 }
 @media (max-width: 380px) {

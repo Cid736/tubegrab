@@ -120,22 +120,36 @@ function isNewerVersion(remote, local) {
   return false;
 }
 
+// Kept in the main process and pulled by the page on load: a one-shot push
+// sent before the page finished loading would otherwise be lost.
+let updateState = { status: 'idle', current: app.getVersion(), latest: null, error: null };
+
+function setUpdateState(patch) {
+  updateState = { ...updateState, ...patch };
+  sendToRenderer('updater:state', updateState);
+}
+
 async function checkForUpdates() {
   // Nothing to compare against when running from source.
-  if (!app.isPackaged) return;
+  if (!app.isPackaged) { setUpdateState({ status: 'dev' }); return; }
+  if (updateState.status === 'checking' || downloadInProgress || downloadedExePath) return;
 
+  setUpdateState({ status: 'checking', error: null });
   try {
     const release = await httpJson(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
     // tag_name ends up in UI text and in comparisons; accept strict X.Y.Z only.
     const remoteVersion = String(release.tag_name || '').replace(/^v/, '');
-    if (!/^\d+\.\d+\.\d+$/.test(remoteVersion)) return;
-    if (!isNewerVersion(remoteVersion, app.getVersion())) return;
+    if (!/^\d+\.\d+\.\d+$/.test(remoteVersion)) throw new Error('versión publicada no válida');
+    if (!isNewerVersion(remoteVersion, app.getVersion())) {
+      setUpdateState({ status: 'up-to-date', latest: remoteVersion });
+      return;
+    }
 
     const asset = (release.assets || []).find((a) => a.name === UPDATE_ASSET_NAME);
     // GitHub publishes a sha256 digest per asset; without one we can't verify
     // the download, so don't offer the update at all.
     const digestMatch = asset && /^sha256:([0-9a-f]{64})$/i.exec(String(asset.digest || ''));
-    if (!asset || !digestMatch) return;
+    if (!asset || !digestMatch) throw new Error(`la versión ${remoteVersion} no tiene un .exe verificable`);
 
     pendingUpdate = {
       downloadUrl: asset.browser_download_url,
@@ -143,11 +157,18 @@ async function checkForUpdates() {
       sha256: digestMatch[1].toLowerCase(),
       size: asset.size,
     };
-    sendToRenderer('updater:available', { version: remoteVersion });
+    setUpdateState({ status: 'available', latest: remoteVersion });
   } catch (err) {
     console.error('[Updater] check failed:', err.message);
+    setUpdateState({ status: 'error', error: err.message });
   }
 }
+
+ipcMain.handle('updater:getState', (event) => (isTrustedSender(event) ? updateState : null));
+
+ipcMain.on('updater:check', (event) => {
+  if (isTrustedSender(event)) checkForUpdates();
+});
 
 ipcMain.on('updater:download', async (event) => {
   if (!isTrustedSender(event) || !pendingUpdate || downloadInProgress || downloadedExePath) return;
@@ -189,10 +210,16 @@ ipcMain.on('updater:install', (event) => {
     'Start-Process -FilePath $env:TG_DST',
   ].join('; ');
 
-  const helper = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript], {
+  // A detached powershell.exe has no console and exits immediately without
+  // running anything, so it's started through `cmd /c start`, which gives it a
+  // (minimized, then hidden) console of its own and lets it outlive this app.
+  // The script contains no double quotes and no cmd metacharacters outside
+  // them; the command line is passed verbatim so cmd sees exactly this.
+  const helper = spawn('cmd.exe', [`/d /c start "" /min powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "${psScript}"`], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
+    windowsVerbatimArguments: true,
     env: { ...process.env, TG_PID: String(process.pid), TG_SRC: downloadedExePath, TG_DST: targetExePath },
   });
   helper.unref();

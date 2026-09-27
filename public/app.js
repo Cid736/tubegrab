@@ -77,10 +77,33 @@ if (window.updater) {
   const updateProgressFill = document.getElementById('updateProgressFill');
   const updateProgressLabel = document.getElementById('updateProgressLabel');
 
-  window.updater.onAvailable(({ version }) => {
-    updateBannerSubtitle.textContent = `Versión ${version} lista para descargar.`;
-    updateBanner.classList.remove('hidden');
-  });
+  const versionChip = document.getElementById('versionChip');
+  const STATUS_LABELS = {
+    checking: 'Buscando actualizaciones…',
+    'up-to-date': 'Última versión',
+    error: 'No se pudo comprobar',
+    dev: 'Modo desarrollo',
+  };
+
+  function renderUpdateState(state) {
+    if (!state) return;
+    const label = state.status === 'available' ? `Nueva: v${state.latest}` : STATUS_LABELS[state.status];
+    versionChip.textContent = label ? `v${state.current} · ${label}` : `v${state.current}`;
+    versionChip.dataset.status = state.status;
+    versionChip.title = state.status === 'error'
+      ? `${state.error} — pulsa para reintentar`
+      : 'Pulsa para buscar actualizaciones';
+    versionChip.classList.remove('hidden');
+
+    if (state.status === 'available') {
+      updateBannerSubtitle.textContent = `Versión ${state.latest} lista para descargar (tienes la ${state.current}).`;
+      updateBanner.classList.remove('hidden');
+    }
+  }
+
+  window.updater.onState(renderUpdateState);
+  window.updater.getState().then(renderUpdateState);
+  versionChip.addEventListener('click', () => window.updater.check());
 
   window.updater.onProgress(({ percent }) => {
     updateProgressFill.style.width = `${percent}%`;
