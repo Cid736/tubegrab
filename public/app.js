@@ -54,8 +54,17 @@ const CONVERT_FORMAT_OPTIONS = {
   ],
 };
 
-// === Desktop app download link (always points to the latest GitHub release) ===
-btnDesktopDownload.href = 'https://github.com/Cid736/tubegrab/releases/latest/download/TubeGrab.exe';
+// === Desktop app banner: only makes sense in the browser. Running inside the
+// Electron app itself, you're already using it, so hide the "download it"
+// pitch entirely rather than show a pointless self-referential banner.
+const isElectronApp = navigator.userAgent.toLowerCase().includes('electron');
+const desktopBanner = document.getElementById('desktopBanner');
+if (isElectronApp) {
+  desktopBanner.remove();
+  document.body.classList.add('is-desktop-app');
+} else {
+  btnDesktopDownload.href = 'https://github.com/Cid736/tubegrab/releases/latest/download/TubeGrab.exe';
+}
 
 // === Format Toggle ===
 formatToggle.addEventListener('click', (e) => {

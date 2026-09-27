@@ -29,6 +29,25 @@ body {
   -webkit-font-smoothing: antialiased;
   display: flex;
   justify-content: center;
+  user-select: none;
+}
+/* Text people actually read/edit should stay selectable even with the
+   app-wide user-select:none (added for a native-app feel in Electron). */
+input, textarea, .preview-title, .preview-meta, .history-item-name, .status-message {
+  user-select: text;
+}
+
+/* ===== SCROLLBAR (desktop-app feel) ===== */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 100px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); background-clip: padding-box; }
+
+/* ===== ENTRANCE ANIMATION ===== */
+.main-card { animation: cardIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ===== ANIMATED BG BLOBS ===== */
