@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 *.exe
+/yt-dlp
 *.log
 .DS_Store
 package-lock.json

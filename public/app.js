@@ -2,6 +2,7 @@
 const urlInput = document.getElementById('urlInput');
 const btnClear = document.getElementById('btnClear');
 const audioBitrate = document.getElementById('audioBitrate');
+const audioFormat = document.getElementById('audioFormat');
 const videoQuality = document.getElementById('videoQuality');
 const btnDownload = document.getElementById('btnDownload');
 const btnText = document.getElementById('btnText');
@@ -11,10 +12,19 @@ const progressFill = document.getElementById('progressFill');
 const formatToggle = document.getElementById('formatToggle');
 const btnAudio = document.getElementById('btnAudio');
 const btnVideo = document.getElementById('btnVideo');
+const btnConvert = document.getElementById('btnConvert');
 const audioOptions = document.getElementById('audioOptions');
 const videoOptions = document.getElementById('videoOptions');
+const convertOptions = document.getElementById('convertOptions');
+const convertFormat = document.getElementById('convertFormat');
+const inputGroup = document.getElementById('inputGroup');
+const uploadGroup = document.getElementById('uploadGroup');
+const fileDrop = document.getElementById('fileDrop');
+const fileInput = document.getElementById('fileInput');
+const fileDropText = document.getElementById('fileDropText');
 
-let currentMode = 'audio'; // 'audio' or 'video'
+let currentMode = 'audio'; // 'audio', 'video' or 'convert'
+let selectedFile = null;
 
 // === Format Toggle ===
 formatToggle.addEventListener('click', (e) => {
@@ -30,24 +40,66 @@ formatToggle.addEventListener('click', (e) => {
 
   // Move slider
   const slider = document.getElementById('toggleSlider');
-  if (mode === 'video') {
-    slider.style.transform = 'translateX(100%)';
-  } else {
-    slider.style.transform = 'translateX(0)';
-  }
+  const sliderPositions = { audio: '0', video: '100%', convert: '200%' };
+  slider.style.transform = `translateX(${sliderPositions[mode]})`;
+
+  // Toggle URL input vs file upload
+  inputGroup.classList.toggle('hidden', mode === 'convert');
+  uploadGroup.classList.toggle('hidden', mode !== 'convert');
 
   // Toggle options visibility
+  audioOptions.classList.toggle('hidden', mode !== 'audio');
+  videoOptions.classList.toggle('hidden', mode !== 'video');
+  convertOptions.classList.toggle('hidden', mode !== 'convert');
+
   if (mode === 'audio') {
-    audioOptions.classList.remove('hidden');
-    videoOptions.classList.add('hidden');
-    btnText.textContent = 'Descargar MP3';
-  } else {
-    audioOptions.classList.add('hidden');
-    videoOptions.classList.remove('hidden');
+    btnText.textContent = 'Descargar ' + audioFormat.value.toUpperCase();
+  } else if (mode === 'video') {
     btnText.textContent = 'Descargar MP4';
+  } else {
+    btnText.textContent = 'Convertir a ' + convertFormat.value.toUpperCase();
   }
 
   clearStatus();
+});
+
+// === Convert Format Change ===
+convertFormat.addEventListener('change', () => {
+  if (currentMode === 'convert') {
+    btnText.textContent = 'Convertir a ' + convertFormat.value.toUpperCase();
+  }
+});
+
+// === File Drop / Selection ===
+fileDrop.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  fileDrop.classList.add('dragover');
+});
+fileDrop.addEventListener('dragleave', () => fileDrop.classList.remove('dragover'));
+fileDrop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  fileDrop.classList.remove('dragover');
+  if (e.dataTransfer.files.length) {
+    fileInput.files = e.dataTransfer.files;
+    handleFileSelect(e.dataTransfer.files[0]);
+  }
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFileSelect(fileInput.files[0]);
+});
+
+function handleFileSelect(file) {
+  selectedFile = file;
+  const sizeMb = (file.size / 1024 / 1024).toFixed(1);
+  fileDropText.textContent = `${file.name} (${sizeMb} MB)`;
+  clearStatus();
+}
+
+// === Audio Format Change ===
+audioFormat.addEventListener('change', () => {
+  if (currentMode === 'audio') {
+    btnText.textContent = 'Descargar ' + audioFormat.value.toUpperCase();
+  }
 });
 
 // === URL Input Events ===
@@ -82,6 +134,10 @@ urlInput.addEventListener('keydown', (e) => {
 });
 
 async function handleDownload() {
+  if (currentMode === 'convert') {
+    return handleConvert();
+  }
+
   const url = urlInput.value.trim();
   if (!url) {
     showStatus('Pega un link de YouTube primero', 'error');
@@ -104,9 +160,10 @@ async function handleDownload() {
       mode: currentMode,
       quality: videoQuality.value,
       audioBitrate: audioBitrate.value,
+      audioFormat: audioFormat.value,
     };
 
-    const formatLabel = currentMode === 'audio' ? 'MP3' : 'MP4';
+    const formatLabel = currentMode === 'audio' ? audioFormat.value.toUpperCase() : 'MP4';
     showStatus('Conectando con servidor seguro...', '');
     animateProgress(10);
 
@@ -123,7 +180,7 @@ async function handleDownload() {
     }
 
     animateProgress(20);
-    const defaultFilename = currentMode === 'audio' ? 'audio.mp3' : 'video.mp4';
+    const defaultFilename = currentMode === 'audio' ? `audio.${audioFormat.value}` : 'video.mp4';
     const downloadFilename = data.filename || defaultFilename;
 
     if (data.downloadUrl) {
@@ -143,7 +200,7 @@ async function handleDownload() {
         a.click();
         document.body.removeChild(a);
 
-        showStatus('¡Descarga MP3 iniciada! 🎉', 'success');
+        showStatus(`¡Descarga ${formatLabel} iniciada! 🎉`, 'success');
         animateProgress(100);
       } else {
         // Video: fetch with progress (server downloads+merges first, then sends)
@@ -196,6 +253,66 @@ async function handleDownload() {
         URL.revokeObjectURL(blobUrl);
       }
     }
+  } catch (err) {
+    showStatus(err.message, 'error');
+  } finally {
+    setLoading(false);
+    setTimeout(hideProgress, 2000);
+  }
+}
+
+async function handleConvert() {
+  if (!selectedFile) {
+    showStatus('Elige un archivo de audio o vídeo primero', 'error');
+    return;
+  }
+
+  const targetFormat = convertFormat.value;
+  setLoading(true);
+  clearStatus();
+  showProgress();
+
+  try {
+    showStatus(`Convirtiendo a ${targetFormat.toUpperCase()}...`, '');
+    animateProgress(20);
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('targetFormat', targetFormat);
+
+    const res = await fetch('/api/convert', {
+      method: 'POST',
+      body: formData,
+    });
+
+    animateProgress(60);
+
+    if (!res.ok) {
+      let errMsg = 'Error al convertir el archivo';
+      try {
+        const data = await res.json();
+        errMsg = data.error || errMsg;
+      } catch (e) { /* ignore parse error */ }
+      throw new Error(errMsg);
+    }
+
+    const blob = await res.blob();
+    animateProgress(90);
+
+    const baseName = selectedFile.name.replace(/\.[^/.]+$/, '') || 'audio';
+    const downloadFilename = `${baseName}.${targetFormat}`;
+
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = downloadFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+
+    animateProgress(100);
+    showStatus(`¡Conversión a ${targetFormat.toUpperCase()} completada! 🎉`, 'success');
   } catch (err) {
     showStatus(err.message, 'error');
   } finally {

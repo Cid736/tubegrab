@@ -136,6 +136,24 @@ body {
 .btn-clear.visible { opacity: 1; visibility: visible; }
 .btn-clear:hover { background: rgba(255,255,255,0.05); color: var(--text); }
 
+/* ===== FILE DROP (Convert mode) ===== */
+.file-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center; cursor: pointer;
+  padding: 32px 20px;
+  background: var(--surface);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  transition: all 0.3s;
+}
+.file-drop:hover, .file-drop.dragover {
+  border-color: var(--border-focus);
+  background: var(--surface-hover);
+}
+.upload-icon { width: 28px; height: 28px; color: var(--text-muted); }
+.file-drop-text { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+.file-drop-hint { font-size: 0.75rem; color: var(--text-muted); }
+
 /* ===== FORMAT TOGGLE ===== */
 .format-toggle-section {
   display: flex; justify-content: center;
@@ -154,10 +172,11 @@ body {
   background: none; border: none;
   color: var(--text-muted); font-family: inherit;
   font-size: 0.95rem; font-weight: 700;
-  padding: 12px 32px; cursor: pointer;
+  padding: 12px 20px; cursor: pointer;
   border-radius: 10px; transition: color 0.3s;
-  width: 50%;
+  width: 33.333%;
   justify-content: center;
+  white-space: nowrap;
 }
 .format-btn svg { transition: color 0.3s; }
 .format-btn.active { color: #fff; }
@@ -171,12 +190,15 @@ body {
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
   z-index: 1;
 }
+.toggle-slider.three { width: calc(33.333% - 4px); }
 
 /* ===== UTILITY ===== */
 .hidden { display: none !important; }
 
 /* ===== OPTIONS ===== */
 .format-section { margin-bottom: 32px; }
+.option-block { margin-bottom: 20px; }
+.option-block:last-child { margin-bottom: 0; }
 .option-label {
   display: block; font-size: 0.8rem; font-weight: 700;
   color: var(--text-dim); margin-bottom: 12px;
@@ -257,7 +279,7 @@ body {
 
 /* ===== INFO SECTION ===== */
 .info-section {
-  display: grid; grid-template-columns: repeat(3,1fr); gap: 16px;
+  display: grid; grid-template-columns: repeat(4,1fr); gap: 16px;
   margin-top: 48px; width: 100%;
 }
 .info-card {
@@ -280,5 +302,6 @@ body {
 @media (max-width: 480px) {
   .main-card { padding: 32px 24px; }
   .main-title { font-size: 1.75rem; }
-  .info-section { grid-template-columns: 1fr; }
+  .info-section { grid-template-columns: 1fr 1fr; }
+  .format-btn { padding: 12px 8px; font-size: 0.85rem; }
 }

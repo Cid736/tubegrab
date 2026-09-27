@@ -5,6 +5,8 @@ const ffmpegPath = require('ffmpeg-static');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
+const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -57,8 +59,10 @@ if (isPkg) {
   if (isWindows) {
     ytDlpPath = path.join(__dirname, 'yt-dlp.exe');
   } else {
-    // In Docker/Linux, we'll install it in the system path
-    ytDlpPath = 'yt-dlp';
+    // On Linux hosts (Render, Railway, Docker), scripts/postinstall.js downloads
+    // a local yt-dlp binary at npm-install time. Fall back to PATH if missing.
+    const localYtDlp = path.join(__dirname, 'yt-dlp');
+    ytDlpPath = fs.existsSync(localYtDlp) ? localYtDlp : 'yt-dlp';
     // ffmpeg-static usually handles the path correctly on Linux too
   }
 }
@@ -67,6 +71,12 @@ const ytDlpWrap = new YTDlpWrap(ytDlpPath);
 
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
+
+// Render/Railway/most PaaS put the app behind a reverse proxy; trust its
+// X-Forwarded-For so express-rate-limit and req.ip work correctly there.
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', 1);
+}
 
 app.use(helmet());
 app.use(express.json());
@@ -81,11 +91,89 @@ const _apiLimiter = rateLimit({
 });
 app.use('/api/', _apiLimiter);
 
+// === Audio format conversion (local file upload) ===
+const AUDIO_CONVERT_FORMATS = {
+  mp3: { codec: 'libmp3lame', contentType: 'audio/mpeg' },
+  wav: { codec: 'pcm_s16le', contentType: 'audio/wav' },
+  ogg: { codec: 'libvorbis', contentType: 'audio/ogg' },
+  m4a: { codec: 'aac', contentType: 'audio/mp4' },
+  flac: { codec: 'flac', contentType: 'audio/flac' },
+  opus: { codec: 'libopus', contentType: 'audio/opus' },
+  mov: { codec: 'aac', contentType: 'video/quicktime' },
+};
+const MAX_CONVERT_SIZE = 300 * 1024 * 1024; // 300MB
+
+const upload = multer({
+  dest: os.tmpdir(),
+  limits: { fileSize: MAX_CONVERT_SIZE, files: 1 },
+});
+
+app.post('/api/convert', upload.single('file'), (req, res) => {
+  const cleanupInput = () => { if (req.file) fs.unlink(req.file.path, () => {}); };
+
+  const targetFormat = String(req.body.targetFormat || '').toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(AUDIO_CONVERT_FORMATS, targetFormat)) {
+    cleanupInput();
+    return res.status(400).json({ error: 'Formato de destino no soportado.' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: 'No se recibió ningún archivo de audio.' });
+  }
+
+  const config = AUDIO_CONVERT_FORMATS[targetFormat];
+  const outId = `convert_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const outputPath = path.join(os.tmpdir(), `${outId}.${targetFormat}`);
+
+  const originalName = (req.file.originalname || 'audio').replace(/[^\w\s.-]/gi, '').trim() || 'audio';
+  const baseName = originalName.replace(/\.[^/.]+$/, '') || 'audio';
+  const outputFilename = `${baseName}.${targetFormat}`;
+
+  const args = [
+    '-y',
+    '-i', req.file.path,
+    '-vn',
+    '-map_metadata', '-1',
+    '-acodec', config.codec,
+    outputPath,
+  ];
+
+  console.log(`[CONVERT] ${originalName} -> ${targetFormat}`);
+
+  execFile(currentFfmpegPath, args, { timeout: 5 * 60 * 1000 }, (err) => {
+    cleanupInput();
+
+    if (err) {
+      console.error('[CONVERT ERROR]', err.message);
+      fs.unlink(outputPath, () => {});
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'No se pudo convertir el archivo. Verifica que sea un archivo de audio/vídeo válido.' });
+      }
+      return;
+    }
+
+    res.setHeader('Content-Type', config.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(outputFilename)}`);
+
+    const fileStream = fs.createReadStream(outputPath);
+    fileStream.pipe(res);
+    fileStream.on('close', () => fs.unlink(outputPath, () => {}));
+    fileStream.on('error', (streamErr) => {
+      console.error('[CONVERT STREAM ERROR]', streamErr.message);
+      fs.unlink(outputPath, () => {});
+      if (!res.headersSent) res.status(500).json({ error: 'Error al enviar el archivo convertido.' });
+    });
+  });
+});
+
+
 // Main API endpoint to verify URL and get metadata
 app.post('/api/download', async (req, res) => {
-  const { url, mode, quality, audioBitrate } = req.body;
+  const { url, mode, quality, audioBitrate, audioFormat } = req.body;
   if (!['audio', 'video'].includes(mode))
     return res.status(400).json({ error: 'Invalid mode. Use audio or video.' });
+
+  const VALID_AUDIO_FORMATS = ['mp3', 'ogg'];
+  const safeAudioFormat = VALID_AUDIO_FORMATS.includes(audioFormat) ? audioFormat : 'mp3';
 
   if (!url) {
     return res.status(400).json({ error: 'URL es requerida' });
@@ -114,11 +202,11 @@ app.post('/api/download', async (req, res) => {
     
     // Clean filename
     const safeTitle = title.replace(/[^\w\s-]/gi, '').trim();
-    const ext = mode === 'audio' ? 'mp3' : 'mp4';
+    const ext = mode === 'audio' ? safeAudioFormat : 'mp4';
     const filename = `${safeTitle}.${ext}`;
 
     // Return a URL that the frontend will use to start the stream
-    const streamUrl = `/api/stream?url=${encodeURIComponent(url)}&mode=${mode}&quality=${quality}&bitrate=${audioBitrate}&filename=${encodeURIComponent(filename)}`;
+    const streamUrl = `/api/stream?url=${encodeURIComponent(url)}&mode=${mode}&quality=${quality}&bitrate=${audioBitrate}&format=${safeAudioFormat}&filename=${encodeURIComponent(filename)}`;
 
     return res.json({
       success: true,
@@ -140,9 +228,11 @@ app.post('/api/download', async (req, res) => {
 app.get('/api/stream', async (req, res) => {
   const VALID_QUALITIES = ['360', '480', '720', '1080', '1440', '2160'];
   const VALID_BITRATES  = ['64', '96', '128', '192', '256', '320'];
+  const VALID_AUDIO_FORMATS = ['mp3', 'ogg'];
   const { url, mode } = req.query;
   const quality = VALID_QUALITIES.includes(req.query.quality) ? req.query.quality : '1080';
   const bitrate = VALID_BITRATES.includes(req.query.bitrate)   ? req.query.bitrate  : '128';
+  const audioFormat = VALID_AUDIO_FORMATS.includes(req.query.format) ? req.query.format : 'mp3';
   const rawFilename = req.query.filename || '';
   const filename = rawFilename.replace(/[^\w\s.\-]/gi, '').trim() || 'download';
 
@@ -165,11 +255,12 @@ app.get('/api/stream', async (req, res) => {
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       '--referer', 'https://www.google.com/',
       '-o', '-',
-      '-x', '--audio-format', 'mp3', '--audio-quality', bitrate || '128'
+      '-x', '--audio-format', audioFormat, '--audio-quality', bitrate || '128'
     ];
     if (hasCookies) args.push('--cookies', cookiesPath);
 
-    res.setHeader('Content-Type', 'audio/mpeg');
+    const AUDIO_CONTENT_TYPES = { mp3: 'audio/mpeg', ogg: 'audio/ogg' };
+    res.setHeader('Content-Type', AUDIO_CONTENT_TYPES[audioFormat]);
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
 
     try {
@@ -265,6 +356,17 @@ app.get('/api/stream', async (req, res) => {
   }
 });
 
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'El archivo es demasiado grande (máx. 300MB).' });
+    }
+    return res.status(400).json({ error: 'Error al subir el archivo.' });
+  }
+  console.error('[UNHANDLED ERROR]', err.message);
+  if (!res.headersSent) res.status(500).json({ error: 'Error interno del servidor.' });
+});
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🎵 TubeGrab Pro (yt-dlp) corriendo en http://localhost:${PORT}`);
