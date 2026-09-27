@@ -379,7 +379,7 @@ const server = app.listen(PORT, HOST, () => {
     ? '🔒 Modo despliegue: accesible externamente (contenedor/proxy).\n'
     : '🔒 Máxima seguridad: Ejecución local, solo accesible desde esta máquina.\n');
   
-  if (isWindows && !isPkg) {
+  if (isWindows) {
     execFile('cmd', ['/c', 'start', `http://localhost:${PORT}`], (err) => {
       if (err) console.warn('[WARN] Could not open browser:', err.message);
     });
