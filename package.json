@@ -1,6 +1,6 @@
 {
   "name": "tubegrab",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "bin": "server.js",
   "main": "electron-main.js",
   "scripts": {
@@ -26,18 +26,20 @@
   "build": {
     "appId": "com.tubegrab.app",
     "productName": "TubeGrab Pro",
+    "asar": false,
     "win": {
       "target": "portable"
+    },
+    "portable": {
+      "artifactName": "TubeGrab.exe"
     },
     "cscLink": null,
     "files": [
       "**/*",
       "!dist/*",
       "!node_modules/electron/**/*",
-      "!node_modules/electron-builder/**/*"
-    ],
-    "extraResources": [
-      "yt-dlp.exe"
+      "!node_modules/electron-builder/**/*",
+      "!node_modules/pkg/**/*"
     ]
   },
   "keywords": [],

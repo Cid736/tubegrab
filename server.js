@@ -74,6 +74,15 @@ if (isPkg) {
 
 const ytDlpWrap = new YTDlpWrap(ytDlpPath);
 
+// yt-dlp-wrap's own getVideoInfo() doesn't forward spawn options, so it can't
+// take windowsHide — reimplement it here (same logic) using execPromise
+// directly so metadata lookups never flash a console window either.
+async function getVideoInfo(args) {
+  if (!args.includes('-f') && !args.includes('--format')) args = args.concat(['-f', 'best']);
+  const stdout = await ytDlpWrap.execPromise(args.concat(['--dump-json']), { windowsHide: true });
+  return JSON.parse(stdout);
+}
+
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 
@@ -153,7 +162,7 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
 
   console.log(`[CONVERT] ${originalName} -> ${targetFormat}`);
 
-  execFile(currentFfmpegPath, args, { timeout: 10 * 60 * 1000 }, (err) => {
+  execFile(currentFfmpegPath, args, { timeout: 10 * 60 * 1000, windowsHide: true }, (err) => {
     cleanupInput();
 
     if (err) {
@@ -195,7 +204,7 @@ app.post('/api/info', async (req, res) => {
     if (fs.existsSync(path.join(__dirname, 'cookies.txt'))) {
       metadataArgs.push('--cookies', path.join(__dirname, 'cookies.txt'));
     }
-    const metadata = await ytDlpWrap.getVideoInfo([url, ...metadataArgs]);
+    const metadata = await getVideoInfo([url, ...metadataArgs]);
     return res.json({
       title: metadata.title || 'Sin título',
       thumbnail: metadata.thumbnail || null,
@@ -240,7 +249,7 @@ app.post('/api/download', async (req, res) => {
       metadataArgs.push('--cookies', path.join(__dirname, 'cookies.txt'));
     }
     
-    const metadata = await ytDlpWrap.getVideoInfo([url, ...metadataArgs]);
+    const metadata = await getVideoInfo([url, ...metadataArgs]);
     const title = metadata.title || 'video';
     
     // Clean filename
@@ -317,7 +326,7 @@ app.get('/api/stream', async (req, res) => {
     req.on('close', () => { clientDisconnected = true; });
 
     try {
-      await ytDlpWrap.execPromise(args);
+      await ytDlpWrap.execPromise(args, { windowsHide: true });
 
       if (clientDisconnected) {
         console.log('[AUDIO] Cliente desconectó durante la descarga, limpiando temp...');
@@ -379,7 +388,7 @@ app.get('/api/stream', async (req, res) => {
 
   try {
     // Use exec instead of execStream so yt-dlp can write to a file
-    await ytDlpWrap.execPromise(args);
+    await ytDlpWrap.execPromise(args, { windowsHide: true });
 
     if (clientDisconnected) {
       console.log('[VIDEO] Cliente desconectó durante la descarga, limpiando temp...');

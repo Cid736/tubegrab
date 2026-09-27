@@ -1,10 +1,33 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
-const { fork } = require('child_process');
+const { fork, execFile } = require('child_process');
 const http = require('http');
 
 let mainWindow;
 let serverProcess;
+let shuttingDown = false;
+
+/**
+ * Kill the server process AND every child it spawned (yt-dlp.exe, ffmpeg.exe),
+ * without touching unrelated processes elsewhere on the system. `serverProcess`
+ * is forked directly by us, so its PID is the root of a process tree that only
+ * contains what our app itself launched; `taskkill /t` walks that tree by PID
+ * lineage, so it can only reach our own descendants — not some other program's
+ * yt-dlp/ffmpeg instance running separately.
+ */
+function killServerTree() {
+  if (!serverProcess || serverProcess.killed || shuttingDown) return;
+  shuttingDown = true;
+  const pid = serverProcess.pid;
+
+  if (process.platform === 'win32') {
+    // This app only ships Windows binaries (yt-dlp.exe, ffmpeg.exe), so this
+    // is the path that matters in practice.
+    execFile('taskkill', ['/pid', String(pid), '/t', '/f'], () => {});
+  } else {
+    serverProcess.kill('SIGKILL');
+  }
+}
 
 /** Poll http://localhost:PORT until it responds or maxAttempts is exceeded */
 function waitForServer(port, maxAttempts, interval, callback) {
@@ -40,9 +63,11 @@ function createWindow() {
     autoHideMenuBar: true
   });
 
-  // Start the Express server
+  // Start the Express server. windowsHide keeps this (and anything it in turn
+  // spawns, like yt-dlp.exe/ffmpeg.exe) from ever flashing a console window.
   serverProcess = fork(path.join(__dirname, 'server.js'), [], {
-    env: { ...process.env, NODE_ENV: 'production' }
+    env: { ...process.env, NODE_ENV: 'production' },
+    windowsHide: true,
   });
 
   // Wait for the server to be ready before loading the URL (avoids race condition)
@@ -62,10 +87,14 @@ function createWindow() {
 app.on('ready', createWindow);
 
 app.on('window-all-closed', function () {
-  // Kill the server process when the window is closed
-  if (serverProcess) serverProcess.kill();
+  killServerTree();
   if (process.platform !== 'darwin') app.quit();
 });
+
+// Safety net: make sure nothing is left running even if quit happens some
+// other way (Cmd+Q on macOS, task manager "end task" on the Electron window, etc.)
+app.on('before-quit', killServerTree);
+app.on('will-quit', killServerTree);
 
 app.on('activate', function () {
   // Only create a new window if all windows are closed
