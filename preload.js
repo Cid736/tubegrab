@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('desktop', {
   setProgress: (value) => ipcRenderer.send('desktop:setProgress', value),
   windowControl: (action) => ipcRenderer.send('window:control', action),
   setTheme: (theme) => ipcRenderer.send('appearance:theme', theme),
+  setUi: (ui) => ipcRenderer.send('appearance:ui', ui),
+  onWindowState: (cb) => ipcRenderer.on('window:state', (_e, state) => cb(state)),
   onSaved: (cb) => ipcRenderer.on('desktop:saved', (_e, info) => cb(info)),
   getEngine: () => ipcRenderer.invoke('engine:getState'),
   updateEngine: () => ipcRenderer.send('engine:update'),

@@ -478,6 +478,13 @@ ipcMain.on('appearance:theme', (event, theme) => {
   nativeTheme.themeSource = THEME_SOURCES[theme];
 });
 
+// Interface style: Windows 11 (Mica) or macOS (acrylic "glass").
+const UI_MATERIALS = { windows: 'mica', mac: 'acrylic' };
+ipcMain.on('appearance:ui', (event, ui) => {
+  if (!isTrustedSender(event) || !mainWindow || !Object.prototype.hasOwnProperty.call(UI_MATERIALS, ui)) return;
+  if (typeof mainWindow.setBackgroundMaterial === 'function') mainWindow.setBackgroundMaterial(UI_MATERIALS[ui]);
+});
+
 ipcMain.on('window:control', (event, action) => {
   if (!isTrustedSender(event) || !mainWindow) return;
   if (action === 'close') mainWindow.close();
@@ -499,12 +506,12 @@ function createWindow() {
     center: true,
     title: 'TubeGrab',
     icon: path.join(__dirname, 'build', 'icon.ico'),
-    // No native title bar: the page draws a macOS-style sidebar with its own
-    // traffic-light buttons (window:control below) and marks drag regions.
+    // No native title bar: the page draws its own (Windows caption buttons or
+    // macOS traffic lights, via window:control below) and marks drag regions.
     titleBarStyle: 'hidden',
-    // Windows 11 acrylic: the window blurs the desktop behind it and the
-    // page's translucent "glass" layers sit on top (see style.css).
-    backgroundMaterial: 'acrylic',
+    // Windows 11 material behind the page's translucent layers: Mica for the
+    // default Windows interface, acrylic for the macOS one (appearance:ui).
+    backgroundMaterial: 'mica',
     backgroundColor: '#00000000',
     webPreferences: {
       nodeIntegration: false,
@@ -526,6 +533,11 @@ function createWindow() {
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(`${APP_ORIGIN}/`)) event.preventDefault();
   });
+
+  // The Windows caption bar swaps its maximize/restore glyph.
+  const sendWindowState = () => mainWindow.webContents.send('window:state', { maximized: mainWindow.isMaximized() });
+  mainWindow.on('maximize', sendWindowState);
+  mainWindow.on('unmaximize', sendWindowState);
 
   setupDownloads();
 

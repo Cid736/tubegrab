@@ -2,13 +2,15 @@
 // paint (no flash of the wrong theme) and exposes window.tgPrefs to app.js.
 (function () {
   var KEY = 'tubegrab_prefs';
+  var UI_KEY = 'tubegrab_ui';
   var DEFAULTS = {
-    theme: 'auto', accent: 'blue', wall: 'aurora', glass: 'tinted', size: 'medium',
+    uiDefault: 'windows', theme: 'auto', accent: 'blue', wall: 'aurora', glass: 'tinted', size: 'medium',
     remember: true, notify: true, sound: false,
   };
   // Every stored value is checked against a fixed list: prefs end up in
   // attributes and CSS, so nothing arbitrary from storage is ever applied.
   var ALLOWED = {
+    uiDefault: ['windows', 'mac'],
     theme: ['auto', 'light', 'dark'],
     accent: ['blue', 'purple', 'pink', 'red', 'orange', 'yellow', 'green', 'graphite'],
     wall: ['aurora', 'ocean', 'sunset', 'forest', 'graphite', 'none'],
@@ -34,6 +36,20 @@
   var media = window.matchMedia('(prefers-color-scheme: dark)');
   var prefs = load();
 
+  // Interface in use: the toolbar switch changes it for this session only
+  // (survives reloads); each launch starts with the favourite, prefs.uiDefault.
+  var ui = prefs.uiDefault;
+  try {
+    var sessionUi = sessionStorage.getItem(UI_KEY);
+    if (ALLOWED.uiDefault.indexOf(sessionUi) !== -1) ui = sessionUi;
+  } catch (e) { /* storage unavailable */ }
+
+  function applyUi() {
+    document.documentElement.setAttribute('data-ui', ui);
+    if (window.desktop && window.desktop.setUi) window.desktop.setUi(ui);
+  }
+  applyUi();
+
   function apply(p) {
     var root = document.documentElement;
     var dark = p.theme === 'dark' || (p.theme === 'auto' && media.matches);
@@ -56,6 +72,14 @@
   window.tgPrefs = {
     ALLOWED: ALLOWED,
     get: function () { return prefs; },
+    getUi: function () { return ui; },
+    setUi: function (value) {
+      if (ALLOWED.uiDefault.indexOf(value) === -1) return ui;
+      ui = value;
+      try { sessionStorage.setItem(UI_KEY, ui); } catch (e) { /* storage unavailable */ }
+      applyUi();
+      return ui;
+    },
     set: function (patch) {
       prefs = sanitize(Object.assign({}, prefs, patch));
       save();

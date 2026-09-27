@@ -224,11 +224,18 @@ if (window.updater) {
 if (desktopApi) {
   $('navSettings').classList.remove('hidden');
 
-  // Traffic lights (the native Windows caption buttons are hidden).
+  // Window buttons (the native caption bar is hidden): Windows caption
+  // buttons or macOS traffic lights, depending on the interface in use.
   $('trafficLights').classList.remove('hidden');
-  $('winClose').addEventListener('click', () => desktopApi.windowControl('close'));
-  $('winMin').addEventListener('click', () => desktopApi.windowControl('minimize'));
-  $('winMax').addEventListener('click', () => desktopApi.windowControl('maximize'));
+  for (const [id, action] of [['winClose', 'close'], ['winMin', 'minimize'], ['winMax', 'maximize'],
+    ['capClose', 'close'], ['capMin', 'minimize'], ['capMax', 'maximize']]) {
+    $(id).addEventListener('click', () => desktopApi.windowControl(action));
+  }
+  desktopApi.onWindowState(({ maximized }) => {
+    document.body.classList.toggle('window-maximized', maximized);
+    $('capMax').title = maximized ? 'Restaurar' : 'Maximizar';
+    $('capMax').setAttribute('aria-label', $('capMax').title);
+  });
   window.addEventListener('blur', () => document.body.classList.add('window-blurred'));
   window.addEventListener('focus', () => document.body.classList.remove('window-blurred'));
 
@@ -253,13 +260,22 @@ if (desktopApi) {
 // window.tgPrefs comes from theme-init.js, which already applied the saved
 // appearance before first paint and validates every value it stores.
 const prefsApi = window.tgPrefs;
-const PICKERS = { theme: 'themePicker', accent: 'accentPicker', wall: 'wallPicker', glass: 'glassPicker', size: 'sizePicker' };
+const PICKERS = { uiDefault: 'uiDefaultPicker', theme: 'themePicker', accent: 'accentPicker', wall: 'wallPicker', glass: 'glassPicker', size: 'sizePicker' };
+const UI_NAMES = { windows: 'Windows', mac: 'Mac' };
 
 function renderPrefs() {
   const p = prefsApi.get();
   for (const [key, id] of Object.entries(PICKERS)) {
     $(id).querySelectorAll('[data-value]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === p[key])));
   }
+  // Toolbar switch + star: the star is lit when the interface in use is the favourite.
+  const ui = prefsApi.getUi();
+  $('uiSwitch').querySelectorAll('[data-value]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === ui)));
+  const isFav = p.uiDefault === ui;
+  const fav = $('uiFav');
+  fav.setAttribute('aria-pressed', String(isFav));
+  fav.title = isFav ? `${UI_NAMES[ui]} es tu interfaz predeterminada` : `Usar ${UI_NAMES[ui]} como interfaz predeterminada`;
+  fav.setAttribute('aria-label', fav.title);
   $('prefRemember').checked = p.remember;
   $('prefNotify').checked = p.notify;
   $('prefSound').checked = p.sound;
@@ -273,6 +289,16 @@ for (const [key, id] of Object.entries(PICKERS)) {
     renderPrefs();
   });
 }
+$('uiSwitch').addEventListener('click', (e) => {
+  if (e.target.closest('#uiFav')) {
+    prefsApi.set({ uiDefault: prefsApi.getUi() });
+  } else {
+    const b = e.target.closest('[data-value]');
+    if (!b) return;
+    prefsApi.setUi(b.dataset.value);
+  }
+  renderPrefs();
+});
 $('prefRemember').addEventListener('change', (e) => {
   prefsApi.set({ remember: e.target.checked, last: {} });
   if (e.target.checked) saveLastOptions();

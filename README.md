@@ -31,7 +31,7 @@ Local video/audio downloader **and** format converter with a job queue. Runs ent
 - Desktop app: saves straight to a folder you choose (with "Show in folder" / "Open folder"), taskbar progress, notifications when a job finishes
 - **Self-updating**: the app updates itself from GitHub Releases in one click (SHA-256 verified), and keeps its download engine (yt-dlp) up to date automatically — sites like YouTube break old versions within weeks
 - Local history of finished jobs (stored only on your device)
-- Native macOS-style interface (Liquid Glass): floating glass sidebar, System Settings-style grouped lists, automatic light/dark mode, and a translucent (acrylic) window on Windows 11
+- **Two interfaces, switchable from the toolbar:** Windows 11 (default: Mica window, own title bar, navigation pane, settings cards) and macOS (Liquid Glass: floating glass sidebar, traffic lights, System Settings-style grouped lists). The star next to the switch — or Settings → Appearance → Default interface — sets which one opens at launch
 - **Personalisation** (Settings → Appearance): light/dark/automatic, 8 macOS accent colours, 6 backgrounds, glass style (clear, tinted, opaque) and text size; remembers your last download options; optional finish sound and notifications
 
 ## Usage
@@ -86,7 +86,8 @@ The repo includes a `Dockerfile` and `render.yaml`. On Render: create a Web Serv
 │   ├── theme-init.js      # Applies saved appearance before first paint (validated values)
 │   ├── index.html
 │   ├── app.js
-│   └── style.css
+│   ├── style.css          # macOS interface + shared base
+│   └── fluent.css         # Windows 11 interface (default)
 ├── Dockerfile
 ├── docker-compose.yml
 └── render.yaml
@@ -146,7 +147,7 @@ Descargador de vídeo/audio **y** conversor de formatos con cola de trabajos. Fu
 - App de escritorio: guarda directamente en la carpeta que elijas (con "Mostrar en carpeta" / "Abrir carpeta"), progreso en la barra de tareas y notificación al terminar
 - **Se actualiza sola**: la app se actualiza desde GitHub Releases con un clic (verificada por SHA-256) y mantiene al día su motor de descargas (yt-dlp) automáticamente — sitios como YouTube rompen las versiones antiguas en semanas
 - Historial local de trabajos terminados (solo en tu equipo)
-- Interfaz al estilo nativo de macOS (Liquid Glass): barra lateral de vidrio, listas agrupadas como Ajustes del Sistema, modo claro/oscuro automático y ventana translúcida (acrylic) en Windows 11
+- **Dos interfaces, cambiables desde la barra superior:** Windows 11 (por defecto: ventana Mica, barra de título propia, panel de navegación, tarjetas de ajustes) y macOS (Liquid Glass: barra lateral de vidrio flotante, semáforo, listas agrupadas como Ajustes del Sistema). La estrella junto al selector —o Ajustes → Apariencia → Interfaz predeterminada— elige cuál se abre al iniciar
 - **Personalización** (Ajustes → Apariencia): claro/oscuro/automático, 8 colores de énfasis de macOS, 6 fondos, estilo de vidrio (transparente, tintado, opaco) y tamaño del texto; recuerda tus últimas opciones de descarga; sonido y aviso al terminar opcionales
 
 ## Modos de uso

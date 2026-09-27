@@ -8,9 +8,27 @@
   <meta name="description" content="Descarga audio y vídeo de YouTube y más de 20 sitios, y convierte tus archivos entre 23 formatos. Todo en tu equipo.">
   <script src="theme-init.js"></script>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="fluent.css">
 </head>
 <body>
   <div class="window">
+    <!-- ===== Windows 11 title bar (desktop app, Windows interface) ===== -->
+    <header class="titlebar">
+      <span class="app-icon titlebar-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+      </span>
+      <span class="titlebar-title">TubeGrab</span>
+      <div class="caption">
+        <button class="caption-btn" id="capMin" type="button" aria-label="Minimizar" title="Minimizar"><svg viewBox="0 0 10 10"><path d="M0 5h10" /></svg></button>
+        <button class="caption-btn" id="capMax" type="button" aria-label="Maximizar" title="Maximizar">
+          <svg class="cap-max" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" rx="1" /></svg>
+          <svg class="cap-restore" viewBox="0 0 10 10"><rect x="0.5" y="2.5" width="7" height="7" rx="1" /><path d="M2.5 2.5V1.5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-1" /></svg>
+        </button>
+        <button class="caption-btn caption-close" id="capClose" type="button" aria-label="Cerrar" title="Cerrar"><svg viewBox="0 0 10 10"><path d="M0.5 0.5l9 9m0-9l-9 9" /></svg></button>
+      </div>
+    </header>
+
+    <div class="frame">
     <!-- ===== Sidebar ===== -->
     <aside class="sidebar">
       <div class="sidebar-top">
@@ -60,10 +78,25 @@
           <h1 id="viewTitle">Descargar</h1>
           <span id="viewSubtitle">YouTube y más de 20 sitios</span>
         </div>
-        <div class="segmented" id="formatToggle" role="tablist" aria-label="Tipo de descarga">
-          <div class="segmented-thumb" id="toggleSlider"></div>
-          <button class="format-btn active" data-mode="audio" id="btnAudio" type="button" role="tab">Audio</button>
-          <button class="format-btn" data-mode="video" id="btnVideo" type="button" role="tab">Vídeo</button>
+        <div class="toolbar-actions">
+          <div class="segmented" id="formatToggle" role="tablist" aria-label="Tipo de descarga">
+            <div class="segmented-thumb" id="toggleSlider"></div>
+            <button class="format-btn active" data-mode="audio" id="btnAudio" type="button" role="tab">Audio</button>
+            <button class="format-btn" data-mode="video" id="btnVideo" type="button" role="tab">Vídeo</button>
+          </div>
+          <div class="ui-switch" id="uiSwitch" role="radiogroup" aria-label="Interfaz">
+            <button data-value="windows" type="button" role="radio" title="Interfaz de Windows">
+              <svg viewBox="0 0 16 16"><path d="M1.5 1.5h6v6h-6zM8.5 1.5h6v6h-6zM1.5 8.5h6v6h-6zM8.5 8.5h6v6h-6z" /></svg>
+              <span>Windows</span>
+            </button>
+            <button data-value="mac" type="button" role="radio" title="Interfaz de Mac">
+              <svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2.5" /><circle cx="4" cy="5" r="0.9" /><circle cx="6.4" cy="5" r="0.9" /><circle cx="8.8" cy="5" r="0.9" /></svg>
+              <span>Mac</span>
+            </button>
+            <button class="ui-fav" id="uiFav" type="button" aria-pressed="false" title="Usar esta interfaz por defecto">
+              <svg viewBox="0 0 16 16"><path d="M8 1.6l1.95 3.95 4.36.63-3.16 3.08.75 4.34L8 11.55l-3.9 2.05.75-4.34L1.69 6.18l4.36-.63z" /></svg>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -323,6 +356,12 @@
             <button class="link-btn" id="btnResetPrefs" type="button">Restablecer</button>
           </div>
           <div class="group">
+            <div class="row"><span class="row-label">Interfaz predeterminada <small>al abrir la app</small></span>
+              <div class="segmented segmented-small picker" id="uiDefaultPicker" role="radiogroup" aria-label="Interfaz predeterminada">
+                <button data-value="windows" type="button" role="radio">Windows</button>
+                <button data-value="mac" type="button" role="radio">Mac</button>
+              </div>
+            </div>
             <div class="row row-tall"><span class="row-label">Aspecto</span>
               <div class="theme-picker picker" id="themePicker" role="radiogroup" aria-label="Aspecto">
                 <button class="theme-tile" data-value="auto" type="button" role="radio"><span class="tile tile-auto"></span><span>Automático</span></button>
@@ -412,6 +451,7 @@
 
         <footer class="footer">Todo se procesa en tu equipo · Para uso personal; respeta los derechos de autor.</footer>
       </div>
+    </div>
     </div>
   </div>
 
