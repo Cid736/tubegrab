@@ -449,19 +449,34 @@ function waitForServer(port, maxAttempts, interval, callback) {
   check();
 }
 
+ipcMain.on('window:control', (event, action) => {
+  if (!isTrustedSender(event) || !mainWindow) return;
+  if (action === 'close') mainWindow.close();
+  else if (action === 'minimize') mainWindow.minimize();
+  else if (action === 'maximize') {
+    if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize();
+  }
+});
+
 function createWindow() {
   // Size to the screen actually available: a fixed height taller than a
   // 1366x768 laptop's work area forced users to maximize the window.
   const { width: workW, height: workH } = screen.getPrimaryDisplay().workAreaSize;
   mainWindow = new BrowserWindow({
-    width: Math.min(1180, Math.round(workW * 0.9)),
+    width: Math.min(900, Math.round(workW * 0.9)),
     height: Math.min(820, Math.round(workH * 0.92)),
-    minWidth: 380,
+    minWidth: 540,
     minHeight: 500,
     center: true,
-    title: 'TubeGrab Pro',
+    title: 'TubeGrab',
     icon: path.join(__dirname, 'build', 'icon.ico'),
-    backgroundColor: '#050508',
+    // No native title bar: the page draws a macOS-style sidebar with its own
+    // traffic-light buttons (window:control below) and marks drag regions.
+    titleBarStyle: 'hidden',
+    // Windows 11 acrylic: the window blurs the desktop behind it and the
+    // page's translucent "glass" layers sit on top (see style.css).
+    backgroundMaterial: 'acrylic',
+    backgroundColor: '#00000000',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

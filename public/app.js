@@ -222,7 +222,16 @@ if (window.updater) {
 
 // === Desktop settings (download folder, engine) ===
 if (desktopApi) {
-  $('settingsSection').classList.remove('hidden');
+  $('navSettings').classList.remove('hidden');
+
+  // Traffic lights (the native Windows caption buttons are hidden).
+  $('trafficLights').classList.remove('hidden');
+  $('winClose').addEventListener('click', () => desktopApi.windowControl('close'));
+  $('winMin').addEventListener('click', () => desktopApi.windowControl('minimize'));
+  $('winMax').addEventListener('click', () => desktopApi.windowControl('maximize'));
+  window.addEventListener('blur', () => document.body.classList.add('window-blurred'));
+  window.addEventListener('focus', () => document.body.classList.remove('window-blurred'));
+
   const dirLabel = $('downloadDirLabel');
   const engineLabel = $('engineLabel');
   const btnUpdateEngine = $('btnUpdateEngine');
@@ -240,16 +249,53 @@ if (desktopApi) {
   btnUpdateEngine.addEventListener('click', () => desktopApi.updateEngine());
 }
 
-// === Mode toggle ===
-formatToggle.addEventListener('click', (e) => {
-  const btn = e.target.closest('.format-btn');
-  if (!btn || btn.classList.contains('active')) return;
-  currentMode = btn.dataset.mode;
-  document.querySelectorAll('.format-btn').forEach((b) => b.classList.remove('active'));
-  btn.classList.add('active');
-  $('toggleSlider').style.transform = `translateX(${{ audio: '0', video: '100%', convert: '200%' }[currentMode]})`;
+// === Views (sidebar) & modes ===
+// Views: download | convert | recents | settings. Within "download", the
+// toolbar's segmented control picks the mode (audio | video).
+let currentView = 'download';
+let downloadMode = 'audio';
+const VIEW_TITLES = {
+  download: ['Descargar', 'YouTube y más de 20 sitios'],
+  convert: ['Convertir', '23 formatos de audio y vídeo'],
+  recents: ['Recientes', 'Terminadas en este equipo'],
+  settings: ['Ajustes', 'TubeGrab para Windows'],
+};
+
+function setView(view) {
+  currentView = view;
+  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('.view').forEach((el) => {
+    el.classList.toggle('hidden', !(el.dataset.views || '').split(' ').includes(view));
+  });
+  const [title, subtitle] = VIEW_TITLES[view];
+  $('viewTitle').textContent = title;
+  $('viewSubtitle').textContent = subtitle;
+  formatToggle.classList.toggle('hidden', view !== 'download');
+  if (view === 'download') setMode(downloadMode);
+  else if (view === 'convert') setMode('convert');
+  if (view === 'recents') renderHistory();
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  if (mode !== 'convert') {
+    downloadMode = mode;
+    document.querySelectorAll('.format-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+    $('toggleSlider').style.transform = `translateX(${mode === 'video' ? '100%' : '0'})`;
+  }
   applyMode();
   clearStatus();
+}
+
+$('nav').addEventListener('click', (e) => {
+  const item = e.target.closest('.nav-item');
+  if (item) setView(item.dataset.view);
+});
+$('navSettings').addEventListener('click', () => setView('settings'));
+
+formatToggle.addEventListener('click', (e) => {
+  const btn = e.target.closest('.format-btn');
+  if (btn && !btn.classList.contains('active')) setMode(btn.dataset.mode);
 });
 
 function applyMode() {
@@ -262,6 +308,7 @@ function applyMode() {
   downloadExtras.classList.toggle('hidden', isConvert);
   optSubtitlesWrap.classList.toggle('hidden', currentMode !== 'video');
   convertOptions.classList.toggle('hidden', !isConvert);
+  $('moreOptions').classList.toggle('hidden', !isConvert);
   refreshButton();
 }
 
@@ -300,9 +347,7 @@ let previewRequestId = 0;
 function updateUrlState() {
   const urls = parseUrls(urlInput.value);
   btnClear.classList.toggle('visible', urlInput.value.length > 0);
-  urlHint.textContent = urls.length > 1
-    ? `${urls.length} enlaces — se añadirán todos a la cola.`
-    : 'YouTube, Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Reddit, Bandcamp…';
+  urlHint.textContent = urls.length > 1 ? `${urls.length} enlaces — se descargarán todos.` : '';
   clearTimeout(previewDebounce);
   if (urls.length !== 1) { hidePreview(); } else { previewDebounce = setTimeout(() => fetchPreview(urls[0]), 700); }
   refreshButton();
@@ -651,55 +696,73 @@ function statusLine(job) {
   }
 }
 
+// Static, trusted SVG markup (never built from job data).
+const svg = (d, w = 1.8) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICONS = {
+  download: svg('<path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/>'),
+  convert: svg('<path d="M17 3l4 4-4 4"/><path d="M3 11V9a2 2 0 0 1 2-2h16"/><path d="M7 21l-4-4 4-4"/><path d="M21 13v2a2 2 0 0 1-2 2H3"/>'),
+  done: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 2.2),
+  error: svg('<path d="M12 8v5"/><path d="M12 16.5v.01"/><circle cx="12" cy="12" r="9"/>'),
+  canceled: svg('<circle cx="12" cy="12" r="9"/><path d="M8 16L16 8"/>'),
+  stop: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/>'),
+  reveal: svg('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/>'),
+  save: svg('<path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/>'),
+  remove: svg('<path d="M7 7l10 10M17 7L7 17"/>'),
+};
+
 function renderRow(job) {
   let li = rows.get(job.id);
   if (!li) {
     li = document.createElement('li');
     li.className = 'queue-item';
     li.innerHTML = `
-      <div class="queue-top">
-        <span class="queue-badge"></span>
+      <div class="queue-icon"></div>
+      <div class="queue-main">
         <span class="queue-title"></span>
-        <div class="queue-actions"></div>
+        <div class="queue-bar"><div class="queue-fill"></div></div>
+        <span class="queue-status"></span>
       </div>
-      <div class="queue-bar"><div class="queue-fill"></div></div>
-      <div class="queue-status"></div>`;
+      <div class="queue-actions"></div>`;
     rows.set(job.id, li);
     queueList.prepend(li);
   }
   li.dataset.status = job.status;
-  li.querySelector('.queue-badge').textContent = job.type === 'convert' ? 'CONV' : 'DESC';
+  const iconKey = ['done', 'error', 'canceled'].includes(job.status) ? job.status : (job.type === 'convert' ? 'convert' : 'download');
+  const icon = li.querySelector('.queue-icon');
+  if (icon.dataset.icon !== iconKey) { icon.innerHTML = ICONS[iconKey]; icon.dataset.icon = iconKey; }
+
   const title = li.querySelector('.queue-title');
   title.textContent = job.fileName || job.title;
-  title.title = `${job.title}\n${job.detail || ''}`;
-  const pct = job.status === 'done' ? 100 : (job.progress ?? 0);
-  const fill = li.querySelector('.queue-fill');
-  fill.style.width = `${pct}%`;
+  title.title = job.title;
+  li.querySelector('.queue-fill').style.width = `${job.progress ?? 0}%`;
   li.classList.toggle('indeterminate', ACTIVE.has(job.status) && job.status !== 'queued' && (job.progress === null || job.progress === undefined));
-  li.querySelector('.queue-status').textContent = `${job.detail ? `${job.detail} · ` : ''}${statusLine(job)}`;
+  li.querySelector('.queue-status').textContent = job.status === 'error'
+    ? statusLine(job)
+    : `${job.detail ? `${job.detail} — ` : ''}${statusLine(job)}`;
 
   const actions = li.querySelector('.queue-actions');
   actions.innerHTML = '';
-  const addBtn = (label, title, onClick, cls = '') => {
+  const addBtn = (icon, label, onClick, cls = '') => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = `queue-btn ${cls}`;
-    b.textContent = label;
-    b.title = title;
+    b.innerHTML = ICONS[icon];
+    b.title = label;
+    b.setAttribute('aria-label', label);
     b.addEventListener('click', onClick);
     actions.appendChild(b);
   };
   if (ACTIVE.has(job.status)) {
-    addBtn('Cancelar', 'Cancelar', () => api(`/api/jobs/${job.id}/cancel`, { method: 'POST' }).catch((e) => showStatus(e.message, 'error')));
+    addBtn('stop', 'Cancelar', () => api(`/api/jobs/${job.id}/cancel`, { method: 'POST' }).catch((e) => showStatus(e.message, 'error')));
   } else {
     if (job.status === 'done') {
       if (desktopApi && saved.get(job.id) === 'saved') {
-        addBtn('Mostrar', 'Mostrar en la carpeta', () => desktopApi.showInFolder(job.id), 'primary');
+        addBtn('reveal', 'Mostrar en la carpeta', () => desktopApi.showInFolder(job.id), 'primary');
       } else if (!job.released) {
-        addBtn('Guardar', 'Guardar el archivo', () => autoSave(job), 'primary');
+        addBtn('save', 'Guardar', () => autoSave(job), 'primary');
       }
     }
-    addBtn('✕', 'Quitar de la lista', () => api(`/api/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {}), 'icon');
+    addBtn('remove', 'Quitar de la lista', () => api(`/api/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {}));
   }
 }
 
@@ -717,7 +780,10 @@ function renderQueueMeta() {
   const active = all.filter((j) => ACTIVE.has(j.status));
   queueEmpty.classList.toggle('hidden', all.length > 0);
   btnClearFinished.classList.toggle('hidden', all.length === active.length);
-  queueCount.textContent = active.length ? `· ${active.length} en curso` : (all.length ? `· ${all.length}` : '');
+  queueCount.textContent = active.length ? `${active.length} en curso` : '';
+  const badge = $('navBadge');
+  badge.textContent = String(active.length);
+  badge.classList.toggle('hidden', active.length === 0);
 
   if (desktopApi) {
     const running = active.filter((j) => j.status !== 'queued');
@@ -753,10 +819,12 @@ function addToHistory(name, badge) {
 function renderHistory() {
   const history = getHistory();
   historySection.classList.toggle('hidden', history.length === 0);
+  $('historyEmpty').classList.toggle('hidden', history.length > 0);
+  btnClearHistory.classList.toggle('hidden', history.length === 0);
   historyList.innerHTML = history.map((item) => `
     <li class="history-item">
-      <span class="history-item-name">${escapeHtml(item.name)}</span>
-      <span class="history-item-badge">${escapeHtml(item.badge || '')}</span>
+      <span class="history-name">${escapeHtml(item.name)}</span>
+      <span class="history-badge">${escapeHtml(item.badge || '')}</span>
     </li>`).join('');
 }
 
@@ -819,6 +887,6 @@ function shakeInput() {
 // === Init ===
 renderConvertFormats();
 refreshConvertUI();
-applyMode();
+setView('download');
 renderHistory();
 connectEvents();

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('desktop', {
   saveJob: (jobId, clientId) => ipcRenderer.send('desktop:saveJob', { jobId, clientId }),
   showInFolder: (jobId) => ipcRenderer.send('desktop:showInFolder', jobId),
   setProgress: (value) => ipcRenderer.send('desktop:setProgress', value),
+  windowControl: (action) => ipcRenderer.send('window:control', action),
   onSaved: (cb) => ipcRenderer.on('desktop:saved', (_e, info) => cb(info)),
   getEngine: () => ipcRenderer.invoke('engine:getState'),
   updateEngine: () => ipcRenderer.send('engine:update'),

@@ -31,6 +31,7 @@ Local video/audio downloader **and** format converter with a job queue. Runs ent
 - Desktop app: saves straight to a folder you choose (with "Show in folder" / "Open folder"), taskbar progress, notifications when a job finishes
 - **Self-updating**: the app updates itself from GitHub Releases in one click (SHA-256 verified), and keeps its download engine (yt-dlp) up to date automatically — sites like YouTube break old versions within weeks
 - Local history of finished jobs (stored only on your device)
+- Native macOS-style interface (Liquid Glass): floating glass sidebar, System Settings-style grouped lists, automatic light/dark mode, and a translucent (acrylic) window on Windows 11
 
 ## Usage
 
@@ -143,6 +144,7 @@ Descargador de vídeo/audio **y** conversor de formatos con cola de trabajos. Fu
 - App de escritorio: guarda directamente en la carpeta que elijas (con "Mostrar en carpeta" / "Abrir carpeta"), progreso en la barra de tareas y notificación al terminar
 - **Se actualiza sola**: la app se actualiza desde GitHub Releases con un clic (verificada por SHA-256) y mantiene al día su motor de descargas (yt-dlp) automáticamente — sitios como YouTube rompen las versiones antiguas en semanas
 - Historial local de trabajos terminados (solo en tu equipo)
+- Interfaz al estilo nativo de macOS (Liquid Glass): barra lateral de vidrio, listas agrupadas como Ajustes del Sistema, modo claro/oscuro automático y ventana translúcida (acrylic) en Windows 11
 
 ## Modos de uso
 
