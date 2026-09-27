@@ -27,32 +27,41 @@ if (fs.existsSync(destPath)) {
   process.exit(0);
 }
 
-const url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+// The latest release's binary is only installed if its SHA-256 matches the
+// sum list published with it (same check `yt-dlp -U` does).
+const BASE = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download';
+const ALLOWED_HOSTS = new Set(['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com']);
+const crypto = require('crypto');
 
-function download(u, redirectsLeft) {
-  https.get(u, (res) => {
-    if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirectsLeft > 0) {
-      res.resume();
-      download(res.headers.location, redirectsLeft - 1);
-      return;
-    }
-    if (res.statusCode !== 200) {
-      console.error(`[postinstall] Descarga de yt-dlp falló con código ${res.statusCode}`);
-      process.exit(0); // don't fail the whole install; server falls back to PATH lookup
-      return;
-    }
-    const fileStream = fs.createWriteStream(destPath);
-    res.pipe(fileStream);
-    fileStream.on('finish', () => {
-      fileStream.close(() => {
-        fs.chmodSync(destPath, 0o755);
-        console.log('[postinstall] yt-dlp descargado correctamente.');
-      });
-    });
-  }).on('error', (err) => {
-    console.error('[postinstall] Error al descargar yt-dlp:', err.message);
-    process.exit(0);
+function get(u, redirectsLeft) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(u);
+    if (url.protocol !== 'https:' || !ALLOWED_HOSTS.has(url.hostname)) return reject(new Error(`origen no permitido: ${url.hostname}`));
+    https.get(url, { headers: { 'User-Agent': 'tubegrab-postinstall' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirectsLeft > 0) {
+        res.resume();
+        return get(new URL(res.headers.location, url).toString(), redirectsLeft - 1).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode}`)); }
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    }).on('error', reject);
   });
 }
 
-download(url, 5);
+(async () => {
+  try {
+    const [bin, sums] = await Promise.all([get(`${BASE}/yt-dlp`, 5), get(`${BASE}/SHA2-256SUMS`, 5)]);
+    const line = sums.toString('utf8').split('\n').find((l) => /\syt-dlp$/.test(l.trim()));
+    const expected = line && line.trim().split(/\s+/)[0].toLowerCase();
+    const actual = crypto.createHash('sha256').update(bin).digest('hex');
+    if (!expected || expected !== actual) throw new Error('la huella SHA-256 no coincide con la publicada');
+    fs.writeFileSync(destPath, bin, { mode: 0o755 });
+    console.log('[postinstall] yt-dlp descargado y verificado (SHA-256).');
+  } catch (err) {
+    // Don't fail the whole install; the server falls back to yt-dlp on PATH.
+    console.error('[postinstall] No se pudo instalar yt-dlp:', err.message);
+  }
+})();

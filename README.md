@@ -27,7 +27,8 @@ Local video/audio downloader **and** format converter with a job queue. Runs ent
 - Audio: bitrate, sample rate, mono/stereo, loudness normalization. Video: resolution, quality, frame rate, rotate/mirror, strip audio. Both: speed (0.5×–2×) and trim start/end. Extract the audio from any video.
 
 **Queue & desktop app**
-- Job queue with **real progress**, speed and time left; several downloads run in parallel; cancel any job
+- Job queue with **real progress**, speed and time left; several downloads run in parallel; cancel any job, **retry** failed downloads (temporary errors are retried once automatically)
+- Drag files or links anywhere onto the window; shortcuts Ctrl+1/2/3 and Ctrl+, (settings)
 - Desktop app: saves straight to a folder you choose (with "Show in folder" / "Open folder"), taskbar progress, notifications when a job finishes
 - **Self-updating**: the app updates itself from GitHub Releases in one click (SHA-256 verified), and keeps its download engine (yt-dlp) up to date automatically — sites like YouTube break old versions within weeks
 - Local history of finished jobs (stored only on your device)
@@ -75,8 +76,9 @@ The repo includes a `Dockerfile` and `render.yaml`. On Render: create a Web Serv
 ├── server.js              # Express server: job API (SSE progress), metadata preview, security guards
 ├── lib/
 │   ├── jobs.js            # Job queue: concurrency, progress, cancel, cleanup
-│   ├── download.js        # yt-dlp: site allowlist, options, progress parsing, playlists
-│   └── convert.js         # ffmpeg: formats, presets' settings, progress parsing
+│   ├── download.js        # yt-dlp: site allowlist, options, progress parsing, playlists, auto-retry
+│   ├── convert.js         # ffmpeg: formats, presets' settings, progress parsing
+│   └── filenames.js       # Safe names for files saved to the user's folder
 ├── electron-main.js       # Desktop app: window, app updater, yt-dlp auto-update, save-to-folder
 ├── preload.js             # Minimal bridge exposed to the page (updater + desktop features)
 ├── scripts/
@@ -88,19 +90,27 @@ The repo includes a `Dockerfile` and `render.yaml`. On Render: create a Web Serv
 │   ├── app.js
 │   ├── style.css          # macOS interface + shared base
 │   └── fluent.css         # Windows 11 interface (default)
+├── test/                  # npm test (node:test): unit, API end-to-end and security tests
 ├── Dockerfile
 ├── docker-compose.yml
 └── render.yaml
 ```
 
+## Tests
+
+```bash
+npm test                    # 77 tests: options, conversions with real ffmpeg (23 formats), queue, API, security
+TG_NETWORK=1 npm test       # also real YouTube downloads
+```
+
 ## Cookies (optional)
 
-For restricted videos, place a `cookies.txt` file (Netscape format) in the project root next to `server.js`.
+For restricted videos, add a `cookies.txt` file (Netscape format). Desktop app: Settings → General → Cookies → "Open folder" (it goes in `%APPDATA%	ubegrab`). Server/Docker: next to `server.js`, or in the folder set by `TUBEGRAB_DATA_DIR`.
 
 ## Dependencies
 
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-- [ffmpeg](https://ffmpeg.org/) 9.0.2 on Windows (gyan.dev build, SHA-256 pinned; [ffmpeg-static](https://www.npmjs.com/package/ffmpeg-static) elsewhere)
+- [ffmpeg](https://ffmpeg.org/) 9.0.2 on Windows (gyan.dev build, SHA-256 pinned); Debian's maintained ffmpeg 7.1 in Docker (`FFMPEG_BIN`); [ffmpeg-static](https://www.npmjs.com/package/ffmpeg-static) only as a last resort
 - [Express](https://expressjs.com/) + [helmet](https://www.npmjs.com/package/helmet) + [express-rate-limit](https://www.npmjs.com/package/express-rate-limit)
 - [multer](https://www.npmjs.com/package/multer) (file uploads for the converter)
 - [Electron](https://www.electronjs.org/) 44 (desktop app only)
@@ -114,7 +124,7 @@ MIT
 
 Security reviews are AI-assisted (Claude, Anthropic) and run on significant changes to check for injection risks, insecure defaults and dependency vulnerabilities. Findings are tracked in [`BUGLOG.md`](BUGLOG.md).
 
-**Last review:** 2026-09-27 (review #8, v2.2.0) — ffmpeg/ffprobe upgraded from 6.1.1 (Jan 2024) to 9.0.2, installed from a SHA-256-pinned download (the old binary is no longer shipped); Electron now only grants notifications and clipboard permissions (camera, microphone, location denied) and blocks <webview>; new personalisation settings are validated against fixed lists. 0 known vulnerabilities in dependencies; Electron and yt-dlp on their latest releases. Earlier hardening (review #7) still applies: site allowlist with no generic extractor, sandboxed JavaScript for YouTube, media-only ffmpeg inputs, per-client jobs. Known limit: the .exe isn't code-signed. Details in BUGLOG.md.
+**Last review:** 2026-09-27 (review #9, v2.4.0) — the desktop window no longer loads whatever program answers on its port (it waits for its own server to confirm over IPC, and holds the port on both 127.0.0.1 and ::1; a foreign server on `[::1]:3000` could previously show its page with access to the app bridge); only media file types can be saved to your folder; Docker now uses a maintained ffmpeg (the `FFMPEG_BIN` setting was ignored), a committed lockfile with `npm ci`, and a checksum-verified yt-dlp; a global cap on concurrent yt-dlp lookups. Also fixed: downloads whose titles had accents/ñ/"/" failed on Windows (pipe encoding), and uploaded names with accents were garbled. New automated suite (`npm test`, 77 tests incl. security probes). 0 known vulnerabilities; all components on their latest releases. Known limit: the .exe isn't code-signed. Details in BUGLOG.md.
 
 Found a vulnerability? Open an issue or contact directly.
 
@@ -143,7 +153,8 @@ Descargador de vídeo/audio **y** conversor de formatos con cola de trabajos. Fu
 - Audio: calidad, frecuencia, mono/estéreo, normalizar volumen. Vídeo: resolución, calidad, fotogramas, girar/espejo, quitar audio. Ambos: velocidad (0,5×–2×) y recorte de inicio/fin. Extrae el audio de cualquier vídeo.
 
 **Cola y app de escritorio**
-- Cola de trabajos con **progreso real**, velocidad y tiempo restante; varias descargas en paralelo; cancelar cualquier trabajo
+- Cola de trabajos con **progreso real**, velocidad y tiempo restante; varias descargas en paralelo; cancelar cualquier trabajo y **reintentar** las descargas fallidas (los errores temporales se reintentan solos una vez)
+- Arrastra archivos o enlaces a cualquier parte de la ventana; atajos Ctrl+1/2/3 y Ctrl+, (ajustes)
 - App de escritorio: guarda directamente en la carpeta que elijas (con "Mostrar en carpeta" / "Abrir carpeta"), progreso en la barra de tareas y notificación al terminar
 - **Se actualiza sola**: la app se actualiza desde GitHub Releases con un clic (verificada por SHA-256) y mantiene al día su motor de descargas (yt-dlp) automáticamente — sitios como YouTube rompen las versiones antiguas en semanas
 - Historial local de trabajos terminados (solo en tu equipo)
@@ -185,15 +196,22 @@ docker compose up
 
 El repo incluye un `Dockerfile` y `render.yaml`. En Render: crea un Web Service desde este repo (detecta Docker automáticamente), elige el plan Free, y añade la variable de entorno `TRUST_PROXY=true` (necesaria para que la app escuche correctamente y el rate-limiting lea la IP real del cliente detrás del proxy de Render).
 
+## Pruebas
+
+```bash
+npm test                    # 77 pruebas: opciones, conversiones con ffmpeg real (23 formatos), cola, API, seguridad
+TG_NETWORK=1 npm test       # también descargas reales de YouTube
+```
+
 ## Cookies (opcional)
 
-Para vídeos con restricciones, coloca un archivo `cookies.txt` (formato Netscape) en la raíz del proyecto junto a `server.js`.
+Para vídeos con restricciones, añade un archivo `cookies.txt` (formato Netscape). App de escritorio: Ajustes → General → Cookies → "Abrir carpeta" (va en `%APPDATA%	ubegrab`). Servidor/Docker: junto a `server.js`, o en la carpeta indicada en `TUBEGRAB_DATA_DIR`.
 
 ## Seguridad
 
 Las revisiones de seguridad son asistidas por IA (Claude, Anthropic) y se ejecutan en cambios significativos para detectar riesgos de inyección, configuraciones inseguras y vulnerabilidades en dependencias. Los hallazgos se registran en [`BUGLOG.md`](BUGLOG.md).
 
-**Última revisión:** 2026-09-27 (revisión 8, v2.2.0) — ffmpeg/ffprobe actualizados de 6.1.1 (enero de 2024) a 9.0.2, instalados desde una descarga con huella SHA-256 fijada (el binario antiguo ya no se distribuye); Electron solo concede permisos de notificaciones y portapapeles (cámara, micrófono y ubicación denegados) y bloquea <webview>; los nuevos ajustes de personalización se validan contra listas cerradas. 0 vulnerabilidades conocidas en dependencias; Electron y yt-dlp en su última versión. Sigue vigente lo de la revisión 7: lista de sitios permitidos sin extractor genérico, JavaScript de YouTube aislado, ffmpeg solo con entradas multimedia, trabajos privados por cliente. Límite conocido: el .exe no está firmado. Detalles en BUGLOG.md.
+**Última revisión:** 2026-09-27 (revisión 9, v2.4.0) — la ventana de escritorio ya no carga cualquier programa que responda en su puerto (espera a que su propio servidor lo confirme por IPC y reserva el puerto en 127.0.0.1 y en ::1; antes un servidor ajeno en `[::1]:3000` podía mostrar su página con acceso al puente de la app); solo se pueden guardar en tu carpeta archivos multimedia; Docker usa un ffmpeg mantenido (se ignoraba `FFMPEG_BIN`), lockfile versionado con `npm ci` y yt-dlp verificado por SHA-256; límite global de consultas simultáneas a yt-dlp. También corregido: en Windows fallaban las descargas con tildes/ñ/"/" en el título (codificación de la tubería) y los nombres subidos con tildes se corrompían. Nueva batería automática (`npm test`, 77 pruebas incluidas las de seguridad). 0 vulnerabilidades conocidas; todos los componentes en su última versión. Límite conocido: el .exe no está firmado. Detalles en BUGLOG.md.
 
 ¿Encontraste una vulnerabilidad? Abre un issue o contacta directamente.
 

@@ -242,7 +242,18 @@ if (desktopApi) {
   const dirLabel = $('downloadDirLabel');
   const engineLabel = $('engineLabel');
   const btnUpdateEngine = $('btnUpdateEngine');
-  const showDir = (s) => { if (s) { dirLabel.textContent = s.downloadDir; dirLabel.title = s.downloadDir; } };
+  const cookiesLabel = $('cookiesLabel');
+  const cookiesHelp = cookiesLabel.textContent;
+  const showDir = (s) => {
+    if (!s) return;
+    dirLabel.textContent = s.downloadDir;
+    dirLabel.title = s.downloadDir;
+    cookiesLabel.textContent = s.hasCookies ? 'cookies.txt encontrado: se usa en todas las descargas.' : cookiesHelp;
+    cookiesLabel.classList.toggle('ok', Boolean(s.hasCookies));
+  };
+  // Re-check when coming back to the window (e.g. after adding cookies.txt).
+  window.addEventListener('focus', () => desktopApi.getSettings().then(showDir));
+  $('btnOpenDataFolder').addEventListener('click', () => desktopApi.openDataFolder());
   const showEngine = (s) => {
     if (!s) return;
     engineLabel.textContent = s.updating ? 'Comprobando actualizaciones…' : (s.error || (s.version ? `Versión ${s.version}` : '—'));
@@ -580,10 +591,42 @@ fileDrop.addEventListener('dragover', (e) => { e.preventDefault(); fileDrop.clas
 fileDrop.addEventListener('dragleave', () => fileDrop.classList.remove('dragover'));
 fileDrop.addEventListener('drop', (e) => {
   e.preventDefault();
+  e.stopPropagation();
   fileDrop.classList.remove('dragover');
   if (e.dataTransfer.files.length) setFiles([...e.dataTransfer.files]);
 });
 fileInput.addEventListener('change', () => { if (fileInput.files.length) setFiles([...fileInput.files]); });
+
+// Drop anywhere in the window: files go to Convertir, links to Descargar.
+// (Also stops a stray drop from navigating the window to the file.)
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => {
+  e.preventDefault();
+  if (e.target.closest && e.target.closest('#fileDrop')) return; // its own handler took it
+  const files = [...(e.dataTransfer.files || [])];
+  if (files.length) {
+    setView('convert');
+    setFiles(files);
+    return;
+  }
+  const urls = parseUrls(e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain'));
+  if (urls.length) {
+    setView('download');
+    urlInput.value = urls.join('\n');
+    autoGrow();
+    updateUrlState();
+  }
+});
+
+// Ctrl+1/2/3 → Descargar / Convertir / Recientes, Ctrl+, → Ajustes.
+const SHORTCUT_VIEWS = { 1: 'download', 2: 'convert', 3: 'recents', ',': 'settings' };
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+  const view = SHORTCUT_VIEWS[e.key];
+  if (!view) return;
+  e.preventDefault();
+  setView(view);
+});
 
 function setFiles(files) {
   selectedFiles = files.slice(0, 50);
@@ -820,6 +863,7 @@ const ICONS = {
   reveal: svg('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/>'),
   save: svg('<path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/>'),
   remove: svg('<path d="M7 7l10 10M17 7L7 17"/>'),
+  retry: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>'),
 };
 
 function renderRow(job) {
@@ -867,6 +911,9 @@ function renderRow(job) {
   if (ACTIVE.has(job.status)) {
     addBtn('stop', 'Cancelar', () => api(`/api/jobs/${job.id}/cancel`, { method: 'POST' }).catch((e) => showStatus(e.message, 'error')));
   } else {
+    if (job.retryable) {
+      addBtn('retry', 'Reintentar', () => api(`/api/jobs/${job.id}/retry`, { method: 'POST' }).catch((e) => showStatus(e.message, 'error')), 'primary');
+    }
     if (job.status === 'done') {
       if (desktopApi && saved.get(job.id) === 'saved') {
         addBtn('reveal', 'Mostrar en la carpeta', () => desktopApi.showInFolder(job.id), 'primary');

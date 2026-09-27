@@ -188,3 +188,51 @@ Revisión manual completa de `server.js`, `public/app.js` y `electron-main.js` c
 ### Resto de la revisión
 - `npm audit` → 0 vulnerabilidades. `helmet` 8.3.0 y `express-rate-limit` 8.7.0 actualizados. Electron 44.4.5 y yt-dlp 2026.08.19 ya estaban en su última versión.
 - **Límite conocido (sin cambios):** el `.exe` no está firmado. Además, el "fuse" `RunAsNode` de Electron no se puede desactivar porque la app lo usa para ejecutar su servidor y como motor JavaScript aislado de yt-dlp.
+
+---
+
+## 2026-09-27 — Revisión 9 (v2.4.0: pruebas completas, errores funcionales y seguridad)
+
+Se añadió una batería de pruebas automáticas (`npm test`, 77 pruebas con el ejecutor de Node, sin dependencias nuevas; `TG_NETWORK=1` activa las descargas reales). Encontró varios de los fallos de abajo.
+
+### [ALTA — seguridad] La ventana cargaba cualquier programa que respondiera en el puerto 3000
+- **Descripción:** La app de escritorio esperaba a que *algo* respondiera en `localhost:3000` y cargaba esa página, que además recibía el puente de la app (`window.desktop`, `window.updater`) porque el origen coincidía. Otro programa en ese puerto (un servidor de desarrollo, u otro proceso local malicioso) se mostraba dentro de TubeGrab con acceso al puente. Como "localhost" también resuelve a IPv6, bastaba con ocupar `[::1]:3000` aunque nuestro servidor arrancara bien en `127.0.0.1:3000` (reproducido: la página ajena se cargó con `window.desktop` disponible).
+- **Fix:** La ventana solo se carga cuando el **propio proceso hijo** confirma por IPC que escucha en ese puerto. El servidor reserva el puerto en `127.0.0.1` **y** en `::1`; si alguno está ocupado lo comunica y la app elige un puerto libre y lo guarda (el origen sigue siendo estable en los siguientes arranques). Probado con un servidor ajeno en `127.0.0.1:3000` y en `[::1]:3000`: la app arranca en otro puerto y nunca muestra la página ajena.
+
+### [MEDIA — seguridad] Guardado de archivos con cualquier extensión
+- **Fix (defensa en profundidad):** Lo que la app escribe en la carpeta de descargas solo puede tener una extensión multimedia conocida (si no, se añade `.bin`, así que nunca aparece un `.exe`/`.lnk`/`.bat`), y los nombres de dispositivo de Windows (`CON`, `NUL`, `COM1`…) se evitan. Código en `lib/filenames.js`, con pruebas.
+
+### [MEDIA — seguridad] Docker usaba el ffmpeg viejo de ffmpeg-static y dependencias sin fijar
+- **Descripción:** El Dockerfile definía `FFMPEG_BIN=/usr/bin/ffmpeg`, pero el servidor nunca leía esa variable: la versión web usaba el ffmpeg 6.1.1 de `ffmpeg-static` (el que se retiró en la revisión 8) y sin ffprobe. Además `package-lock.json` estaba en `.gitignore`, así que cada imagen resolvía versiones nuevas sin control, y yt-dlp se descargaba sin verificar.
+- **Fix:** El servidor respeta `FFMPEG_BIN`; la imagen pasa a Debian 13 (`node:24-trixie-slim`, ffmpeg 7.1 mantenido por Debian, con ffprobe). `package-lock.json` se versiona y la imagen usa `npm ci`. yt-dlp (Docker y `postinstall` en Linux) solo se instala si su SHA-256 coincide con el publicado. Se quitó `python3-pip`, que no hacía falta. Probado construyendo y ejecutando la imagen: descargas, conversión y las cargas maliciosas rechazadas.
+
+### [BAJA — seguridad] Sin límite global de procesos yt-dlp para vista previa y playlists
+- **Fix:** Máximo de consultas simultáneas (8 vistas previas y 4 lecturas de playlist en la web; 4 y 3 en escritorio); el resto recibe 429. El límite por IP no acotaba el total.
+
+### [ALTA — funcional] Descargas con tildes, ñ o "/" en el título fallaban al final
+- **Descripción:** En Windows yt-dlp escribe por la tubería en la página de códigos ANSI: "Canción" llegaba como "Canci�n" y "IF/ELSE" (en disco "IF⧸ELSE") como "IFELSE". La ruta impresa no existía, así que la descarga se completaba pero el trabajo acababa en "La descarga falló", y los títulos se veían corruptos.
+- **Fix:** `--encoding utf-8` en todas las llamadas a yt-dlp, y como red de seguridad se toma el único archivo terminado de la carpeta del trabajo. Prueba real con el vídeo que fallaba.
+
+### [MEDIA — funcional] Nombres de archivo subidos con tildes se corrompían
+- **Descripción:** multer leía el nombre como latin1: "Mi canción.wav" → "Mi canciÃ³n.mp3". **Fix:** `defParamCharset: 'utf8'`.
+
+### [MEDIA — funcional] Con el puerto ocupado, el servidor decía "corriendo" y se caía
+- **Descripción:** En Express 5 `app.listen` también llama a su callback cuando falla. **Fix:** el callback comprueba el error.
+
+### [BAJA — funcional] Otros
+- Abrir el `.exe` dos veces lanzaba una segunda copia que peleaba por el puerto: ahora se trae al frente la ventana abierta.
+- Cada proceso usa su propia carpeta temporal (antes una segunda copia borraba los archivos de la primera); las subidas también van ahí y se limpian si la app se cierra a mitad.
+- Un nombre subido como `CON.wav` no se podía crear en Windows.
+- "cookies.txt junto a la app" no servía en el `.exe` portable (se descomprime en una carpeta temporal nueva en cada arranque): ahora va en la carpeta de datos, con botón en Ajustes → General → Cookies.
+- Varios errores de yt-dlp salían en inglés ("This video is unavailable", Vimeo "logged-in"); el filtro de "privado" era demasiado amplio.
+- El `.exe` incluía archivos que no usa (Dockerfile, README, scripts antiguos `build-portable.js` y `build-launcher.cs`, que se eliminan): ahora solo se empaqueta lo necesario.
+
+### Mejoras
+- **Reintentar:** botón en las descargas fallidas o canceladas, y un reintento automático tras errores temporales (p. ej. 403 de YouTube al bajar varias a la vez). En una playlist de 20 vídeos los fallos pasaron de 3 a 1 (el restante ahora también se resuelve con el arreglo de codificación).
+- **Arrastrar y soltar** en cualquier parte de la ventana: archivos → Convertir, enlaces → Descargar.
+- **Atajos:** Ctrl+1/2/3 (Descargar, Convertir, Recientes) y Ctrl+, (Ajustes).
+
+### Resto de la revisión
+- `npm audit` → 0 vulnerabilidades; Electron 44.4.5, express 5.2.1, multer 2.4.0, helmet 8.3.0, express-rate-limit 8.7.0, yt-dlp 2026.08.19 y ffmpeg 9.0.2: todos en su última versión.
+- Pruebas de seguridad automatizadas: Host (DNS rebinding), Origin, id de cliente, ids de trabajo manipulados, salida de `public/`, URLs no permitidas (incluida `169.254.169.254`), JSON enorme/roto, subidas no multimedia, formatos `__proto__`, recortes inyectados, límite de conexiones SSE, privacidad entre clientes, HLS/`ffconcat`/`subfile`/ffmetadata maliciosos y preferencias manipuladas.
+- **Límite conocido (sin cambios):** el `.exe` no está firmado; el fuse `RunAsNode` sigue siendo necesario.

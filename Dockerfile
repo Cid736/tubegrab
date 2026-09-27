@@ -1,18 +1,23 @@
 # Imagen base de Node.js. yt-dlp usa este mismo Node (>=22, con su modelo de
 # permisos) como motor JavaScript aislado para resolver los retos de YouTube.
-FROM node:24-slim
+FROM node:24-trixie-slim
 
 # Instalar dependencias del sistema: python3 (para yt-dlp) y ffmpeg
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
-    python3-pip \
     ffmpeg \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Descargar e instalar yt-dlp manualmente para asegurar la última versión
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp
+# yt-dlp (última versión), verificado contra las sumas SHA-256 que publica la
+# propia release: si no coincide, la construcción de la imagen falla.
+RUN cd /tmp \
+    && curl -fsSL -o yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+    && curl -fsSL -o SHA2-256SUMS https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS \
+    && grep ' yt-dlp$' SHA2-256SUMS | sha256sum -c - \
+    && install -m 755 yt-dlp /usr/local/bin/yt-dlp \
+    && rm -f yt-dlp SHA2-256SUMS
 
 # Directorio de trabajo
 WORKDIR /app
@@ -21,8 +26,9 @@ WORKDIR /app
 COPY package*.json ./
 COPY scripts/ ./scripts/
 
-# Instalar solo dependencias de producción
-RUN npm install --omit=dev
+# Instalar solo dependencias de producción, exactamente las versiones del
+# package-lock.json (reproducible; nada se resuelve de nuevo al construir).
+RUN npm ci --omit=dev
 
 # Copiar el código de la aplicación
 COPY server.js ./

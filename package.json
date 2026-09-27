@@ -1,12 +1,13 @@
 {
   "name": "tubegrab",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "main": "electron-main.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
     "postinstall": "node scripts/postinstall.js",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "test": "node --test --test-concurrency=1 \"test/*.test.js\""
   },
   "engines": {
     "node": ">=22"
@@ -24,12 +25,17 @@
     },
     "cscLink": null,
     "files": [
-      "**/*",
-      "!dist/*",
-      "!node_modules/electron/**/*",
-      "!node_modules/electron-builder/**/*",
-      "!node_modules/ffmpeg-static/*.exe",
-      "!bin/ffmpeg.version"
+      "electron-main.js",
+      "preload.js",
+      "server.js",
+      "package.json",
+      "lib/**/*",
+      "public/**/*",
+      "build/icon.ico",
+      "bin/ffmpeg.exe",
+      "bin/ffprobe.exe",
+      "yt-dlp.exe",
+      "!node_modules/ffmpeg-static/*.exe"
     ]
   },
   "keywords": [],

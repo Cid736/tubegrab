@@ -5,5 +5,4 @@ dist/
 /yt-dlp
 *.log
 .DS_Store
-package-lock.json
 /bin/

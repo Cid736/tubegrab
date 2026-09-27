@@ -412,6 +412,8 @@ body.window-blurred .tl { background: rgba(128, 128, 128, 0.3); }
 .row-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
 .row-sub { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 .row-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.row-sub-wrap { white-space: normal; direction: ltr; }
+.row-sub.ok { color: var(--green); }
 
 /* Pop-up buttons */
 .row select, .text-input {

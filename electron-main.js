@@ -5,10 +5,15 @@ const fs = require('fs');
 const https = require('https');
 const crypto = require('crypto');
 const { fork, execFile, spawn } = require('child_process');
-const http = require('http');
 
-const PORT = process.env.PORT || 3000;
-const APP_ORIGIN = `http://localhost:${PORT}`;
+const net = require('net');
+
+// The local UI server's port. Stable across launches (the page's saved
+// preferences and history are tied to its origin): PORT, else the one saved
+// in settings, else 3000. Only set once our own server confirms it's
+// listening there (see startServer), never because *something* answers.
+let appPort = null;
+let APP_ORIGIN = 'http://localhost:0';
 
 let mainWindow;
 let serverProcess;
@@ -331,13 +336,10 @@ ipcMain.handle('engine:getState', (event) => (isTrustedSender(event) ? engineSta
 ipcMain.on('engine:update', (event) => { if (isTrustedSender(event)) maintainEngine(true); });
 
 // === Saving finished jobs straight into the chosen folder ===
-const JOB_FILE_RE = new RegExp(`^${APP_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/jobs/([a-f0-9]{32})/file\\?client=[a-f0-9]{32}$`);
+const jobFileMatch = (url) => new RegExp(`^${APP_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/jobs/([a-f0-9]{32})/file\\?client=[a-f0-9]{32}$`).exec(url);
 const savedFiles = new Map(); // jobId -> absolute path we wrote
 
-function safeFileName(name) {
-  const cleaned = path.basename(String(name || '')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^[.\s]+|[.\s]+$/g, '');
-  return cleaned.slice(0, 200) || 'descarga';
-}
+const { safeSaveName } = require('./lib/filenames');
 
 function uniquePath(dir, fileName) {
   const ext = path.extname(fileName);
@@ -370,12 +372,12 @@ function setupDownloads() {
   mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
 
   mainWindow.webContents.session.on('will-download', (event, item) => {
-    const match = JOB_FILE_RE.exec(item.getURL());
+    const match = jobFileMatch(item.getURL());
     if (!match) return; // anything else keeps Electron's normal save dialog
     const jobId = match[1];
     const dir = getSettings().downloadDir;
     try { fs.mkdirSync(dir, { recursive: true }); } catch { /* reported on failure below */ }
-    const target = uniquePath(dir, safeFileName(item.getFilename()));
+    const target = uniquePath(dir, safeSaveName(item.getFilename()));
     item.setSavePath(target);
     item.once('done', (_e, state) => {
       if (state === 'completed') {
@@ -388,7 +390,17 @@ function setupDownloads() {
   });
 }
 
-ipcMain.handle('desktop:getSettings', (event) => (isTrustedSender(event) ? { downloadDir: getSettings().downloadDir } : null));
+const cookiesFile = () => path.join(app.getPath('userData'), 'cookies.txt');
+
+ipcMain.handle('desktop:getSettings', (event) => (isTrustedSender(event)
+  ? { downloadDir: getSettings().downloadDir, hasCookies: fs.existsSync(cookiesFile()) }
+  : null));
+
+// Opens the data folder (where cookies.txt goes). The renderer can't pick the path.
+ipcMain.on('desktop:openDataFolder', (event) => {
+  if (!isTrustedSender(event)) return;
+  shell.openPath(app.getPath('userData'));
+});
 
 ipcMain.handle('desktop:chooseFolder', async (event) => {
   if (!isTrustedSender(event)) return null;
@@ -449,25 +461,68 @@ function killServerTree() {
   }
 }
 
-/** Poll http://localhost:PORT until it responds or maxAttempts is exceeded */
-function waitForServer(port, maxAttempts, interval, callback) {
-  let attempts = 0;
-  const check = () => {
-    attempts++;
-    const req = http.get(`http://127.0.0.1:${port}`, (res) => {
-      res.resume();
-      callback(null);
+/** A port nothing is listening on right now (the OS picks it). */
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
     });
-    req.on('error', () => {
-      if (attempts >= maxAttempts) {
-        callback(new Error(`Server did not start after ${maxAttempts} attempts`));
-      } else {
-        setTimeout(check, interval);
+  });
+}
+
+/**
+ * Forks server.js on `port` and resolves once *that child* reports it is
+ * listening (IPC message), so the window can never be pointed at some other
+ * program that happens to answer on the same port. If the port is taken, a
+ * free one is picked and remembered, keeping the origin stable from then on.
+ */
+function startServer(port, enginePath, retriesLeft = 2) {
+  return new Promise((resolve, reject) => {
+    const child = fork(path.join(__dirname, 'server.js'), [], {
+      // TUBEGRAB_ELECTRON tells server.js it already has a native window on the
+      // way, so it must not also launch the system browser (see server.js).
+      env: {
+        ...process.env, NODE_ENV: 'production', TUBEGRAB_ELECTRON: '1', PORT: String(port),
+        TUBEGRAB_DATA_DIR: app.getPath('userData'),
+        ...(enginePath ? { TUBEGRAB_YTDLP: enginePath } : {}),
+      },
+      windowsHide: true,
+    });
+    serverProcess = child;
+    let handedOff = false; // this child gave up its port; a new one takes over
+    const timer = setTimeout(() => reject(new Error('el servidor no arrancó a tiempo')), 30_000);
+    child.on('message', async (msg) => {
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.type === 'listening' && msg.port === port) {
+        clearTimeout(timer);
+        resolve(port);
+      } else if (msg.type === 'port-in-use') {
+        clearTimeout(timer);
+        handedOff = true;
+        if (retriesLeft <= 0) return reject(new Error(`el puerto ${port} está ocupado`));
+        try {
+          const next = await findFreePort();
+          console.warn(`[Electron] Port ${port} is in use; switching to ${next}.`);
+          saveSettings({ port: next });
+          resolve(await startServer(next, enginePath, retriesLeft - 1));
+        } catch (err) { reject(err); }
       }
     });
-    req.setTimeout(interval, () => { req.destroy(); });
-  };
-  check();
+    child.once('exit', (code) => {
+      clearTimeout(timer);
+      if (!handedOff && !shuttingDown) reject(new Error(`el servidor terminó (código ${code})`));
+    });
+  });
+}
+
+function preferredPort() {
+  const fromEnv = Number(process.env.PORT);
+  if (Number.isInteger(fromEnv) && fromEnv > 0 && fromEnv < 65536) return fromEnv;
+  const saved = Number(getSettings().port);
+  return Number.isInteger(saved) && saved >= 1024 && saved < 65536 ? saved : 3000;
 }
 
 // The page's Aspecto setting also drives the native window theme (acrylic
@@ -543,22 +598,16 @@ function createWindow() {
 
   // Start the Express server. windowsHide keeps this (and anything it in turn
   // spawns, like yt-dlp.exe/ffmpeg.exe) from ever flashing a console window.
-  const enginePath = ensureEngine();
-  serverProcess = fork(path.join(__dirname, 'server.js'), [], {
-    // TUBEGRAB_ELECTRON tells server.js it already has a native window on the
-    // way, so it must not also launch the system browser (see server.js).
-    env: { ...process.env, NODE_ENV: 'production', TUBEGRAB_ELECTRON: '1', ...(enginePath ? { TUBEGRAB_YTDLP: enginePath } : {}) },
-    windowsHide: true,
-  });
-
-  // Wait for the server to be ready before loading the URL (avoids race condition)
-  waitForServer(PORT, 30, 200, (err) => {
-    if (err) {
-      console.error('[Electron] Server failed to start:', err.message);
-    }
+  startServer(preferredPort(), ensureEngine()).then((port) => {
+    appPort = port;
+    APP_ORIGIN = `http://localhost:${appPort}`;
     if (mainWindow) mainWindow.loadURL(APP_ORIGIN);
     checkForUpdates();
     maintainEngine(false);
+  }, (err) => {
+    console.error('[Electron] Server failed to start:', err.message);
+    dialog.showErrorBox('TubeGrab', `No se pudo iniciar TubeGrab: ${err.message}.`);
+    app.quit();
   });
 
   mainWindow.on('closed', function () {
@@ -566,7 +615,18 @@ function createWindow() {
   });
 }
 
-app.on('ready', createWindow);
+// One instance at a time: a second launch just brings the open window forward
+// (two copies would fight over the same port, engine and settings).
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  });
+  app.on('ready', createWindow);
+}
 
 app.on('window-all-closed', function () {
   killServerTree();

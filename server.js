@@ -27,8 +27,12 @@ const isWindows = process.platform === 'win32';
 
 // Windows: scripts/fetch-ffmpeg.js keeps a current, SHA-256-pinned ffmpeg (and
 // ffprobe beside it) in bin/; ffmpeg-static's own binary is only a fallback.
+// Elsewhere FFMPEG_BIN points at a system ffmpeg (the Docker image sets
+// /usr/bin/ffmpeg, which is current and has ffprobe next to it).
 const pinnedFfmpeg = path.join(__dirname, 'bin', 'ffmpeg.exe');
-const currentFfmpegPath = isWindows && fs.existsSync(pinnedFfmpeg) ? pinnedFfmpeg : ffmpegPath;
+const envFfmpeg = process.env.FFMPEG_BIN;
+const currentFfmpegPath = envFfmpeg && path.isAbsolute(envFfmpeg) && fs.existsSync(envFfmpeg) ? envFfmpeg
+  : isWindows && fs.existsSync(pinnedFfmpeg) ? pinnedFfmpeg : ffmpegPath;
 
 if (process.env.TUBEGRAB_YTDLP && fs.existsSync(process.env.TUBEGRAB_YTDLP)) {
   // Desktop app: a self-updating copy kept in the user's app-data folder.
@@ -42,7 +46,11 @@ if (process.env.TUBEGRAB_YTDLP && fs.existsSync(process.env.TUBEGRAB_YTDLP)) {
   ytDlpPath = fs.existsSync(localYtDlp) ? localYtDlp : 'yt-dlp';
 }
 
-const cookiesPath = path.join(__dirname, 'cookies.txt');
+// Optional cookies.txt (age-restricted / sign-in videos). The desktop app
+// passes its data folder: the portable .exe's own folder is a temp copy
+// re-extracted on every launch, so nothing placed "next to the app" survives.
+const dataDir = process.env.TUBEGRAB_DATA_DIR && path.isAbsolute(process.env.TUBEGRAB_DATA_DIR) ? process.env.TUBEGRAB_DATA_DIR : __dirname;
+const cookiesPath = path.join(dataDir, 'cookies.txt');
 // YouTube needs a JavaScript runtime to solve its player challenges. Whatever
 // runs this server (Node, or Electron acting as Node inside the desktop app —
 // ELECTRON_RUN_AS_NODE is inherited by yt-dlp's child) is one.
@@ -73,7 +81,7 @@ app.use(helmet({
 // own domain at 127.0.0.1 and then read this server's responses from the
 // browser. Only answer requests actually addressed to localhost.
 if (HOST === '127.0.0.1') {
-  const allowedHosts = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
+  const allowedHosts = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`, `[::1]:${PORT}`]);
   app.use((req, res, next) => {
     if (!allowedHosts.has(String(req.headers.host || '').toLowerCase())) {
       return res.status(403).send('Forbidden');
@@ -130,18 +138,33 @@ function requireJob(req, res, next) {
   next();
 }
 
+// Each preview and playlist read is a yt-dlp process; the per-IP rate limits
+// don't bound how many run at once across everyone (self-hosted instance).
+function slots(max) {
+  let busy = 0;
+  return {
+    take() { if (busy >= max) return false; busy += 1; return true; },
+    release() { busy = Math.max(0, busy - 1); },
+  };
+}
+const infoSlots = slots(IS_DESKTOP ? 4 : 8);
+const playlistSlots = slots(IS_DESKTOP ? 3 : 4);
+const BUSY = { error: 'El servidor está ocupado, inténtalo en unos segundos.' };
+
 // === Media info preview (title, thumbnail, duration) ===
 app.post('/api/info', infoLimiter, (req, res) => {
   const url = download.normalizeMediaUrl((req.body || {}).url);
   if (!url) return res.status(400).json({ error: 'Enlace no válido o sitio no soportado.' });
+  if (!infoSlots.take()) return res.status(429).json(BUSY);
 
   const env = ytEnv();
-  const args = ['--ignore-config', '--no-playlist', '--ies', 'default,-generic', '--dump-json', '--skip-download', '--no-warnings'];
+  const args = ['--ignore-config', '--encoding', 'utf-8', '--no-playlist', '--ies', 'default,-generic', '--dump-json', '--skip-download', '--no-warnings'];
   if (env.jsRuntime) args.push('--js-runtimes', `node:${env.jsRuntime}`);
   if (env.cookiesPath) args.push('--cookies', env.cookiesPath);
   args.push('--', url);
 
   execFile(ytDlpPath, args, { windowsHide: true, timeout: 60_000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout) => {
+    infoSlots.release();
     if (err) return res.status(500).json({ error: 'No se pudo obtener información del enlace.' });
     try {
       const data = JSON.parse(stdout);
@@ -214,13 +237,18 @@ app.post('/api/jobs/download', createLimiter, requireClient, async (req, res) =>
 
   const env = ytEnv();
   const items = [];
-  for (const url of urls) {
-    const expanded = opts.playlist ? await download.expandPlaylist(url, env) : null;
-    if (expanded && expanded.entries.length) {
-      for (const entry of expanded.entries) items.push({ url: entry.url, title: entry.title || entry.url });
-    } else {
-      items.push({ url, title: url });
+  if (opts.playlist && !playlistSlots.take()) return res.status(429).json(BUSY);
+  try {
+    for (const url of urls) {
+      const expanded = opts.playlist ? await download.expandPlaylist(url, env) : null;
+      if (expanded && expanded.entries.length) {
+        for (const entry of expanded.entries) items.push({ url: entry.url, title: entry.title || entry.url });
+      } else {
+        items.push({ url, title: url });
+      }
     }
+  } finally {
+    if (opts.playlist) playlistSlots.release();
   }
   if (!jobs.canCreate(req.clientId, items.length)) {
     return res.status(429).json({ error: 'Hay demasiados trabajos en la cola. Elimina algunos terminados e inténtalo de nuevo.' });
@@ -234,6 +262,7 @@ app.post('/api/jobs/download', createLimiter, requireClient, async (req, res) =>
       title: item.title,
       detail,
       run: download.runDownload(item.url, opts, env),
+      retryable: true,
     });
   }
   res.json({ created: items.length, rejected });
@@ -252,7 +281,12 @@ const ALLOWED_UPLOAD_EXTENSIONS = new Set([
 const GENERIC_MIMETYPES = new Set(['application/octet-stream', 'application/x-matroska', '']);
 
 const upload = multer({
-  dest: os.tmpdir(),
+  // Browsers send the file name as UTF-8; multer's default (latin1) turned
+  // "Canción.wav" into "CanciÃ³n.mp3".
+  defParamCharset: 'utf8',
+  // Inside this process's job folder: swept on the next start if the server
+  // is killed mid-upload/conversion, instead of piling up in %TEMP%.
+  dest: path.join(jobs.dir, 'uploads'),
   limits: { fileSize: MAX_UPLOAD_SIZE, files: 1, fields: 30 },
   fileFilter: (req, file, cb) => {
     // Animated GIFs are accepted as a video source (e.g. GIF -> MP4).
@@ -305,6 +339,11 @@ app.post('/api/jobs/:id/cancel', requireClient, requireJob, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/jobs/:id/retry', createLimiter, requireClient, requireJob, (req, res) => {
+  if (!jobs.retry(req.job)) return res.status(409).json({ error: 'Este trabajo no se puede reintentar ahora.' });
+  res.json({ ok: true });
+});
+
 app.delete('/api/jobs/:id', requireClient, requireJob, (req, res) => {
   jobs.remove(req.job);
   res.json({ ok: true });
@@ -351,7 +390,47 @@ app.use((err, req, res, next) => {
   if (!res.headersSent) res.status(500).json({ error: 'Error interno del servidor.' });
 });
 
-const server = app.listen(PORT, HOST, () => {
+function onListenError(err) {
+  if (err.code === 'EADDRINUSE' && process.send) {
+    process.send({ type: 'port-in-use' }, () => process.exit(1));
+    return;
+  }
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n[ERROR] El puerto ${PORT} ya está siendo usado por otra aplicación.`);
+    console.error('[SOLUCIÓN] Cierra cualquier otra terminal o servidor que tengas abierto y vuelve a intentarlo.\n');
+  } else {
+    console.error('\n[ERROR] No se pudo iniciar el servidor:', err.message);
+  }
+  process.exitCode = 1;
+}
+
+// "localhost" resolves to IPv6 (::1) as well as 127.0.0.1, and browsers try
+// both: hold the port on ::1 too, so no other program can sit there and
+// answer for http://localhost:PORT in our place.
+function claimIpv6Loopback(done) {
+  if (HOST !== '127.0.0.1') return done(null);
+  app.listen(PORT, '::1', (err) => {
+    if (err && err.code !== 'EADDRINUSE') return done(null); // this machine has no IPv6 loopback
+    done(err || null);
+  });
+}
+
+// Express 5 calls this back on failure too (e.g. port in use), with the error.
+const server = app.listen(PORT, HOST, (err) => {
+  if (err) return onListenError(err);
+  claimIpv6Loopback((err6) => {
+    if (err6) {
+      server.close();
+      return onListenError(err6);
+    }
+    onListening();
+  });
+});
+
+function onListening() {
+  // Desktop app: tell the Electron process (our parent) that *this* server is
+  // the one listening, so it never loads a page from another program.
+  if (process.send) process.send({ type: 'listening', port: server.address().port });
   console.log(`\n🎵 TubeGrab Pro (yt-dlp) corriendo en http://localhost:${PORT}`);
   console.log(HOST === '0.0.0.0'
     ? '🔒 Modo despliegue: accesible externamente (contenedor/proxy).\n'
@@ -359,20 +438,11 @@ const server = app.listen(PORT, HOST, () => {
 
   // Only auto-open the system browser for the standalone console build.
   // The Electron desktop app forks this file itself and already shows its
-  // own native window pointed at this same URL.
-  if (isWindows && !IS_DESKTOP) {
-    execFile('cmd', ['/c', 'start', `http://localhost:${PORT}`], (err) => {
-      if (err) console.warn('[WARN] Could not open browser:', err.message);
+  // own native window pointed at this same URL; any other parent process
+  // (e.g. the test suite) doesn't want a browser either.
+  if (isWindows && !IS_DESKTOP && !process.send) {
+    execFile('cmd', ['/c', 'start', `http://localhost:${PORT}`], (err2) => {
+      if (err2) console.warn('[WARN] Could not open browser:', err2.message);
     });
   }
-});
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`\n[ERROR] El puerto ${PORT} ya está siendo usado por otra aplicación.`);
-    console.error(`[SOLUCIÓN] Cierra cualquier otra terminal o servidor que tengas abierto y vuelve a intentarlo.\n`);
-  } else {
-    console.error(`\n[ERROR] No se pudo iniciar el servidor:`, err.message);
-  }
-
-});
+}
