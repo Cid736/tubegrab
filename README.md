@@ -45,7 +45,7 @@ npm run build:exe      # pkg console build -> dist/TubeGrab.exe (lightweight, sh
 
 Building with `npm run build` needs Windows Developer Mode enabled (Settings → Privacy & security → For developers) so electron-builder can create symlinks without admin rights.
 
-**Maintainers, publishing a release:** the in-app updater compares against `latest.yml`, which `electron-builder` only generates when it actually publishes — plain `npm run build` does not produce it. Bump the version in `package.json`, then run `GH_TOKEN=$(gh auth token) npx electron-builder --publish always` to build and publish `TubeGrab.exe` + `latest.yml` + the `.blockmap` to a new GitHub Release in one step (instead of building and using `gh release create` separately).
+The desktop app checks GitHub Releases for a newer version on launch and can update itself in one click (see below) — no manual re-download needed. **Maintainers, publishing a release:** this check reads the release's `tag_name` (`vX.Y.Z`, matching `package.json`'s version) and looks for an asset named exactly `TubeGrab.exe`, so keep using `gh release create` as before; no extra build step or metadata file is needed.
 
 ### 3. Docker
 
@@ -142,7 +142,7 @@ npm run build:exe      # Build de consola con pkg -> dist/TubeGrab.exe (ligero, 
 
 Para `npm run build` necesitas el Modo Desarrollador de Windows activado (Configuración → Privacidad y seguridad → Para desarrolladores), para que electron-builder pueda crear symlinks sin permisos de administrador.
 
-**Para quien mantenga el repo, al publicar una release:** el actualizador integrado compara contra `latest.yml`, que `electron-builder` solo genera cuando publica de verdad — el `npm run build` normal no lo produce. Sube la versión en `package.json` y ejecuta `GH_TOKEN=$(gh auth token) npx electron-builder --publish always` para construir y publicar `TubeGrab.exe` + `latest.yml` + el `.blockmap` en una Release de GitHub nueva en un solo paso (en vez de construir y usar `gh release create` por separado).
+La app de escritorio comprueba los Releases de GitHub al arrancar y puede actualizarse sola con un clic (ver más abajo) — sin descargar nada a mano. **Para quien mantenga el repo, al publicar una release:** esta comprobación lee el `tag_name` de la release (`vX.Y.Z`, igual que la versión en `package.json`) y busca un asset llamado exactamente `TubeGrab.exe`, así que sigue usando `gh release create` como hasta ahora; no hace falta ningún paso ni archivo extra.
 
 ### 3. Docker
 
