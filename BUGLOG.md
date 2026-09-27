@@ -61,7 +61,13 @@
 - **Archivo:** `server.js` (`upload = multer({ dest: os.tmpdir(), ... })`)
 - **Descripción:** El endpoint acepta cualquier archivo subido y lo pasa directamente a ffmpeg (binario nativo) sin comprobar mimetype/extensión antes. No es una vulnerabilidad demostrada en el código propio, pero es una superficie de ataque innecesaria si el conversor queda expuesto públicamente (p. ej. desplegado en Render): un archivo corrupto a propósito podría intentar explotar algún fallo del propio ffmpeg.
 - **Severidad:** BAJA (recomendación de hardening, no exploit confirmado)
-- **Estado:** Pendiente — sin aplicar todavía.
+- **Estado:** ✅ Aplicado (2026-09-27) — `multer` ahora usa `fileFilter`: rechaza cualquier subida cuyo mimetype no sea `audio/*`/`video/*`, salvo que el mimetype sea genérico (`application/octet-stream`, vacío) **y** la extensión coincida con un formato de audio/vídeo soportado — evita falsos rechazos de archivos reales que algunos navegadores/clientes reportan con mimetype genérico. Probado: un `.txt` se rechaza (400), un `.mp3` real con mimetype genérico se acepta y convierte correctamente.
+
+### [BAJA] La app de escritorio abría también el navegador del sistema
+- **Archivo:** `server.js` (auto-open al arrancar), `electron-main.js`
+- **Descripción:** El auto-open del navegador (pensado para el build de consola standalone) se activaba también cuando `server.js` corría bifurcado dentro de la app de Electron, abriendo una pestaña del navegador duplicada además de la ventana nativa — no es un fallo de seguridad, pero rompía la experiencia de "app de escritorio".
+- **Severidad:** BAJA (UX, no seguridad)
+- **Estado:** ✅ Aplicado (2026-09-27) — `electron-main.js` pasa `TUBEGRAB_ELECTRON=1` al bifurcar el servidor; `server.js` solo abre el navegador si esa variable no está presente.
 
 ### Resultado de la auditoría de código
 Revisión manual completa de `server.js`, `public/app.js` y `electron-main.js` centrada en los vectores típicos:

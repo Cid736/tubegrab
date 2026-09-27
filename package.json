@@ -1,6 +1,6 @@
 {
   "name": "tubegrab",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "bin": "server.js",
   "main": "electron-main.js",
   "scripts": {
@@ -28,7 +28,8 @@
     "productName": "TubeGrab Pro",
     "asar": false,
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "icon": "build/icon.ico"
     },
     "portable": {
       "artifactName": "TubeGrab.exe"

@@ -123,9 +123,33 @@ const VIDEO_CONVERT_FORMATS = {
 };
 const MAX_CONVERT_SIZE = 300 * 1024 * 1024; // 300MB
 
+// Reject uploads that are clearly not media before they ever reach ffmpeg.
+// The client-supplied mimetype isn't cryptographically trustworthy, and
+// browsers/tools are inconsistent about setting it for less common audio/
+// video formats (some send 'application/octet-stream' even for a real .mp3
+// or .mkv) — so an empty/generic mimetype is allowed through as long as the
+// extension matches a format this app actually supports, rather than
+// rejecting legitimate files. This still blocks the obvious case (a .txt,
+// .exe, .pdf, etc. with its own real mimetype) from ever reaching ffmpeg.
+// See BUGLOG.md, revisión 5.
+const ALLOWED_UPLOAD_EXTENSIONS = new Set([
+  ...Object.keys(AUDIO_CONVERT_FORMATS), 'aac', 'wma',
+  ...Object.keys(VIDEO_CONVERT_FORMATS), 'flv', 'wmv', '3gp',
+]);
+const GENERIC_MIMETYPES = new Set(['application/octet-stream', 'application/x-matroska', '']);
+
 const upload = multer({
   dest: os.tmpdir(),
   limits: { fileSize: MAX_CONVERT_SIZE, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const isMediaMime = /^(audio|video)\//.test(file.mimetype);
+    const ext = (file.originalname.split('.').pop() || '').toLowerCase();
+    const isGenericButKnownExt = GENERIC_MIMETYPES.has(file.mimetype) && ALLOWED_UPLOAD_EXTENSIONS.has(ext);
+    if (!isMediaMime && !isGenericButKnownExt) {
+      return cb(new Error('INVALID_FILE_TYPE'));
+    }
+    cb(null, true);
+  },
 });
 
 app.post('/api/convert', upload.single('file'), (req, res) => {
@@ -434,6 +458,9 @@ app.get('/api/stream', async (req, res) => {
 
 
 app.use((err, req, res, next) => {
+  if (err.message === 'INVALID_FILE_TYPE') {
+    return res.status(400).json({ error: 'Solo se admiten archivos de audio o vídeo.' });
+  }
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({ error: 'El archivo es demasiado grande (máx. 300MB).' });
@@ -450,7 +477,11 @@ const server = app.listen(PORT, HOST, () => {
     ? '🔒 Modo despliegue: accesible externamente (contenedor/proxy).\n'
     : '🔒 Máxima seguridad: Ejecución local, solo accesible desde esta máquina.\n');
   
-  if (isWindows) {
+  // Only auto-open the system browser for the standalone console build.
+  // The Electron desktop app forks this file itself and already shows its
+  // own native window pointed at this same URL — opening a browser tab on
+  // top of that would be a redundant, distinctly un-premium duplicate.
+  if (isWindows && !process.env.TUBEGRAB_ELECTRON) {
     execFile('cmd', ['/c', 'start', `http://localhost:${PORT}`], (err) => {
       if (err) console.warn('[WARN] Could not open browser:', err.message);
     });

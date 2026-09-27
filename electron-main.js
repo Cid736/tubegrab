@@ -55,6 +55,7 @@ function createWindow() {
     width: 1000,
     height: 800,
     title: 'TubeGrab Pro',
+    icon: path.join(__dirname, 'build', 'icon.ico'),
     backgroundColor: '#050508',
     webPreferences: {
       nodeIntegration: false,
@@ -66,7 +67,9 @@ function createWindow() {
   // Start the Express server. windowsHide keeps this (and anything it in turn
   // spawns, like yt-dlp.exe/ffmpeg.exe) from ever flashing a console window.
   serverProcess = fork(path.join(__dirname, 'server.js'), [], {
-    env: { ...process.env, NODE_ENV: 'production' },
+    // TUBEGRAB_ELECTRON tells server.js it already has a native window on the
+    // way, so it must not also launch the system browser (see server.js).
+    env: { ...process.env, NODE_ENV: 'production', TUBEGRAB_ELECTRON: '1' },
     windowsHide: true,
   });
 
