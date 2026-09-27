@@ -72,15 +72,15 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
 /* ===== APP CONTAINER ===== */
 .app-container {
   position: relative; z-index: 1;
-  width: 100%; max-width: 500px;
-  padding: clamp(20px, 6vw, 40px) clamp(12px, 4vw, 20px);
+  width: 100%; max-width: 520px;
+  padding: clamp(16px, 3vh, 32px) clamp(12px, 3vw, 32px);
   display: flex; flex-direction: column; align-items: center;
 }
 
 /* ===== HEADER ===== */
 .header {
   width: 100%; display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 40px;
+  margin-bottom: clamp(16px, 3vh, 32px);
 }
 .logo { display: flex; align-items: center; gap: 12px; }
 .logo-icon {
@@ -104,7 +104,7 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: clamp(24px, 8vw, 48px) clamp(16px, 6vw, 32px);
+  padding: clamp(20px, 4vh, 40px) clamp(16px, 4vw, 36px);
   backdrop-filter: blur(30px);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
@@ -121,7 +121,7 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
 }
 .main-subtitle {
   text-align: center; color: var(--text-dim);
-  font-size: 0.9rem; line-height: 1.6; margin-bottom: 40px;
+  font-size: 0.9rem; line-height: 1.6; margin-bottom: clamp(20px, 3.5vh, 32px);
 }
 
 /* ===== INPUT ===== */
@@ -317,7 +317,7 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ===== STATUS & PROGRESS ===== */
-.status-area { margin-top: 24px; min-height: 24px; text-align: center; }
+.status-area { margin-top: 16px; min-height: 20px; text-align: center; }
 .status-message {
   font-size: 0.9rem; font-weight: 500; color: var(--text-dim);
   animation: fadeIn 0.4s ease;
@@ -429,9 +429,16 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
 .desktop-banner-note a { color: var(--accent-light); }
 
 /* ===== INFO SECTION ===== */
+/* ===== SIDE PANEL (history, update, banners, info) ===== */
+/* Single column: the panel dissolves into the page flow so the update notice
+   can sit right under the header instead of below the fold. */
+.side-panel { display: contents; }
+.header { order: -2; }
+.update-banner { order: -1; margin: 0 0 16px; }
+
 .info-section {
-  display: grid; grid-template-columns: repeat(4,1fr); gap: 16px;
-  margin-top: 48px; width: 100%;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+  width: 100%; margin-top: 24px;
 }
 .info-card {
   text-align: center; padding: 24px 16px;
@@ -446,10 +453,34 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
 .info-card p { font-size: 0.75rem; color: var(--text-dim); line-height: 1.5; }
 
 /* ===== FOOTER ===== */
-.footer { margin-top: 48px; text-align: center; opacity: 0.5; }
+.footer { width: 100%; margin-top: 32px; text-align: center; opacity: 0.5; }
 .footer p { font-size: 0.8rem; color: var(--text-muted); }
 
 /* ===== RESPONSIVE ===== */
+
+/* Wide windows: form on the left, side panel on the right, using the space
+   instead of a narrow centered strip. */
+@media (min-width: 960px) {
+  .app-container {
+    max-width: 1200px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr);
+    column-gap: clamp(20px, 2.5vw, 36px);
+    align-items: start;
+    align-content: center;
+  }
+  .header, .footer { grid-column: 1 / -1; }
+  .side-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .side-panel > * { margin: 0; }
+  #audioOptions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  #audioOptions .option-block { margin-bottom: 0; }
+  .side-panel .desktop-banner, .side-panel .update-banner { flex-direction: column; align-items: stretch; }
+  .side-panel .desktop-banner-text p, .side-panel .update-banner-text p { max-width: none; }
+  .side-panel .desktop-banner-actions, .side-panel .update-banner-actions { align-items: stretch; }
+  .side-panel .btn-desktop-download { justify-content: center; }
+  .side-panel .desktop-banner-note { max-width: none; text-align: left; }
+}
+
 @media (max-width: 560px) {
   .desktop-banner, .update-banner { flex-direction: column; align-items: stretch; text-align: center; }
   .desktop-banner-text p, .update-banner-text p { max-width: none; }
@@ -458,16 +489,31 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
   .desktop-banner-note { max-width: none; text-align: center; }
 }
 @media (max-width: 480px) {
-  .info-section { grid-template-columns: 1fr 1fr; }
-  .format-btn { padding: 12px 8px; font-size: 0.85rem; }
+  .format-btn { padding: 12px 8px; font-size: 0.85rem; gap: 6px; }
 }
-@media (max-width: 360px) {
+@media (max-width: 380px) {
+  .header-badge { display: none; }
+  .format-btn svg { display: none; }
   .info-section { grid-template-columns: 1fr; }
-  .header-badge span:not(.badge-dot) { display: none; }
 }
-@media (max-height: 640px) {
-  .main-title, .main-subtitle { margin-bottom: 8px; }
-  .format-toggle-section { margin-bottom: 16px; }
+
+/* Short windows (e.g. laptops at 1366x768): tighten vertical rhythm so the
+   whole form, including the download button, fits without scrolling. */
+@media (max-height: 800px) {
+  .logo-icon { width: 34px; height: 34px; }
+  .logo-text { font-size: 1.3rem; }
+  .main-title { font-size: clamp(1.4rem, 4vw, 1.75rem); margin-bottom: 6px; }
+  .main-subtitle { margin-bottom: 18px; }
+  .input-group, .preview-card { margin-bottom: 16px; }
+  #urlInput { padding: 14px 12px; }
+  .format-toggle-section { margin-bottom: 18px; }
+  .format-btn { padding: 10px 18px; }
   .format-section { margin-bottom: 20px; }
-  .info-section { margin-top: 24px; }
+  .option-block { margin-bottom: 14px; }
+  .option-label { margin-bottom: 8px; }
+  .select-wrapper select { padding: 12px 18px; }
+  .btn-download { padding: 16px; font-size: 1rem; }
+  .file-drop { padding: 22px 16px; }
+  .info-card { padding: 16px 12px; }
+  .info-icon { font-size: 1.4rem; margin-bottom: 8px; }
 }

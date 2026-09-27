@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -244,11 +244,15 @@ function waitForServer(port, maxAttempts, interval, callback) {
 }
 
 function createWindow() {
+  // Size to the screen actually available: a fixed height taller than a
+  // 1366x768 laptop's work area forced users to maximize the window.
+  const { width: workW, height: workH } = screen.getPrimaryDisplay().workAreaSize;
   mainWindow = new BrowserWindow({
-    width: 560,
-    height: 820,
+    width: Math.min(1180, Math.round(workW * 0.9)),
+    height: Math.min(820, Math.round(workH * 0.92)),
     minWidth: 380,
-    minHeight: 520,
+    minHeight: 500,
+    center: true,
     title: 'TubeGrab Pro',
     icon: path.join(__dirname, 'build', 'icon.ico'),
     backgroundColor: '#050508',
