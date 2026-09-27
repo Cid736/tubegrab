@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, screen, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, dialog, nativeTheme } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -347,7 +347,28 @@ function uniquePath(dir, fileName) {
   return candidate;
 }
 
+// Electron grants every permission a page asks for unless told otherwise.
+// This UI only needs notifications and reading the clipboard (paste a link).
+const ALLOWED_PERMISSIONS = new Set(['notifications', 'clipboard-read', 'clipboard-sanitized-write']);
+function isAppOrigin(url) {
+  try { return new URL(url).origin === new URL(APP_ORIGIN).origin; } catch { return false; }
+}
+
+function lockDownSession(ses) {
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(ALLOWED_PERMISSIONS.has(permission) && isAppOrigin(details.requestingUrl || webContents.getURL()));
+  });
+  ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => (
+    ALLOWED_PERMISSIONS.has(permission)
+    && isAppOrigin(requestingOrigin || (details && details.requestingUrl) || (webContents && webContents.getURL()))
+  ));
+}
+
 function setupDownloads() {
+  lockDownSession(mainWindow.webContents.session);
+  // No <webview> tags: they could load remote content inside the app.
+  mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
+
   mainWindow.webContents.session.on('will-download', (event, item) => {
     const match = JOB_FILE_RE.exec(item.getURL());
     if (!match) return; // anything else keeps Electron's normal save dialog
@@ -448,6 +469,14 @@ function waitForServer(port, maxAttempts, interval, callback) {
   };
   check();
 }
+
+// The page's Aspecto setting also drives the native window theme (acrylic
+// tint, scrollbars, context menus). Only these three values are accepted.
+const THEME_SOURCES = { auto: 'system', light: 'light', dark: 'dark' };
+ipcMain.on('appearance:theme', (event, theme) => {
+  if (!isTrustedSender(event) || !Object.prototype.hasOwnProperty.call(THEME_SOURCES, theme)) return;
+  nativeTheme.themeSource = THEME_SOURCES[theme];
+});
 
 ipcMain.on('window:control', (event, action) => {
   if (!isTrustedSender(event) || !mainWindow) return;

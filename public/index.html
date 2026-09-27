@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <title>TubeGrab</title>
   <meta name="description" content="Descarga audio y vídeo de YouTube y más de 20 sitios, y convierte tus archivos entre 23 formatos. Todo en tu equipo.">
+  <script src="theme-init.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -44,7 +45,7 @@
       </nav>
 
       <div class="sidebar-bottom">
-        <button class="nav-item hidden" data-view="settings" id="navSettings" type="button">
+        <button class="nav-item" data-view="settings" id="navSettings" type="button">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span>Ajustes</span>
         </button>
@@ -315,10 +316,67 @@
           </div>
         </section>
 
-        <!-- ===== Settings (desktop app) ===== -->
+        <!-- ===== Settings ===== -->
         <section class="view hidden" data-views="settings" id="settingsSection">
-          <div class="section-header"><h2>General</h2></div>
+          <div class="section-header">
+            <h2>Apariencia</h2>
+            <button class="link-btn" id="btnResetPrefs" type="button">Restablecer</button>
+          </div>
           <div class="group">
+            <div class="row row-tall"><span class="row-label">Aspecto</span>
+              <div class="theme-picker picker" id="themePicker" role="radiogroup" aria-label="Aspecto">
+                <button class="theme-tile" data-value="auto" type="button" role="radio"><span class="tile tile-auto"></span><span>Automático</span></button>
+                <button class="theme-tile" data-value="light" type="button" role="radio"><span class="tile tile-light"></span><span>Claro</span></button>
+                <button class="theme-tile" data-value="dark" type="button" role="radio"><span class="tile tile-dark"></span><span>Oscuro</span></button>
+              </div>
+            </div>
+            <div class="row"><span class="row-label">Color de énfasis</span>
+              <div class="swatches picker" id="accentPicker" role="radiogroup" aria-label="Color de énfasis">
+                <button class="swatch sw-blue" data-value="blue" type="button" role="radio" title="Azul" aria-label="Azul"></button>
+                <button class="swatch sw-purple" data-value="purple" type="button" role="radio" title="Morado" aria-label="Morado"></button>
+                <button class="swatch sw-pink" data-value="pink" type="button" role="radio" title="Rosa" aria-label="Rosa"></button>
+                <button class="swatch sw-red" data-value="red" type="button" role="radio" title="Rojo" aria-label="Rojo"></button>
+                <button class="swatch sw-orange" data-value="orange" type="button" role="radio" title="Naranja" aria-label="Naranja"></button>
+                <button class="swatch sw-yellow" data-value="yellow" type="button" role="radio" title="Amarillo" aria-label="Amarillo"></button>
+                <button class="swatch sw-green" data-value="green" type="button" role="radio" title="Verde" aria-label="Verde"></button>
+                <button class="swatch sw-graphite" data-value="graphite" type="button" role="radio" title="Grafito" aria-label="Grafito"></button>
+              </div>
+            </div>
+            <div class="row"><span class="row-label">Fondo</span>
+              <div class="walls picker" id="wallPicker" role="radiogroup" aria-label="Fondo">
+                <button class="wall-chip wc-aurora" data-value="aurora" type="button" role="radio" title="Aurora" aria-label="Aurora"></button>
+                <button class="wall-chip wc-ocean" data-value="ocean" type="button" role="radio" title="Océano" aria-label="Océano"></button>
+                <button class="wall-chip wc-sunset" data-value="sunset" type="button" role="radio" title="Atardecer" aria-label="Atardecer"></button>
+                <button class="wall-chip wc-forest" data-value="forest" type="button" role="radio" title="Bosque" aria-label="Bosque"></button>
+                <button class="wall-chip wc-graphite" data-value="graphite" type="button" role="radio" title="Grafito" aria-label="Grafito"></button>
+                <button class="wall-chip wc-none" data-value="none" type="button" role="radio" title="Ninguno" aria-label="Ninguno"></button>
+              </div>
+            </div>
+            <div class="row"><span class="row-label">Vidrio</span>
+              <div class="segmented segmented-small picker" id="glassPicker" role="radiogroup" aria-label="Vidrio">
+                <button data-value="clear" type="button" role="radio">Transparente</button>
+                <button data-value="tinted" type="button" role="radio">Tintado</button>
+                <button data-value="solid" type="button" role="radio">Opaco</button>
+              </div>
+            </div>
+            <div class="row"><span class="row-label">Tamaño del texto</span>
+              <div class="segmented segmented-small picker" id="sizePicker" role="radiogroup" aria-label="Tamaño del texto">
+                <button data-value="small" type="button" role="radio">Pequeño</button>
+                <button data-value="medium" type="button" role="radio">Normal</button>
+                <button data-value="large" type="button" role="radio">Grande</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-header"><h2>Comportamiento</h2></div>
+          <div class="group">
+            <label class="row switch"><span class="row-label">Recordar mis últimas opciones <small>formato, calidad…</small></span><input type="checkbox" id="prefRemember"><span class="switch-ui"></span></label>
+            <label class="row switch desktop-only"><span class="row-label">Avisar al terminar</span><input type="checkbox" id="prefNotify"><span class="switch-ui"></span></label>
+            <label class="row switch"><span class="row-label">Sonido al terminar</span><input type="checkbox" id="prefSound"><span class="switch-ui"></span></label>
+          </div>
+
+          <div class="section-header desktop-only"><h2>General</h2></div>
+          <div class="group desktop-only">
             <div class="row">
               <div class="row-text">
                 <span class="row-label">Carpeta de descargas</span>
@@ -330,8 +388,8 @@
               </div>
             </div>
           </div>
-          <div class="section-header"><h2>Actualizaciones</h2></div>
-          <div class="group">
+          <div class="section-header desktop-only"><h2>Actualizaciones</h2></div>
+          <div class="group desktop-only">
             <div class="row">
               <div class="row-text">
                 <span class="row-label">Motor de descargas</span>
@@ -340,7 +398,7 @@
               <div class="row-actions"><button class="btn" id="btnUpdateEngine" type="button">Buscar actualización</button></div>
             </div>
           </div>
-          <p class="footnote">El motor (yt-dlp) se actualiza solo una vez al día. Los sitios cambian a menudo; si una descarga falla, prueba a actualizarlo.</p>
+          <p class="footnote desktop-only">El motor (yt-dlp) se actualiza solo una vez al día. Los sitios cambian a menudo; si una descarga falla, prueba a actualizarlo.</p>
         </section>
 
         <!-- Desktop app pitch (web only; removed inside the desktop app) -->

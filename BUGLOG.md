@@ -167,3 +167,24 @@ Revisión manual completa de `server.js`, `public/app.js` y `electron-main.js` c
 - **Escritorio:** guardado automático solo para URLs de la API de trabajos; "Mostrar en carpeta" solo abre rutas que la propia app guardó (el renderer nunca envía rutas); nombres de archivo saneados y sin sobrescribir.
 - **XSS:** todo dato remoto (títulos, nombres de archivo, errores) se inserta con `textContent`.
 - **Límite conocido:** el `.exe` sigue sin firma de código.
+
+---
+
+## 2026-09-27 — Revisión 8 (v2.2.0: personalización + actualización de componentes)
+
+### [ALTA] ffmpeg/ffprobe 6.1.1 (enero de 2024) desactualizado
+- **Descripción:** ffmpeg procesa entradas no fiables (archivos subidos para convertir y medios descargados). La versión incluida vía `ffmpeg-static` tenía más de dos años y medio de parches de seguridad pendientes en sus demuxers/decoders.
+- **Fix:** `scripts/fetch-ffmpeg.js` instala ffmpeg + ffprobe **9.0.2** (build "essentials" de gyan.dev publicada en GitHub) en `bin/`, verificando el zip contra una huella SHA-256 fijada (coincide con el digest que publica GitHub). El servidor usa esa copia y el binario viejo de `ffmpeg-static` se excluye del `.exe`, así que ya no se distribuye. Sustituye a `fetch-ffprobe.js`.
+- **Verificado:** los 23 formatos de salida, velocidad + rotación + recorte y los 40 archivos de entrada de prueba se convierten; descargas con portada en MKV, subtítulos y SponsorBlock funcionan; las cargas HLS/`ffconcat`/`subfile` maliciosas siguen rechazadas.
+
+### [MEDIA] Electron concedía cualquier permiso que pidiera la página
+- **Descripción:** Sin `setPermissionRequestHandler`, Electron concede automáticamente cámara, micrófono, ubicación, etc. (punto de la lista de seguridad oficial de Electron).
+- **Fix:** Solo se permiten `notifications` y el portapapeles, y solo al origen local de la app; todo lo demás se deniega. También se bloquea la creación de `<webview>`. Probado: cámara, micrófono y ubicación → denegados; notificaciones y lectura del portapapeles → permitidos; `<webview>` no se crea.
+
+### [BAJA — revisión del código nuevo] Personalización
+- Las preferencias (tema, color, fondo, vidrio, tamaño) se guardan en `localStorage` y acaban en atributos/CSS; `theme-init.js` valida cada valor contra una lista cerrada antes de aplicarlo. Probado con valores manipulados (incluido HTML inyectado): se descartan y vuelven a los valores por defecto. Las "últimas opciones" recordadas solo se restauran si coinciden con una opción existente del formulario.
+- El IPC nuevo (`appearance:theme`, `window:control`) solo acepta llamadas del origen local y solo valores de una lista fija.
+
+### Resto de la revisión
+- `npm audit` → 0 vulnerabilidades. `helmet` 8.3.0 y `express-rate-limit` 8.7.0 actualizados. Electron 44.4.5 y yt-dlp 2026.08.19 ya estaban en su última versión.
+- **Límite conocido (sin cambios):** el `.exe` no está firmado. Además, el "fuse" `RunAsNode` de Electron no se puede desactivar porque la app lo usa para ejecutar su servidor y como motor JavaScript aislado de yt-dlp.

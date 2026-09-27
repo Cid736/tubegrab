@@ -23,9 +23,12 @@ const IS_DESKTOP = Boolean(process.env.TUBEGRAB_ELECTRON);
 
 // Initialize yt-dlp and ffmpeg paths
 let ytDlpPath;
-const currentFfmpegPath = ffmpegPath;
-
 const isWindows = process.platform === 'win32';
+
+// Windows: scripts/fetch-ffmpeg.js keeps a current, SHA-256-pinned ffmpeg (and
+// ffprobe beside it) in bin/; ffmpeg-static's own binary is only a fallback.
+const pinnedFfmpeg = path.join(__dirname, 'bin', 'ffmpeg.exe');
+const currentFfmpegPath = isWindows && fs.existsSync(pinnedFfmpeg) ? pinnedFfmpeg : ffmpegPath;
 
 if (process.env.TUBEGRAB_YTDLP && fs.existsSync(process.env.TUBEGRAB_YTDLP)) {
   // Desktop app: a self-updating copy kept in the user's app-data folder.

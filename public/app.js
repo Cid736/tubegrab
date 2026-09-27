@@ -249,6 +249,91 @@ if (desktopApi) {
   btnUpdateEngine.addEventListener('click', () => desktopApi.updateEngine());
 }
 
+// === Personalisation (Settings → Apariencia / Comportamiento) ===
+// window.tgPrefs comes from theme-init.js, which already applied the saved
+// appearance before first paint and validates every value it stores.
+const prefsApi = window.tgPrefs;
+const PICKERS = { theme: 'themePicker', accent: 'accentPicker', wall: 'wallPicker', glass: 'glassPicker', size: 'sizePicker' };
+
+function renderPrefs() {
+  const p = prefsApi.get();
+  for (const [key, id] of Object.entries(PICKERS)) {
+    $(id).querySelectorAll('[data-value]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === p[key])));
+  }
+  $('prefRemember').checked = p.remember;
+  $('prefNotify').checked = p.notify;
+  $('prefSound').checked = p.sound;
+}
+
+for (const [key, id] of Object.entries(PICKERS)) {
+  $(id).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-value]');
+    if (!b) return;
+    prefsApi.set({ [key]: b.dataset.value });
+    renderPrefs();
+  });
+}
+$('prefRemember').addEventListener('change', (e) => {
+  prefsApi.set({ remember: e.target.checked, last: {} });
+  if (e.target.checked) saveLastOptions();
+});
+$('prefNotify').addEventListener('change', (e) => prefsApi.set({ notify: e.target.checked }));
+$('prefSound').addEventListener('change', (e) => {
+  prefsApi.set({ sound: e.target.checked });
+  if (e.target.checked) playDoneSound();
+});
+$('btnResetPrefs').addEventListener('click', () => { prefsApi.resetAppearance(); renderPrefs(); });
+
+// Soft two-note chime, synthesised (no audio file to ship or fetch).
+let audioCtx = null;
+function playDoneSound() {
+  try {
+    audioCtx = audioCtx || new AudioContext();
+    const t = audioCtx.currentTime;
+    [[1046.5, 0], [1568, 0.1]].forEach(([freq, delay]) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t + delay);
+      gain.gain.exponentialRampToValueAtTime(0.12, t + delay + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + delay + 0.6);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t + delay);
+      osc.stop(t + delay + 0.65);
+    });
+  } catch { /* audio unavailable */ }
+}
+
+// Remember the last download options (restored on next launch).
+const REMEMBERED_SELECTS = { audioFormat, audioBitrate, videoQuality, videoContainer };
+const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock };
+
+function saveLastOptions() {
+  if (!prefsApi.get().remember) return;
+  const last = { downloadMode };
+  for (const [k, el] of Object.entries(REMEMBERED_SELECTS)) last[k] = el.value;
+  for (const [k, el] of Object.entries(REMEMBERED_SWITCHES)) last[k] = el.checked;
+  prefsApi.set({ last });
+}
+
+function restoreLastOptions() {
+  const p = prefsApi.get();
+  if (!p.remember) return;
+  const last = p.last || {};
+  for (const [k, el] of Object.entries(REMEMBERED_SELECTS)) {
+    if ([...el.options].some((o) => o.value === last[k])) el.value = last[k];
+  }
+  for (const [k, el] of Object.entries(REMEMBERED_SWITCHES)) {
+    if (typeof last[k] === 'boolean') el.checked = last[k];
+  }
+  if (last.downloadMode === 'audio' || last.downloadMode === 'video') downloadMode = last.downloadMode;
+  audioBitrate.disabled = LOSSLESS_DL.has(audioFormat.value);
+}
+
+[...Object.values(REMEMBERED_SELECTS), ...Object.values(REMEMBERED_SWITCHES)]
+  .forEach((el) => el.addEventListener('change', saveLastOptions));
+
 // === Views (sidebar) & modes ===
 // Views: download | convert | recents | settings. Within "download", the
 // toolbar's segmented control picks the mode (audio | video).
@@ -279,7 +364,7 @@ function setView(view) {
 function setMode(mode) {
   currentMode = mode;
   if (mode !== 'convert') {
-    downloadMode = mode;
+    if (downloadMode !== mode) { downloadMode = mode; saveLastOptions(); }
     document.querySelectorAll('.format-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
     $('toggleSlider').style.transform = `translateX(${mode === 'video' ? '100%' : '0'})`;
   }
@@ -627,6 +712,7 @@ function onJob(job, live) {
     autoSave(job);
     addToHistory(job.fileName || job.title, job.detail);
     notify(job);
+    if (prefsApi.get().sound) playDoneSound();
   }
   if (live && prev && ACTIVE.has(prev.status) && job.status === 'error') notify(job);
   renderRow(job);
@@ -666,7 +752,7 @@ if (desktopApi) {
 }
 
 function notify(job) {
-  if (!isElectronApp || document.hasFocus() || typeof Notification === 'undefined') return;
+  if (!isElectronApp || !prefsApi.get().notify || document.hasFocus() || typeof Notification === 'undefined') return;
   const title = job.status === 'done' ? (job.type === 'convert' ? 'Conversión terminada' : 'Descarga terminada') : 'Algo falló';
   try { new Notification(title, { body: job.status === 'done' ? (job.fileName || job.title) : `${job.title}: ${job.error}`, silent: false }); } catch { /* ignore */ }
 }
@@ -887,6 +973,8 @@ function shakeInput() {
 // === Init ===
 renderConvertFormats();
 refreshConvertUI();
+renderPrefs();
+restoreLastOptions();
 setView('download');
 renderHistory();
 connectEvents();

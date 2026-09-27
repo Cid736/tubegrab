@@ -32,6 +32,7 @@ Local video/audio downloader **and** format converter with a job queue. Runs ent
 - **Self-updating**: the app updates itself from GitHub Releases in one click (SHA-256 verified), and keeps its download engine (yt-dlp) up to date automatically — sites like YouTube break old versions within weeks
 - Local history of finished jobs (stored only on your device)
 - Native macOS-style interface (Liquid Glass): floating glass sidebar, System Settings-style grouped lists, automatic light/dark mode, and a translucent (acrylic) window on Windows 11
+- **Personalisation** (Settings → Appearance): light/dark/automatic, 8 macOS accent colours, 6 backgrounds, glass style (clear, tinted, opaque) and text size; remembers your last download options; optional finish sound and notifications
 
 ## Usage
 
@@ -79,9 +80,10 @@ The repo includes a `Dockerfile` and `render.yaml`. On Render: create a Web Serv
 ├── electron-main.js       # Desktop app: window, app updater, yt-dlp auto-update, save-to-folder
 ├── preload.js             # Minimal bridge exposed to the page (updater + desktop features)
 ├── scripts/
-│   ├── postinstall.js     # Linux: fetches yt-dlp · Windows: runs fetch-ffprobe.js
-│   └── fetch-ffprobe.js   # Windows: ffprobe next to ffmpeg (SHA-256 pinned)
+│   ├── postinstall.js     # Linux: fetches yt-dlp · Windows: runs fetch-ffmpeg.js
+│   └── fetch-ffmpeg.js    # Windows: current ffmpeg + ffprobe into bin/ (SHA-256 pinned)
 ├── public/
+│   ├── theme-init.js      # Applies saved appearance before first paint (validated values)
 │   ├── index.html
 │   ├── app.js
 │   └── style.css
@@ -97,7 +99,7 @@ For restricted videos, place a `cookies.txt` file (Netscape format) in the proje
 ## Dependencies
 
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-- [ffmpeg-static](https://www.npmjs.com/package/ffmpeg-static)
+- [ffmpeg](https://ffmpeg.org/) 9.0.2 on Windows (gyan.dev build, SHA-256 pinned; [ffmpeg-static](https://www.npmjs.com/package/ffmpeg-static) elsewhere)
 - [Express](https://expressjs.com/) + [helmet](https://www.npmjs.com/package/helmet) + [express-rate-limit](https://www.npmjs.com/package/express-rate-limit)
 - [multer](https://www.npmjs.com/package/multer) (file uploads for the converter)
 - [Electron](https://www.electronjs.org/) 44 (desktop app only)
@@ -111,7 +113,7 @@ MIT
 
 Security reviews are AI-assisted (Claude, Anthropic) and run on significant changes to check for injection risks, insecure defaults and dependency vulnerabilities. Findings are tracked in [`BUGLOG.md`](BUGLOG.md).
 
-**Last review:** 2026-09-27 (review #7, v2.0.0) — covered the new job API, multi-site downloads and the desktop features. 0 known vulnerabilities in dependencies (`npm audit`); Electron upgraded 34 → 44; unused and unmaintained packages removed. Downloads only accept an allowlist of sites (yt-dlp's generic extractor is disabled, so no SSRF), yt-dlp ignores local config files, and the JavaScript it runs for YouTube is sandboxed by Node's permission model (verified). Uploaded files can only be opened by real media demuxers without network access (blocks the HLS/concat "fake video" file-read trick). Jobs are private to the browser/app that created them. Known limits: the `.exe` isn't code-signed. Details in `BUGLOG.md`.
+**Last review:** 2026-09-27 (review #8, v2.2.0) — ffmpeg/ffprobe upgraded from 6.1.1 (Jan 2024) to 9.0.2, installed from a SHA-256-pinned download (the old binary is no longer shipped); Electron now only grants notifications and clipboard permissions (camera, microphone, location denied) and blocks <webview>; new personalisation settings are validated against fixed lists. 0 known vulnerabilities in dependencies; Electron and yt-dlp on their latest releases. Earlier hardening (review #7) still applies: site allowlist with no generic extractor, sandboxed JavaScript for YouTube, media-only ffmpeg inputs, per-client jobs. Known limit: the .exe isn't code-signed. Details in BUGLOG.md.
 
 Found a vulnerability? Open an issue or contact directly.
 
@@ -145,6 +147,7 @@ Descargador de vídeo/audio **y** conversor de formatos con cola de trabajos. Fu
 - **Se actualiza sola**: la app se actualiza desde GitHub Releases con un clic (verificada por SHA-256) y mantiene al día su motor de descargas (yt-dlp) automáticamente — sitios como YouTube rompen las versiones antiguas en semanas
 - Historial local de trabajos terminados (solo en tu equipo)
 - Interfaz al estilo nativo de macOS (Liquid Glass): barra lateral de vidrio, listas agrupadas como Ajustes del Sistema, modo claro/oscuro automático y ventana translúcida (acrylic) en Windows 11
+- **Personalización** (Ajustes → Apariencia): claro/oscuro/automático, 8 colores de énfasis de macOS, 6 fondos, estilo de vidrio (transparente, tintado, opaco) y tamaño del texto; recuerda tus últimas opciones de descarga; sonido y aviso al terminar opcionales
 
 ## Modos de uso
 
@@ -189,7 +192,7 @@ Para vídeos con restricciones, coloca un archivo `cookies.txt` (formato Netscap
 
 Las revisiones de seguridad son asistidas por IA (Claude, Anthropic) y se ejecutan en cambios significativos para detectar riesgos de inyección, configuraciones inseguras y vulnerabilidades en dependencias. Los hallazgos se registran en [`BUGLOG.md`](BUGLOG.md).
 
-**Última revisión:** 2026-09-27 (revisión 7, v2.0.0) — cubre la nueva API de trabajos, las descargas de varios sitios y las funciones de escritorio. 0 vulnerabilidades conocidas en dependencias (npm audit); Electron actualizado de 34 a 44; eliminados paquetes sin uso o sin mantenimiento. Las descargas solo aceptan una lista de sitios permitidos (el extractor genérico de yt-dlp está desactivado, así que no hay SSRF), yt-dlp ignora archivos de configuración locales, y el JavaScript que ejecuta para YouTube queda aislado por el modelo de permisos de Node (verificado). Los archivos subidos solo los pueden abrir demuxers multimedia reales y sin acceso a red (bloquea el truco del "vídeo falso" HLS/concat para leer archivos). Los trabajos son privados del navegador o app que los creó. Límite conocido: el .exe no está firmado. Detalles en BUGLOG.md.
+**Última revisión:** 2026-09-27 (revisión 8, v2.2.0) — ffmpeg/ffprobe actualizados de 6.1.1 (enero de 2024) a 9.0.2, instalados desde una descarga con huella SHA-256 fijada (el binario antiguo ya no se distribuye); Electron solo concede permisos de notificaciones y portapapeles (cámara, micrófono y ubicación denegados) y bloquea <webview>; los nuevos ajustes de personalización se validan contra listas cerradas. 0 vulnerabilidades conocidas en dependencias; Electron y yt-dlp en su última versión. Sigue vigente lo de la revisión 7: lista de sitios permitidos sin extractor genérico, JavaScript de YouTube aislado, ffmpeg solo con entradas multimedia, trabajos privados por cliente. Límite conocido: el .exe no está firmado. Detalles en BUGLOG.md.
 
 ¿Encontraste una vulnerabilidad? Abre un issue o contacta directamente.
 

@@ -9,7 +9,7 @@ const { execSync } = require('child_process');
 const isWindows = process.platform === 'win32';
 if (isWindows) {
   console.log('[postinstall] Windows detectado, se omite la descarga de yt-dlp (usa yt-dlp.exe local).');
-  require('./fetch-ffprobe');
+  require('./fetch-ffmpeg');
   return;
 }
 
