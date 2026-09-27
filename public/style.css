@@ -136,6 +136,48 @@ body {
 .btn-clear.visible { opacity: 1; visibility: visible; }
 .btn-clear:hover { background: rgba(255,255,255,0.05); color: var(--text); }
 
+/* ===== VIDEO PREVIEW ===== */
+.preview-card {
+  width: 100%; margin-bottom: 24px;
+  display: flex; align-items: center; gap: 14px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px; overflow: hidden;
+  animation: fadeIn 0.35s ease;
+}
+.preview-thumb {
+  width: 88px; height: 50px; object-fit: cover;
+  border-radius: 8px; flex-shrink: 0;
+  background: rgba(255,255,255,0.05);
+}
+.preview-info { min-width: 0; }
+.preview-title {
+  font-size: 0.85rem; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.preview-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+
+/* ===== CONVERT KIND TOGGLE ===== */
+.convert-kind-toggle {
+  display: flex; gap: 8px; margin-bottom: 20px;
+}
+.kind-btn {
+  flex: 1; padding: 10px; cursor: pointer;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim); font-family: inherit;
+  font-size: 0.85rem; font-weight: 700;
+  transition: all 0.25s;
+}
+.kind-btn:hover { border-color: rgba(255,255,255,0.1); }
+.kind-btn.active {
+  background: var(--accent-glow);
+  border-color: var(--border-focus);
+  color: #fff;
+}
+
 /* ===== FILE DROP (Convert mode) ===== */
 .file-drop {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -277,6 +319,57 @@ body {
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ===== RECENT HISTORY ===== */
+.history-section {
+  width: 100%; margin-top: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+}
+.history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.history-header h3 { font-size: 0.85rem; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 0.05em; }
+.btn-clear-history {
+  background: none; border: none; color: var(--text-muted);
+  font-family: inherit; font-size: 0.75rem; cursor: pointer;
+  text-decoration: underline; padding: 4px;
+}
+.btn-clear-history:hover { color: var(--text-dim); }
+.history-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.history-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 0.8rem; color: var(--text-dim);
+  padding-bottom: 10px; border-bottom: 1px solid var(--border);
+}
+.history-item:last-child { border-bottom: none; padding-bottom: 0; }
+.history-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: var(--text); }
+.history-item-badge {
+  flex-shrink: 0; font-size: 0.7rem; font-weight: 700;
+  color: var(--accent-light); background: var(--accent-glow);
+  padding: 3px 8px; border-radius: 100px; text-transform: uppercase;
+}
+
+/* ===== DESKTOP APP BANNER ===== */
+.desktop-banner {
+  width: 100%; margin-top: 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(79, 70, 229, 0.08));
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-sm);
+  padding: 20px 24px;
+}
+.desktop-banner-text h3 { font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
+.desktop-banner-text p { font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; max-width: 320px; }
+.btn-desktop-download {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  background: #fff; color: #111;
+  font-size: 0.85rem; font-weight: 700;
+  padding: 12px 20px; border-radius: var(--radius-sm);
+  text-decoration: none; white-space: nowrap;
+  transition: all 0.25s;
+}
+.btn-desktop-download:hover { transform: translateY(-2px); filter: brightness(0.95); }
+
 /* ===== INFO SECTION ===== */
 .info-section {
   display: grid; grid-template-columns: repeat(4,1fr); gap: 16px;
@@ -304,4 +397,7 @@ body {
   .main-title { font-size: 1.75rem; }
   .info-section { grid-template-columns: 1fr 1fr; }
   .format-btn { padding: 12px 8px; font-size: 0.85rem; }
+  .desktop-banner { flex-direction: column; align-items: stretch; text-align: center; }
+  .desktop-banner-text p { max-width: none; }
+  .btn-desktop-download { justify-content: center; }
 }

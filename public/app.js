@@ -22,9 +22,40 @@ const uploadGroup = document.getElementById('uploadGroup');
 const fileDrop = document.getElementById('fileDrop');
 const fileInput = document.getElementById('fileInput');
 const fileDropText = document.getElementById('fileDropText');
+const previewCard = document.getElementById('previewCard');
+const previewThumb = document.getElementById('previewThumb');
+const previewTitle = document.getElementById('previewTitle');
+const previewMeta = document.getElementById('previewMeta');
+const convertKindToggle = document.getElementById('convertKindToggle');
+const historySection = document.getElementById('historySection');
+const historyList = document.getElementById('historyList');
+const btnClearHistory = document.getElementById('btnClearHistory');
+const btnDesktopDownload = document.getElementById('btnDesktopDownload');
 
 let currentMode = 'audio'; // 'audio', 'video' or 'convert'
+let currentConvertKind = 'audio'; // 'audio' or 'video'
 let selectedFile = null;
+
+const CONVERT_FORMAT_OPTIONS = {
+  audio: [
+    { value: 'mp3', label: 'MP3' },
+    { value: 'ogg', label: 'OGG (Vorbis)' },
+    { value: 'wav', label: 'WAV (sin pérdida)' },
+    { value: 'm4a', label: 'M4A (AAC)' },
+    { value: 'flac', label: 'FLAC (sin pérdida)' },
+    { value: 'opus', label: 'OPUS' },
+  ],
+  video: [
+    { value: 'mp4', label: 'MP4' },
+    { value: 'webm', label: 'WEBM' },
+    { value: 'mkv', label: 'MKV' },
+    { value: 'avi', label: 'AVI' },
+    { value: 'mov', label: 'MOV' },
+  ],
+};
+
+// === Desktop app download link (always points to the latest GitHub release) ===
+btnDesktopDownload.href = 'https://github.com/Cid736/tubegrab/releases/latest/download/TubeGrab.exe';
 
 // === Format Toggle ===
 formatToggle.addEventListener('click', (e) => {
@@ -46,6 +77,7 @@ formatToggle.addEventListener('click', (e) => {
   // Toggle URL input vs file upload
   inputGroup.classList.toggle('hidden', mode === 'convert');
   uploadGroup.classList.toggle('hidden', mode !== 'convert');
+  if (mode === 'convert') hidePreview();
 
   // Toggle options visibility
   audioOptions.classList.toggle('hidden', mode !== 'audio');
@@ -68,6 +100,22 @@ convertFormat.addEventListener('change', () => {
   if (currentMode === 'convert') {
     btnText.textContent = 'Convertir a ' + convertFormat.value.toUpperCase();
   }
+});
+
+// === Convert Kind Toggle (Audio / Vídeo) ===
+convertKindToggle.addEventListener('click', (e) => {
+  const btn = e.target.closest('.kind-btn');
+  if (!btn || btn.classList.contains('active')) return;
+
+  currentConvertKind = btn.dataset.kind;
+  document.querySelectorAll('.kind-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  convertFormat.innerHTML = CONVERT_FORMAT_OPTIONS[currentConvertKind]
+    .map(opt => `<option value="${opt.value}">${opt.label}</option>`)
+    .join('');
+
+  btnText.textContent = 'Convertir a ' + convertFormat.value.toUpperCase();
 });
 
 // === File Drop / Selection ===
@@ -103,8 +151,19 @@ audioFormat.addEventListener('change', () => {
 });
 
 // === URL Input Events ===
+let previewDebounce = null;
+let previewRequestId = 0;
+
 urlInput.addEventListener('input', () => {
   btnClear.classList.toggle('visible', urlInput.value.length > 0);
+
+  clearTimeout(previewDebounce);
+  const url = urlInput.value.trim();
+  if (!isYouTubeUrl(url)) {
+    hidePreview();
+    return;
+  }
+  previewDebounce = setTimeout(() => fetchPreview(url), 700);
 });
 
 btnClear.addEventListener('click', () => {
@@ -112,7 +171,43 @@ btnClear.addEventListener('click', () => {
   btnClear.classList.remove('visible');
   urlInput.focus();
   clearStatus();
+  hidePreview();
 });
+
+async function fetchPreview(url) {
+  const requestId = ++previewRequestId;
+  try {
+    const res = await fetch('/api/info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (requestId !== previewRequestId) return; // stale response, a newer URL was typed since
+    if (!res.ok) { hidePreview(); return; }
+
+    const data = await res.json();
+    if (requestId !== previewRequestId) return;
+
+    previewThumb.src = data.thumbnail || '';
+    previewThumb.style.visibility = data.thumbnail ? 'visible' : 'hidden';
+    previewTitle.textContent = data.title;
+    previewMeta.textContent = [data.uploader, formatDuration(data.duration)].filter(Boolean).join(' · ');
+    previewCard.classList.remove('hidden');
+  } catch (e) {
+    hidePreview();
+  }
+}
+
+function hidePreview() {
+  previewCard.classList.add('hidden');
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return '';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
 
 // Paste from clipboard on focus if input is empty
 urlInput.addEventListener('focus', async () => {
@@ -188,70 +283,60 @@ async function handleDownload() {
         ? data.downloadUrl 
         : `/api/proxy-download?url=${encodeURIComponent(data.downloadUrl)}&filename=${encodeURIComponent(downloadFilename)}`;
 
-      if (currentMode === 'audio') {
-        // Audio: quick stream, just trigger the download link
-        showStatus('Preparando archivo de audio...', 'success');
-        animateProgress(80);
+      // Both audio and video are fully processed server-side (yt-dlp download +
+      // ffmpeg re-encode/merge) before anything is sent, so both use the same
+      // fetch-with-progress flow rather than a bare <a href> download link.
+      const isAudio = currentMode === 'audio';
+      const label = isAudio ? formatLabel : 'MP4';
+      const verb = isAudio ? 'Extrayendo y convirtiendo audio' : 'Descargando y fusionando vídeo + audio';
+      showStatus(`${verb}... esto puede tardar`, '');
+      animateProgress(25);
 
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = downloadFilename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+      const streamRes = await fetch(downloadUrl);
 
-        showStatus(`¡Descarga ${formatLabel} iniciada! 🎉`, 'success');
-        animateProgress(100);
-      } else {
-        // Video: fetch with progress (server downloads+merges first, then sends)
-        showStatus('Descargando y fusionando vídeo + audio... esto puede tardar', '');
-        animateProgress(25);
-
-        const streamRes = await fetch(downloadUrl);
-
-        if (!streamRes.ok) {
-          throw new Error('Error al descargar el vídeo del servidor');
-        }
-
-        const contentLength = streamRes.headers.get('Content-Length');
-        const total = contentLength ? parseInt(contentLength, 10) : 0;
-
-        const reader = streamRes.body.getReader();
-        const chunks = [];
-        let received = 0;
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-          received += value.length;
-
-          if (total > 0) {
-            const pct = Math.min(25 + Math.round((received / total) * 70), 95);
-            animateProgress(pct);
-            const mb = (received / 1024 / 1024).toFixed(1);
-            const totalMb = (total / 1024 / 1024).toFixed(1);
-            showStatus(`Descargando vídeo... ${mb} / ${totalMb} MB`, 'success');
-          } else {
-            const mb = (received / 1024 / 1024).toFixed(1);
-            showStatus(`Descargando vídeo... ${mb} MB`, 'success');
-          }
-        }
-
-        animateProgress(100);
-        showStatus('¡Descarga MP4 completada! 🎉', 'success');
-
-        // Create blob and trigger download
-        const blob = new Blob(chunks, { type: 'video/mp4' });
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = downloadFilename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
+      if (!streamRes.ok) {
+        throw new Error(`Error al descargar el ${isAudio ? 'audio' : 'vídeo'} del servidor`);
       }
+
+      const contentLength = streamRes.headers.get('Content-Length');
+      const total = contentLength ? parseInt(contentLength, 10) : 0;
+      const mimeType = streamRes.headers.get('Content-Type') || (isAudio ? 'audio/mpeg' : 'video/mp4');
+
+      const reader = streamRes.body.getReader();
+      const chunks = [];
+      let received = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+
+        const mb = (received / 1024 / 1024).toFixed(1);
+        if (total > 0) {
+          const pct = Math.min(25 + Math.round((received / total) * 70), 95);
+          animateProgress(pct);
+          const totalMb = (total / 1024 / 1024).toFixed(1);
+          showStatus(`Descargando... ${mb} / ${totalMb} MB`, 'success');
+        } else {
+          showStatus(`Descargando... ${mb} MB`, 'success');
+        }
+      }
+
+      animateProgress(100);
+      showStatus(`¡Descarga ${label} completada! 🎉`, 'success');
+      addToHistory(downloadFilename, label, isAudio ? 'Audio' : 'Vídeo');
+
+      // Create blob and trigger download
+      const blob = new Blob(chunks, { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = downloadFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
     }
   } catch (err) {
     showStatus(err.message, 'error');
@@ -313,6 +398,7 @@ async function handleConvert() {
 
     animateProgress(100);
     showStatus(`¡Conversión a ${targetFormat.toUpperCase()} completada! 🎉`, 'success');
+    addToHistory(downloadFilename, targetFormat.toUpperCase(), 'Conversión');
   } catch (err) {
     showStatus(err.message, 'error');
   } finally {
@@ -320,6 +406,51 @@ async function handleConvert() {
     setTimeout(hideProgress, 2000);
   }
 }
+
+// === History (stored locally in this browser only) ===
+const HISTORY_KEY = 'tubegrab_history';
+const HISTORY_MAX = 8;
+
+function getHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function addToHistory(name, badge, kind) {
+  try {
+    const history = getHistory();
+    history.unshift({ name, badge, kind, date: Date.now() });
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_MAX)));
+    renderHistory();
+  } catch (e) { /* localStorage unavailable, ignore */ }
+}
+
+function renderHistory() {
+  const history = getHistory();
+  historySection.classList.toggle('hidden', history.length === 0);
+  historyList.innerHTML = history.map(item => `
+    <li class="history-item">
+      <span class="history-item-name">${escapeHtml(item.name)}</span>
+      <span class="history-item-badge">${escapeHtml(item.badge)}</span>
+    </li>
+  `).join('');
+}
+
+btnClearHistory.addEventListener('click', () => {
+  try { localStorage.removeItem(HISTORY_KEY); } catch (e) { /* ignore */ }
+  renderHistory();
+});
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+renderHistory();
 
 // === Helpers ===
 function isYouTubeUrl(url) {

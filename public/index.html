@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TubeGrab — YouTube a MP3 & MP4</title>
-  <meta name="description" content="Descarga audio y vídeo de YouTube en formato MP3 o MP4 de forma segura y privada.">
+  <title>TubeGrab — YouTube, MP3, MP4 y Conversor</title>
+  <meta name="description" content="Descarga audio y vídeo de YouTube y convierte tus propios archivos entre formatos de audio y vídeo, de forma segura y privada.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -39,13 +39,22 @@
         </div>
       </div>
 
+      <!-- Video Preview -->
+      <div class="preview-card hidden" id="previewCard">
+        <img class="preview-thumb" id="previewThumb" alt="Miniatura del vídeo">
+        <div class="preview-info">
+          <p class="preview-title" id="previewTitle"></p>
+          <p class="preview-meta" id="previewMeta"></p>
+        </div>
+      </div>
+
       <!-- File Upload (Convert mode) -->
       <div class="input-group hidden" id="uploadGroup">
         <label class="file-drop" id="fileDrop" for="fileInput">
-          <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.ogg,.wav,.m4a,.flac,.opus,.mov,.mp4,.webm" hidden>
+          <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.ogg,.wav,.m4a,.flac,.opus,.mov,.mp4,.webm,.mkv,.avi" hidden>
           <svg class="upload-icon" viewBox="0 0 24 24" fill="none"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <span class="file-drop-text" id="fileDropText">Arrastra un archivo o haz clic para elegirlo</span>
-          <span class="file-drop-hint">MP3, OGG, WAV, M4A, FLAC, OPUS, MOV...</span>
+          <span class="file-drop-hint">Audio: MP3, OGG, WAV... · Vídeo: MP4, WEBM, MKV, AVI, MOV</span>
         </label>
       </div>
 
@@ -108,6 +117,10 @@
         </div>
         <!-- Convert Options -->
         <div class="option-group hidden" id="convertOptions">
+          <div class="convert-kind-toggle" id="convertKindToggle">
+            <button class="kind-btn active" data-kind="audio" id="btnConvertAudio">Audio</button>
+            <button class="kind-btn" data-kind="video" id="btnConvertVideo">Vídeo</button>
+          </div>
           <label class="option-label">Convertir a</label>
           <div class="select-wrapper">
             <select id="convertFormat">
@@ -117,7 +130,6 @@
               <option value="m4a">M4A (AAC)</option>
               <option value="flac">FLAC (sin pérdida)</option>
               <option value="opus">OPUS</option>
-              <option value="mov">MOV (audio)</option>
             </select>
           </div>
         </div>
@@ -134,11 +146,32 @@
       <div class="progress-bar hidden" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
     </main>
 
+    <!-- Recent History -->
+    <section class="history-section hidden" id="historySection">
+      <div class="history-header">
+        <h3>Recientes</h3>
+        <button class="btn-clear-history" id="btnClearHistory">Limpiar</button>
+      </div>
+      <ul class="history-list" id="historyList"></ul>
+    </section>
+
+    <!-- Desktop App Banner -->
+    <section class="desktop-banner">
+      <div class="desktop-banner-text">
+        <h3>¿Prefieres usarlo sin navegador?</h3>
+        <p>Descarga la app de escritorio para Windows: un único .exe, sin instalación, sin dependencias.</p>
+      </div>
+      <a class="btn-desktop-download" id="btnDesktopDownload" href="#" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Descargar para Windows (.exe)
+      </a>
+    </section>
+
     <section class="info-section">
       <div class="info-card"><div class="info-icon">🛡️</div><h3>Sin Rastro</h3><p>Ejecución 100% local en tu máquina</p></div>
       <div class="info-card"><div class="info-icon">⚡</div><h3>Veloz</h3><p>Conversión directa con yt-dlp + ffmpeg</p></div>
       <div class="info-card"><div class="info-icon">🎬</div><h3>Audio & Vídeo</h3><p>MP3 hasta 320kbps · MP4 hasta 4K</p></div>
-      <div class="info-card"><div class="info-icon">🔄</div><h3>Conversor</h3><p>MP3, OGG, WAV, M4A, FLAC, OPUS, MOV</p></div>
+      <div class="info-card"><div class="info-icon">🔄</div><h3>Conversor</h3><p>Audio y vídeo: MP3, OGG, WAV, FLAC, MP4, WEBM, MKV...</p></div>
     </section>
 
     <footer class="footer"><p>TubeGrab — Descargas privadas para uso personal.</p></footer>

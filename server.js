@@ -96,7 +96,7 @@ const _apiLimiter = rateLimit({
 });
 app.use('/api/', _apiLimiter);
 
-// === Audio format conversion (local file upload) ===
+// === Format conversion (local file upload) ===
 const AUDIO_CONVERT_FORMATS = {
   mp3: { codec: 'libmp3lame', contentType: 'audio/mpeg' },
   wav: { codec: 'pcm_s16le', contentType: 'audio/wav' },
@@ -104,7 +104,13 @@ const AUDIO_CONVERT_FORMATS = {
   m4a: { codec: 'aac', contentType: 'audio/mp4' },
   flac: { codec: 'flac', contentType: 'audio/flac' },
   opus: { codec: 'libopus', contentType: 'audio/opus' },
-  mov: { codec: 'aac', contentType: 'video/quicktime' },
+};
+const VIDEO_CONVERT_FORMATS = {
+  mp4: { vcodec: 'libx264', acodec: 'aac', contentType: 'video/mp4' },
+  webm: { vcodec: 'libvpx-vp9', acodec: 'libopus', contentType: 'video/webm' },
+  mkv: { vcodec: 'libx264', acodec: 'aac', contentType: 'video/x-matroska' },
+  avi: { vcodec: 'mpeg4', acodec: 'libmp3lame', contentType: 'video/x-msvideo' },
+  mov: { vcodec: 'libx264', acodec: 'aac', contentType: 'video/quicktime' },
 };
 const MAX_CONVERT_SIZE = 300 * 1024 * 1024; // 300MB
 
@@ -117,34 +123,37 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
   const cleanupInput = () => { if (req.file) fs.unlink(req.file.path, () => {}); };
 
   const targetFormat = String(req.body.targetFormat || '').toLowerCase();
-  if (!Object.prototype.hasOwnProperty.call(AUDIO_CONVERT_FORMATS, targetFormat)) {
+  const isAudio = Object.prototype.hasOwnProperty.call(AUDIO_CONVERT_FORMATS, targetFormat);
+  const isVideo = Object.prototype.hasOwnProperty.call(VIDEO_CONVERT_FORMATS, targetFormat);
+  if (!isAudio && !isVideo) {
     cleanupInput();
     return res.status(400).json({ error: 'Formato de destino no soportado.' });
   }
   if (!req.file) {
-    return res.status(400).json({ error: 'No se recibió ningún archivo de audio.' });
+    return res.status(400).json({ error: 'No se recibió ningún archivo.' });
   }
 
-  const config = AUDIO_CONVERT_FORMATS[targetFormat];
   const outId = `convert_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const outputPath = path.join(os.tmpdir(), `${outId}.${targetFormat}`);
 
-  const originalName = (req.file.originalname || 'audio').replace(/[^\w\s.-]/gi, '').trim() || 'audio';
-  const baseName = originalName.replace(/\.[^/.]+$/, '') || 'audio';
+  const originalName = (req.file.originalname || (isAudio ? 'audio' : 'video')).replace(/[^\w\s.-]/gi, '').trim() || 'archivo';
+  const baseName = originalName.replace(/\.[^/.]+$/, '') || 'archivo';
   const outputFilename = `${baseName}.${targetFormat}`;
 
-  const args = [
-    '-y',
-    '-i', req.file.path,
-    '-vn',
-    '-map_metadata', '-1',
-    '-acodec', config.codec,
-    outputPath,
-  ];
+  let args, contentType;
+  if (isAudio) {
+    const config = AUDIO_CONVERT_FORMATS[targetFormat];
+    contentType = config.contentType;
+    args = ['-y', '-i', req.file.path, '-vn', '-map_metadata', '-1', '-acodec', config.codec, outputPath];
+  } else {
+    const config = VIDEO_CONVERT_FORMATS[targetFormat];
+    contentType = config.contentType;
+    args = ['-y', '-i', req.file.path, '-c:v', config.vcodec, '-c:a', config.acodec, outputPath];
+  }
 
   console.log(`[CONVERT] ${originalName} -> ${targetFormat}`);
 
-  execFile(currentFfmpegPath, args, { timeout: 5 * 60 * 1000 }, (err) => {
+  execFile(currentFfmpegPath, args, { timeout: 10 * 60 * 1000 }, (err) => {
     cleanupInput();
 
     if (err) {
@@ -156,7 +165,7 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
       return;
     }
 
-    res.setHeader('Content-Type', config.contentType);
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(outputFilename)}`);
 
     const fileStream = fs.createReadStream(outputPath);
@@ -168,6 +177,35 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
       if (!res.headersSent) res.status(500).json({ error: 'Error al enviar el archivo convertido.' });
     });
   });
+});
+
+// Video metadata preview (title, thumbnail, duration) before downloading
+app.post('/api/info', async (req, res) => {
+  const { url } = req.body || {};
+  const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\/.+/i;
+  if (!url || !ytRegex.test(url)) {
+    return res.status(400).json({ error: 'URL inválida' });
+  }
+
+  try {
+    const metadataArgs = [
+      '--no-playlist',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ];
+    if (fs.existsSync(path.join(__dirname, 'cookies.txt'))) {
+      metadataArgs.push('--cookies', path.join(__dirname, 'cookies.txt'));
+    }
+    const metadata = await ytDlpWrap.getVideoInfo([url, ...metadataArgs]);
+    return res.json({
+      title: metadata.title || 'Sin título',
+      thumbnail: metadata.thumbnail || null,
+      duration: metadata.duration || null,
+      uploader: metadata.uploader || null,
+    });
+  } catch (err) {
+    console.error('[INFO ERROR]', err.message);
+    return res.status(500).json({ error: 'No se pudo obtener información del vídeo.' });
+  }
 });
 
 
@@ -251,42 +289,66 @@ app.get('/api/stream', async (req, res) => {
   const cookiesPath = path.join(__dirname, 'cookies.txt');
   const hasCookies = fs.existsSync(cookiesPath);
 
-  // ── AUDIO MODE: pipe directly to response (no merge needed) ──
+  // ── AUDIO MODE: download + extract to a temp file, then send ──
+  // yt-dlp's -x/--audio-format post-processing (the actual mp3/ogg re-encode)
+  // does not run when the output goes to stdout ('-o -'); it silently returns
+  // the raw stream instead (e.g. opus/webm mislabeled as .mp3). Writing to a
+  // real file first lets ffmpeg post-processing run correctly, same as video.
   if (mode === 'audio') {
+    const tmpDir = os.tmpdir();
+    const tmpId = `tubegrab_audio_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const tmpTemplate = path.join(tmpDir, `${tmpId}.%(ext)s`);
+    const tmpFile = path.join(tmpDir, `${tmpId}.${audioFormat}`);
+
     let args = [
       url,
       '--no-playlist',
       '--ffmpeg-location', currentFfmpegPath,
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       '--referer', 'https://www.google.com/',
-      '-o', '-',
-      '-x', '--audio-format', audioFormat, '--audio-quality', bitrate || '128'
+      '-x', '--audio-format', audioFormat, '--audio-quality', bitrate || '128',
+      '-o', tmpTemplate,
     ];
     if (hasCookies) args.push('--cookies', cookiesPath);
 
-    const AUDIO_CONTENT_TYPES = { mp3: 'audio/mpeg', ogg: 'audio/ogg' };
-    res.setHeader('Content-Type', AUDIO_CONTENT_TYPES[audioFormat]);
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    console.log(`[AUDIO] Descargando a archivo temporal: ${tmpFile}`);
+
+    let clientDisconnected = false;
+    req.on('close', () => { clientDisconnected = true; });
 
     try {
-      const ytDlpProcess = ytDlpWrap.execStream(args);
+      await ytDlpWrap.execPromise(args);
 
-      ytDlpProcess.on('error', (err) => {
-        console.error('[STREAM ERROR]', err);
-        if (!res.headersSent) {
-          res.status(500).send('Error durante el procesamiento del audio');
-        }
-      });
+      if (clientDisconnected) {
+        console.log('[AUDIO] Cliente desconectó durante la descarga, limpiando temp...');
+        fs.unlink(tmpFile, () => {});
+        return;
+      }
 
-      ytDlpProcess.pipe(res);
+      if (!fs.existsSync(tmpFile)) {
+        console.error('[AUDIO] Archivo temporal no encontrado tras descarga');
+        if (!res.headersSent) res.status(500).send('Error: el archivo de audio no se generó');
+        return;
+      }
 
-      req.on('close', () => {
-        console.log('[STREAM] Cliente desconectado, deteniendo yt-dlp');
-        if (ytDlpProcess.ytDlpProcess) ytDlpProcess.ytDlpProcess.kill();
+      const AUDIO_CONTENT_TYPES = { mp3: 'audio/mpeg', ogg: 'audio/ogg' };
+      const stat = fs.statSync(tmpFile);
+      res.setHeader('Content-Type', AUDIO_CONTENT_TYPES[audioFormat]);
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.setHeader('Content-Length', stat.size);
+
+      const fileStream = fs.createReadStream(tmpFile);
+      fileStream.pipe(res);
+      fileStream.on('end', () => fs.unlink(tmpFile, () => {}));
+      fileStream.on('error', (streamErr) => {
+        console.error('[AUDIO FILE ERROR]', streamErr.message);
+        fs.unlink(tmpFile, () => {});
+        if (!res.headersSent) res.status(500).send('Error al leer archivo de audio');
       });
     } catch (err) {
-      console.error('[ERROR] Audio stream failed:', err.message);
-      if (!res.headersSent) res.status(500).send('Error al iniciar la descarga de audio');
+      console.error('[ERROR] Audio download failed:', err.message);
+      fs.unlink(tmpFile, () => {});
+      if (!res.headersSent) res.status(500).send('Error al descargar el audio.');
     }
     return;
   }
