@@ -52,3 +52,23 @@
 - No se detectó path traversal: los archivos temporales usan `os.tmpdir()` con nombre aleatorio (`Date.now()_random`).
 - `helmet` activo, rate limiting activo en `/api/`.
 - `execFile` usado para abrir navegador (no `exec`), sin shell injection.
+
+---
+
+## 2026-09-27 — Revisión 5 (auditoría completa + auditoría de dependencias)
+
+### [BAJA] `/api/convert` no valida el tipo de archivo subido antes de pasarlo a ffmpeg
+- **Archivo:** `server.js` (`upload = multer({ dest: os.tmpdir(), ... })`)
+- **Descripción:** El endpoint acepta cualquier archivo subido y lo pasa directamente a ffmpeg (binario nativo) sin comprobar mimetype/extensión antes. No es una vulnerabilidad demostrada en el código propio, pero es una superficie de ataque innecesaria si el conversor queda expuesto públicamente (p. ej. desplegado en Render): un archivo corrupto a propósito podría intentar explotar algún fallo del propio ffmpeg.
+- **Severidad:** BAJA (recomendación de hardening, no exploit confirmado)
+- **Estado:** Pendiente — sin aplicar todavía.
+
+### Resultado de la auditoría de código
+Revisión manual completa de `server.js`, `public/app.js` y `electron-main.js` centrada en los vectores típicos:
+- **Inyección de comandos:** todas las llamadas a yt-dlp/ffmpeg usan `execFile`/`spawn` con argumentos en array, nunca shell — no hay forma de inyectar flags vía la URL o parámetros.
+- **SSRF:** la regex de validación de YouTube exige el dominio seguido inmediatamente de `/`, bloqueando bypasses típicos (`youtube.com.evil.com`, `youtube.com@evil.com`).
+- **XSS:** el frontend usa `textContent` para todo dato dinámico (título, autor, duración) y escapa el HTML antes de insertarlo en el historial vía `innerHTML`.
+- **Path traversal:** los nombres de archivo (subidos o generados) nunca se usan como ruta real en disco — se generan IDs aleatorios; el nombre original solo llega sanitizado al header `Content-Disposition`.
+
+### Resultado de la auditoría de dependencias (`npm audit`)
+21 avisos totales. 20 de 21 vienen de `electron-builder` y su árbol de dependencias transitivas (`tar`, `extract-zip`, `js-yaml`, `xmldom`, etc.) — es una `devDependency` que solo corre al construir el `.exe` localmente, nunca se despliega. Los únicos de producción (`qs`, `body-parser`, vía `express`) son de denegación de servicio (fuera de alcance) o no aplican dado que el código valida los parámetros de query contra allowlists estrictas antes de usarlos. Electron 34.5.8 tiene varios CVEs listados, pero casi todos requieren cargar contenido web de terceros en el renderer — esta app solo carga su propio `localhost` con `nodeIntegration: false` y `contextIsolation: true`, lo que corta la mayoría de esos vectores. Recomendado actualizar Electron cuando sea posible.
