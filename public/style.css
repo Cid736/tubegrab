@@ -360,6 +360,7 @@ body {
 }
 .desktop-banner-text h3 { font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
 .desktop-banner-text p { font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; max-width: 320px; }
+.desktop-banner-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex-shrink: 0; }
 .btn-desktop-download {
   display: flex; align-items: center; gap: 8px; flex-shrink: 0;
   background: #fff; color: #111;
@@ -369,6 +370,11 @@ body {
   transition: all 0.25s;
 }
 .btn-desktop-download:hover { transform: translateY(-2px); filter: brightness(0.95); }
+.desktop-banner-note {
+  font-size: 0.7rem; color: var(--text-muted); line-height: 1.5;
+  max-width: 260px; text-align: right;
+}
+.desktop-banner-note a { color: var(--accent-light); }
 
 /* ===== INFO SECTION ===== */
 .info-section {
@@ -399,5 +405,7 @@ body {
   .format-btn { padding: 12px 8px; font-size: 0.85rem; }
   .desktop-banner { flex-direction: column; align-items: stretch; text-align: center; }
   .desktop-banner-text p { max-width: none; }
+  .desktop-banner-actions { align-items: stretch; }
   .btn-desktop-download { justify-content: center; }
+  .desktop-banner-note { max-width: none; text-align: center; }
 }
