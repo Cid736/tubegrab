@@ -185,6 +185,17 @@ if (window.updater) {
     versionChip.dataset.status = state.status;
     versionChip.title = state.status === 'error' ? `${state.error} — pulsa para reintentar` : 'Pulsa para buscar actualizaciones';
     versionChip.classList.remove('hidden');
+    // Settings → Actualizaciones: the same state, with the reason spelled out.
+    const appLabel = $('appUpdateLabel');
+    appLabel.textContent = {
+      checking: `Versión ${state.current} · buscando actualizaciones…`,
+      'up-to-date': `Versión ${state.current} · es la última`,
+      available: `Versión ${state.current} · hay una nueva: ${state.latest}`,
+      error: `Versión ${state.current} · no se pudo comprobar: ${state.error}. Se reintentará sola en unos minutos.`,
+      dev: `Versión ${state.current} · modo desarrollo`,
+    }[state.status] || `Versión ${state.current}`;
+    appLabel.classList.toggle('error', state.status === 'error');
+    $('btnCheckApp').disabled = state.status === 'checking';
     if (state.status === 'available') {
       updateBannerSubtitle.textContent = `Versión ${state.latest} lista para descargar (tienes la ${state.current}).`;
       updateBanner.classList.remove('hidden');
@@ -194,6 +205,7 @@ if (window.updater) {
   window.updater.onState(renderUpdateState);
   window.updater.getState().then(renderUpdateState);
   versionChip.addEventListener('click', () => window.updater.check());
+  $('btnCheckApp').addEventListener('click', () => window.updater.check());
   window.updater.onProgress(({ percent }) => {
     updateProgressFill.style.width = `${percent}%`;
     updateProgressLabel.textContent = `${percent}%`;

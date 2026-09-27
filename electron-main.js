@@ -1,8 +1,7 @@
-const { app, BrowserWindow, ipcMain, shell, screen, dialog, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, dialog, nativeTheme, net: electronNet } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const https = require('https');
 const crypto = require('crypto');
 const { fork, execFile, spawn } = require('child_process');
 
@@ -59,25 +58,64 @@ function assertAllowedUrl(rawUrl) {
   return url;
 }
 
+// Chromium's network errors, in words a user can act on.
+function friendlyNetError(err) {
+  const m = String((err && err.message) || err);
+  if (/INTERNET_DISCONNECTED|NETWORK_CHANGED|ADDRESS_UNREACHABLE/.test(m)) return 'Sin conexión a Internet';
+  if (/NAME_NOT_RESOLVED|NAME_RESOLUTION_FAILED/.test(m)) return 'No se encuentra GitHub (¿sin conexión?)';
+  if (/CERT_DATE_INVALID/.test(m)) return 'La fecha y hora del equipo no son correctas';
+  if (/CERT_|SSL_|ssl/i.test(m)) return 'Conexión segura rechazada (¿antivirus o red que inspecciona HTTPS?)';
+  if (/PROXY|TUNNEL/.test(m)) return 'No se pudo conectar a través del proxy';
+  if (/TIMED_OUT|CONNECTION_(RESET|CLOSED|REFUSED|FAILED)/.test(m)) return 'No se pudo conectar con GitHub';
+  return m.replace(/^net::/, '');
+}
+
+/**
+ * GET over Chromium's network stack (electron.net): unlike Node's https, it
+ * trusts the Windows certificate store and honours the system proxy, so it
+ * works behind antivirus HTTPS scanning and corporate networks just like the
+ * browser does. Every redirect hop is checked against the GitHub allowlist.
+ */
 function httpsGet(rawUrl, redirectsLeft, onResponse, onError) {
   let url;
   try { url = assertAllowedUrl(rawUrl); } catch (err) { onError(err); return; }
-  const req = https.get(url, { headers: { 'User-Agent': 'TubeGrab-Updater', Accept: 'application/json, application/octet-stream' } }, (res) => {
-    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-      res.resume();
-      if (redirectsLeft <= 0) { onError(new Error('Demasiadas redirecciones')); return; }
-      httpsGet(new URL(res.headers.location, url).toString(), redirectsLeft - 1, onResponse, onError);
-      return;
-    }
+  let settled = false;
+  const fail = (err) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(idle);
+    try { request.abort(); } catch { /* already finished */ }
+    onError(err instanceof Error && !/^net::/.test(err.message) ? err : new Error(friendlyNetError(err)));
+  };
+  // No bytes for 30 s = give up (reset on every chunk, so big downloads are fine).
+  let idle = null;
+  const touch = () => { clearTimeout(idle); idle = setTimeout(() => fail(new Error('Tiempo de espera agotado')), 30_000); };
+
+  const request = electronNet.request({ url: url.toString(), redirect: 'manual', useSessionCookies: false, cache: 'no-cache' });
+  request.setHeader('User-Agent', 'TubeGrab-Updater');
+  request.setHeader('Accept', 'application/json, application/octet-stream');
+  request.on('redirect', (statusCode, method, redirectUrl) => {
+    if (redirectsLeft <= 0) return fail(new Error('Demasiadas redirecciones'));
+    try { assertAllowedUrl(redirectUrl); } catch (err) { return fail(err); }
+    redirectsLeft -= 1;
+    touch();
+    request.followRedirect();
+  });
+  request.on('response', (res) => {
     if (res.statusCode !== 200) {
-      res.resume();
-      onError(new Error(`GitHub respondió ${res.statusCode}`));
-      return;
+      const limited = res.statusCode === 403 || res.statusCode === 429;
+      return fail(new Error(limited ? 'GitHub limita las consultas ahora mismo; se reintentará más tarde' : `GitHub respondió ${res.statusCode}`));
     }
+    // Still watched after this point: a stall or a dropped connection
+    // mid-download aborts the request and rejects through onError.
+    res.on('data', touch);
+    res.on('end', () => clearTimeout(idle));
+    res.on('error', () => clearTimeout(idle));
     onResponse(res);
   });
-  req.on('error', onError);
-  req.setTimeout(30_000, () => req.destroy(new Error('Tiempo de espera agotado')));
+  request.on('error', fail);
+  touch();
+  request.end();
 }
 
 function httpJson(url) {
@@ -166,7 +204,21 @@ async function checkForUpdates() {
   } catch (err) {
     console.error('[Updater] check failed:', err.message);
     setUpdateState({ status: 'error', error: err.message });
+    scheduleUpdateCheck(UPDATE_RETRY_MS);
   }
+}
+
+// Checks again later on its own: soon after a failure (no network yet at
+// start-up, GitHub rate limit…), and periodically while the app stays open.
+const UPDATE_RETRY_MS = 10 * 60 * 1000;
+const UPDATE_PERIOD_MS = 6 * 60 * 60 * 1000;
+let updateTimer = null;
+function scheduleUpdateCheck(ms) {
+  clearTimeout(updateTimer);
+  updateTimer = setTimeout(() => {
+    checkForUpdates().finally(() => { if (updateState.status !== 'error') scheduleUpdateCheck(UPDATE_PERIOD_MS); });
+  }, ms);
+  updateTimer.unref?.();
 }
 
 ipcMain.handle('updater:getState', (event) => (isTrustedSender(event) ? updateState : null));
@@ -602,7 +654,7 @@ function createWindow() {
     appPort = port;
     APP_ORIGIN = `http://localhost:${appPort}`;
     if (mainWindow) mainWindow.loadURL(APP_ORIGIN);
-    checkForUpdates();
+    checkForUpdates().finally(() => { if (updateState.status !== 'error') scheduleUpdateCheck(UPDATE_PERIOD_MS); });
     maintainEngine(false);
   }, (err) => {
     console.error('[Electron] Server failed to start:', err.message);

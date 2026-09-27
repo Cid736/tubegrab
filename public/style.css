@@ -414,6 +414,7 @@ body.window-blurred .tl { background: rgba(128, 128, 128, 0.3); }
 .row-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .row-sub-wrap { white-space: normal; direction: ltr; }
 .row-sub.ok { color: var(--green); }
+.row-sub.error { color: var(--red); }
 
 /* Pop-up buttons */
 .row select, .text-input {
