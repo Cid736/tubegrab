@@ -66,6 +66,54 @@ if (isElectronApp) {
   btnDesktopDownload.href = 'https://github.com/Cid736/tubegrab/releases/latest/download/TubeGrab.exe';
 }
 
+// === Auto-updater (desktop app only) ===
+// window.updater is only exposed by preload.js inside Electron; on the plain
+// website this stays undefined and the whole block is skipped.
+if (window.updater) {
+  const updateBanner = document.getElementById('updateBanner');
+  const updateBannerSubtitle = document.getElementById('updateBannerSubtitle');
+  const btnUpdate = document.getElementById('btnUpdate');
+  const updateProgress = document.getElementById('updateProgress');
+  const updateProgressFill = document.getElementById('updateProgressFill');
+  const updateProgressLabel = document.getElementById('updateProgressLabel');
+
+  window.updater.onAvailable(({ version }) => {
+    updateBannerSubtitle.textContent = `Versión ${version} lista para descargar.`;
+    updateBanner.classList.remove('hidden');
+  });
+
+  window.updater.onProgress(({ percent }) => {
+    updateProgressFill.style.width = `${percent}%`;
+    updateProgressLabel.textContent = `${percent}%`;
+  });
+
+  window.updater.onDownloaded(() => {
+    updateProgress.classList.add('hidden');
+    btnUpdate.disabled = false;
+    btnUpdate.textContent = 'Reiniciar y actualizar';
+    btnUpdate.dataset.stage = 'downloaded';
+  });
+
+  window.updater.onError((message) => {
+    updateBannerSubtitle.textContent = `No se pudo actualizar: ${message}`;
+    btnUpdate.disabled = false;
+    btnUpdate.textContent = 'Reintentar';
+    btnUpdate.dataset.stage = 'available';
+    updateProgress.classList.add('hidden');
+  });
+
+  btnUpdate.addEventListener('click', () => {
+    if (btnUpdate.dataset.stage === 'downloaded') {
+      window.updater.quitAndInstall();
+      return;
+    }
+    btnUpdate.disabled = true;
+    btnUpdate.textContent = 'Descargando...';
+    updateProgress.classList.remove('hidden');
+    window.updater.downloadUpdate();
+  });
+}
+
 // === Format Toggle ===
 formatToggle.addEventListener('click', (e) => {
   const btn = e.target.closest('.format-btn');

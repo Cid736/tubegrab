@@ -73,7 +73,7 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
 .app-container {
   position: relative; z-index: 1;
   width: 100%; max-width: 500px;
-  padding: 40px 20px;
+  padding: clamp(20px, 6vw, 40px) clamp(12px, 4vw, 20px);
   display: flex; flex-direction: column; align-items: center;
 }
 
@@ -104,14 +104,14 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 48px 32px;
+  padding: clamp(24px, 8vw, 48px) clamp(16px, 6vw, 32px);
   backdrop-filter: blur(30px);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
 /* ===== TITLE ===== */
 .main-title {
-  font-size: 2rem; font-weight: 800; line-height: 1.1;
+  font-size: clamp(1.5rem, 5vw, 2rem); font-weight: 800; line-height: 1.1;
   text-align: center; letter-spacing: -0.04em; margin-bottom: 12px;
 }
 .title-accent {
@@ -368,6 +368,39 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
   padding: 3px 8px; border-radius: 100px; text-transform: uppercase;
 }
 
+/* ===== UPDATE BANNER ===== */
+.update-banner {
+  width: 100%; margin-top: 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(124, 58, 237, 0.08));
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 20px 24px;
+  animation: fadeIn 0.35s ease;
+}
+.update-banner-text h3 { font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
+.update-banner-text p { font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; max-width: 320px; }
+.update-banner-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex-shrink: 0; min-width: 140px; }
+.btn-update {
+  background: var(--green); color: #052e21; border: none;
+  font-size: 0.85rem; font-weight: 700; font-family: inherit;
+  padding: 12px 20px; border-radius: var(--radius-sm);
+  cursor: pointer; white-space: nowrap; transition: all 0.25s;
+}
+.btn-update:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.05); }
+.btn-update:disabled { opacity: 0.7; cursor: default; }
+.update-progress { width: 100%; display: flex; align-items: center; gap: 8px; }
+.update-progress.hidden { display: none; }
+.update-progress-bar {
+  flex: 1; height: 6px; background: rgba(255,255,255,0.08);
+  border-radius: 100px; overflow: hidden;
+}
+.update-progress-fill {
+  height: 100%; width: 0%; background: var(--green);
+  border-radius: 100px; transition: width 0.3s ease;
+}
+.update-progress span { font-size: 0.7rem; color: var(--text-muted); flex-shrink: 0; }
+
 /* ===== DESKTOP APP BANNER ===== */
 .desktop-banner {
   width: 100%; margin-top: 24px;
@@ -417,14 +450,24 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
 .footer p { font-size: 0.8rem; color: var(--text-muted); }
 
 /* ===== RESPONSIVE ===== */
+@media (max-width: 560px) {
+  .desktop-banner, .update-banner { flex-direction: column; align-items: stretch; text-align: center; }
+  .desktop-banner-text p, .update-banner-text p { max-width: none; }
+  .desktop-banner-actions, .update-banner-actions { align-items: stretch; }
+  .btn-desktop-download, .btn-update { justify-content: center; }
+  .desktop-banner-note { max-width: none; text-align: center; }
+}
 @media (max-width: 480px) {
-  .main-card { padding: 32px 24px; }
-  .main-title { font-size: 1.75rem; }
   .info-section { grid-template-columns: 1fr 1fr; }
   .format-btn { padding: 12px 8px; font-size: 0.85rem; }
-  .desktop-banner { flex-direction: column; align-items: stretch; text-align: center; }
-  .desktop-banner-text p { max-width: none; }
-  .desktop-banner-actions { align-items: stretch; }
-  .btn-desktop-download { justify-content: center; }
-  .desktop-banner-note { max-width: none; text-align: center; }
+}
+@media (max-width: 360px) {
+  .info-section { grid-template-columns: 1fr; }
+  .header-badge span:not(.badge-dot) { display: none; }
+}
+@media (max-height: 640px) {
+  .main-title, .main-subtitle { margin-bottom: 8px; }
+  .format-toggle-section { margin-bottom: 16px; }
+  .format-section { margin-bottom: 20px; }
+  .info-section { margin-top: 24px; }
 }

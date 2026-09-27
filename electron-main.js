@@ -1,4 +1,5 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { fork, execFile } = require('child_process');
 const http = require('http');
@@ -6,6 +7,41 @@ const http = require('http');
 let mainWindow;
 let serverProcess;
 let shuttingDown = false;
+
+// Portable builds have no installer to relaunch elevated, and no signing
+// cert to trust automatically, so keep updates fully user-driven: check
+// silently, but only download/install when the renderer asks us to.
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+
+function sendToRenderer(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
+function initAutoUpdater() {
+  // Update checks need a real published release to compare against; running
+  // from source (`npm start`/electron unpackaged) has no feed to hit.
+  if (!app.isPackaged) return;
+
+  autoUpdater.on('update-available', (info) => sendToRenderer('updater:available', { version: info.version }));
+  autoUpdater.on('download-progress', (progress) => sendToRenderer('updater:progress', { percent: Math.round(progress.percent) }));
+  autoUpdater.on('update-downloaded', () => sendToRenderer('updater:downloaded'));
+  autoUpdater.on('error', (err) => sendToRenderer('updater:error', err == null ? 'unknown error' : err.message));
+
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('[Updater] check failed:', err.message);
+  });
+}
+
+ipcMain.on('updater:download', () => {
+  autoUpdater.downloadUpdate().catch((err) => sendToRenderer('updater:error', err.message));
+});
+
+ipcMain.on('updater:install', () => {
+  // killServerTree runs anyway via the 'before-quit' hook below; isForceRunAfter
+  // relaunches the new .exe once the portable updater has swapped the file.
+  autoUpdater.quitAndInstall(false, true);
+});
 
 /**
  * Kill the server process AND every child it spawned (yt-dlp.exe, ffmpeg.exe),
@@ -52,14 +88,17 @@ function waitForServer(port, maxAttempts, interval, callback) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 800,
+    width: 560,
+    height: 820,
+    minWidth: 380,
+    minHeight: 520,
     title: 'TubeGrab Pro',
     icon: path.join(__dirname, 'build', 'icon.ico'),
     backgroundColor: '#050508',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
     autoHideMenuBar: true
   });
@@ -80,6 +119,7 @@ function createWindow() {
       console.error('[Electron] Server failed to start:', err.message);
     }
     if (mainWindow) mainWindow.loadURL(`http://localhost:${PORT}`);
+    initAutoUpdater();
   });
 
   mainWindow.on('closed', function () {

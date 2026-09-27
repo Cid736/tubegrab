@@ -155,6 +155,21 @@
       <ul class="history-list" id="historyList"></ul>
     </section>
 
+    <!-- Update Banner (desktop app only, shown when electron-updater finds a newer release) -->
+    <section class="update-banner hidden" id="updateBanner">
+      <div class="update-banner-text">
+        <h3 id="updateBannerTitle">Nueva versión disponible</h3>
+        <p id="updateBannerSubtitle">Descarga e instala la actualización sin salir de la app.</p>
+      </div>
+      <div class="update-banner-actions">
+        <button class="btn-update" id="btnUpdate" data-stage="available">Actualizar</button>
+        <div class="update-progress hidden" id="updateProgress">
+          <div class="update-progress-bar"><div class="update-progress-fill" id="updateProgressFill"></div></div>
+          <span id="updateProgressLabel">0%</span>
+        </div>
+      </div>
+    </section>
+
     <!-- Desktop App Banner (removed automatically when running inside the desktop app itself) -->
     <section class="desktop-banner" id="desktopBanner">
       <div class="desktop-banner-text">

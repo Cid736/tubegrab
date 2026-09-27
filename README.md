@@ -18,7 +18,7 @@ Local YouTube video/audio downloader **and** audio/video format converter. Runs 
 - 100% local processing using [yt-dlp](https://github.com/yt-dlp/yt-dlp) + ffmpeg — nothing is uploaded to a third party
 - Cookie support for age-restricted videos
 - Available as:
-  - a **desktop app** for Windows (single `.exe`, no install, no console window)
+  - a **desktop app** for Windows (single `.exe`, no install, no console window), with a built-in updater — it checks GitHub Releases on launch and lets you update in one click, no manual re-download
   - a **Docker** container
   - a **web app** you can self-host (e.g. on [Render](https://render.com), free tier)
 
@@ -44,6 +44,8 @@ npm run build:exe      # pkg console build -> dist/TubeGrab.exe (lightweight, sh
 ```
 
 Building with `npm run build` needs Windows Developer Mode enabled (Settings → Privacy & security → For developers) so electron-builder can create symlinks without admin rights.
+
+**Maintainers, publishing a release:** the in-app updater compares against `latest.yml`, which `electron-builder` only generates when it actually publishes — plain `npm run build` does not produce it. Bump the version in `package.json`, then run `GH_TOKEN=$(gh auth token) npx electron-builder --publish always` to build and publish `TubeGrab.exe` + `latest.yml` + the `.blockmap` to a new GitHub Release in one step (instead of building and using `gh release create` separately).
 
 ### 3. Docker
 
@@ -113,7 +115,7 @@ Descargador local de vídeo/audio de YouTube **y** conversor de formatos de audi
 - Procesamiento 100% local usando [yt-dlp](https://github.com/yt-dlp/yt-dlp) + ffmpeg — nada se sube a terceros
 - Compatible con cookies para vídeos con restricción de edad
 - Disponible como:
-  - **app de escritorio** para Windows (un único `.exe`, sin instalación, sin ventana de consola)
+  - **app de escritorio** para Windows (un único `.exe`, sin instalación, sin ventana de consola), con actualizador integrado — comprueba los Releases de GitHub al abrir y te deja actualizar con un clic, sin descargar el .exe a mano
   - contenedor **Docker**
   - **app web** autoalojable (por ejemplo en [Render](https://render.com), plan gratuito)
 
@@ -139,6 +141,8 @@ npm run build:exe      # Build de consola con pkg -> dist/TubeGrab.exe (ligero, 
 ```
 
 Para `npm run build` necesitas el Modo Desarrollador de Windows activado (Configuración → Privacidad y seguridad → Para desarrolladores), para que electron-builder pueda crear symlinks sin permisos de administrador.
+
+**Para quien mantenga el repo, al publicar una release:** el actualizador integrado compara contra `latest.yml`, que `electron-builder` solo genera cuando publica de verdad — el `npm run build` normal no lo produce. Sube la versión en `package.json` y ejecuta `GH_TOKEN=$(gh auth token) npx electron-builder --publish always` para construir y publicar `TubeGrab.exe` + `latest.yml` + el `.blockmap` en una Release de GitHub nueva en un solo paso (en vez de construir y usar `gh release create` por separado).
 
 ### 3. Docker
 
