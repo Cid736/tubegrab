@@ -36,23 +36,41 @@ let currentMode = 'audio'; // 'audio', 'video' or 'convert'
 let currentConvertKind = 'audio'; // 'audio' or 'video'
 let selectedFile = null;
 
+// `ext` is the downloaded file's extension (ALAC and HEVC reuse m4a/mp4).
 const CONVERT_FORMAT_OPTIONS = {
   audio: [
-    { value: 'mp3', label: 'MP3' },
-    { value: 'ogg', label: 'OGG (Vorbis)' },
-    { value: 'wav', label: 'WAV (sin pérdida)' },
-    { value: 'm4a', label: 'M4A (AAC)' },
-    { value: 'flac', label: 'FLAC (sin pérdida)' },
-    { value: 'opus', label: 'OPUS' },
+    { value: 'mp3', ext: 'mp3', short: 'MP3', label: 'MP3 — el más compatible' },
+    { value: 'm4a', ext: 'm4a', short: 'M4A', label: 'M4A (AAC) — iPhone, iTunes' },
+    { value: 'aac', ext: 'aac', short: 'AAC', label: 'AAC — archivo AAC puro' },
+    { value: 'ogg', ext: 'ogg', short: 'OGG', label: 'OGG (Vorbis)' },
+    { value: 'opus', ext: 'opus', short: 'OPUS', label: 'OPUS — mejor calidad por kbps' },
+    { value: 'wma', ext: 'wma', short: 'WMA', label: 'WMA — Windows Media' },
+    { value: 'ac3', ext: 'ac3', short: 'AC3', label: 'AC3 — Dolby Digital' },
+    { value: 'flac', ext: 'flac', short: 'FLAC', label: 'FLAC — sin pérdida', lossless: true },
+    { value: 'alac', ext: 'm4a', short: 'ALAC', label: 'ALAC — sin pérdida de Apple', lossless: true },
+    { value: 'wav', ext: 'wav', short: 'WAV', label: 'WAV — sin comprimir', lossless: true },
+    { value: 'aiff', ext: 'aiff', short: 'AIFF', label: 'AIFF — sin comprimir (Mac)', lossless: true },
   ],
   video: [
-    { value: 'mp4', label: 'MP4' },
-    { value: 'webm', label: 'WEBM' },
-    { value: 'mkv', label: 'MKV' },
-    { value: 'avi', label: 'AVI' },
-    { value: 'mov', label: 'MOV' },
+    { value: 'mp4', ext: 'mp4', short: 'MP4', label: 'MP4 (H.264) — el más compatible' },
+    { value: 'hevc', ext: 'mp4', short: 'MP4 H.265', label: 'MP4 (H.265/HEVC) — menos peso, más lento' },
+    { value: 'webm', ext: 'webm', short: 'WEBM', label: 'WEBM (VP9) — para web' },
+    { value: 'mkv', ext: 'mkv', short: 'MKV', label: 'MKV' },
+    { value: 'mov', ext: 'mov', short: 'MOV', label: 'MOV — QuickTime / Apple' },
+    { value: 'avi', ext: 'avi', short: 'AVI', label: 'AVI' },
+    { value: 'wmv', ext: 'wmv', short: 'WMV', label: 'WMV — Windows Media' },
+    { value: 'flv', ext: 'flv', short: 'FLV', label: 'FLV — Flash Video' },
+    { value: 'mpg', ext: 'mpg', short: 'MPG', label: 'MPG (MPEG-2) — DVD, reproductores antiguos' },
+    { value: '3gp', ext: '3gp', short: '3GP', label: '3GP — móviles antiguos' },
+    { value: 'ogv', ext: 'ogv', short: 'OGV', label: 'OGV (Theora)' },
+    { value: 'gif', ext: 'gif', short: 'GIF', label: 'GIF animado — sin sonido', gif: true },
   ],
 };
+
+function currentConvertOption() {
+  return CONVERT_FORMAT_OPTIONS[currentConvertKind].find((opt) => opt.value === convertFormat.value)
+    || CONVERT_FORMAT_OPTIONS[currentConvertKind][0];
+}
 
 // === Desktop app banner: only makes sense in the browser. Running inside the
 // Electron app itself, you're already using it, so hide the "download it"
@@ -169,18 +187,60 @@ formatToggle.addEventListener('click', (e) => {
   } else if (mode === 'video') {
     btnText.textContent = 'Descargar MP4';
   } else {
-    btnText.textContent = 'Convertir a ' + convertFormat.value.toUpperCase();
+    refreshConvertUI();
   }
 
   clearStatus();
 });
 
-// === Convert Format Change ===
-convertFormat.addEventListener('change', () => {
-  if (currentMode === 'convert') {
-    btnText.textContent = 'Convertir a ' + convertFormat.value.toUpperCase();
+// === Convert settings ===
+const audioConvertSettings = document.getElementById('audioConvertSettings');
+const videoConvertSettings = document.getElementById('videoConvertSettings');
+const convertBitrate = document.getElementById('convertBitrate');
+const convertSampleRate = document.getElementById('convertSampleRate');
+const convertChannels = document.getElementById('convertChannels');
+const convertNormalize = document.getElementById('convertNormalize');
+const convertResolution = document.getElementById('convertResolution');
+const convertQuality = document.getElementById('convertQuality');
+const convertQualitySetting = document.getElementById('convertQualitySetting');
+const convertFps = document.getElementById('convertFps');
+const convertRemoveAudio = document.getElementById('convertRemoveAudio');
+const convertRemoveAudioOption = document.getElementById('convertRemoveAudioOption');
+const convertTrimStart = document.getElementById('convertTrimStart');
+const convertTrimEnd = document.getElementById('convertTrimEnd');
+const convertHint = document.getElementById('convertHint');
+
+function renderConvertFormats() {
+  convertFormat.innerHTML = CONVERT_FORMAT_OPTIONS[currentConvertKind]
+    .map((opt) => `<option value="${opt.value}">${opt.label}</option>`)
+    .join('');
+}
+
+function refreshConvertUI() {
+  const opt = currentConvertOption();
+  const isAudio = currentConvertKind === 'audio';
+  audioConvertSettings.classList.toggle('hidden', !isAudio);
+  videoConvertSettings.classList.toggle('hidden', isAudio);
+
+  convertBitrate.disabled = Boolean(opt.lossless);
+  if (opt.lossless) convertBitrate.value = '';
+  convertQualitySetting.classList.toggle('hidden', Boolean(opt.gif));
+  convertRemoveAudioOption.classList.toggle('hidden', Boolean(opt.gif));
+
+  if (opt.lossless) {
+    convertHint.textContent = 'Formato sin pérdida: la calidad en kbps no aplica.';
+  } else if (opt.gif) {
+    convertHint.textContent = 'El GIF no lleva sonido. Sin resolución elegida se limita a 480 px de ancho y 12 fps; recórtalo para que no pese demasiado.';
+  } else if (isAudio) {
+    convertHint.textContent = 'Si eliges un vídeo, se extrae solo su audio.';
+  } else {
+    convertHint.textContent = '';
   }
-});
+
+  if (currentMode === 'convert') btnText.textContent = 'Convertir a ' + opt.short;
+}
+
+convertFormat.addEventListener('change', refreshConvertUI);
 
 // === Convert Kind Toggle (Audio / Vídeo) ===
 convertKindToggle.addEventListener('click', (e) => {
@@ -191,12 +251,12 @@ convertKindToggle.addEventListener('click', (e) => {
   document.querySelectorAll('.kind-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
-  convertFormat.innerHTML = CONVERT_FORMAT_OPTIONS[currentConvertKind]
-    .map(opt => `<option value="${opt.value}">${opt.label}</option>`)
-    .join('');
-
-  btnText.textContent = 'Convertir a ' + convertFormat.value.toUpperCase();
+  renderConvertFormats();
+  refreshConvertUI();
 });
+
+renderConvertFormats();
+refreshConvertUI();
 
 // === File Drop / Selection ===
 fileDrop.addEventListener('dragover', (e) => {
@@ -432,18 +492,32 @@ async function handleConvert() {
     return;
   }
 
-  const targetFormat = convertFormat.value;
+  const opt = currentConvertOption();
+  const targetFormat = opt.value;
   setLoading(true);
   clearStatus();
   showProgress();
 
   try {
-    showStatus(`Convirtiendo a ${targetFormat.toUpperCase()}...`, '');
+    showStatus(`Convirtiendo a ${opt.short}...`, '');
     animateProgress(20);
 
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('targetFormat', targetFormat);
+    formData.append('trimStart', convertTrimStart.value.trim());
+    formData.append('trimEnd', convertTrimEnd.value.trim());
+    if (currentConvertKind === 'audio') {
+      formData.append('audioBitrate', convertBitrate.value);
+      formData.append('sampleRate', convertSampleRate.value);
+      formData.append('channels', convertChannels.value);
+      formData.append('normalize', String(convertNormalize.checked));
+    } else {
+      formData.append('resolution', convertResolution.value);
+      formData.append('quality', convertQuality.value);
+      formData.append('fps', convertFps.value);
+      formData.append('removeAudio', String(convertRemoveAudio.checked));
+    }
 
     const res = await fetch('/api/convert', {
       method: 'POST',
@@ -465,7 +539,7 @@ async function handleConvert() {
     animateProgress(90);
 
     const baseName = selectedFile.name.replace(/\.[^/.]+$/, '') || 'audio';
-    const downloadFilename = `${baseName}.${targetFormat}`;
+    const downloadFilename = `${baseName}.${opt.ext}`;
 
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -477,8 +551,8 @@ async function handleConvert() {
     URL.revokeObjectURL(blobUrl);
 
     animateProgress(100);
-    showStatus(`¡Conversión a ${targetFormat.toUpperCase()} completada! 🎉`, 'success');
-    addToHistory(downloadFilename, targetFormat.toUpperCase(), 'Conversión');
+    showStatus(`¡Conversión a ${opt.short} completada! 🎉`, 'success');
+    addToHistory(downloadFilename, opt.short, 'Conversión');
   } catch (err) {
     showStatus(err.message, 'error');
   } finally {

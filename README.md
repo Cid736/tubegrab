@@ -13,7 +13,7 @@ Local YouTube video/audio downloader **and** audio/video format converter. Runs 
 ## Features
 
 - **Download from YouTube** in MP4 (up to 4K) or MP3/OGG (64–320 kbps), with a live preview (title, thumbnail, duration) before downloading
-- **Convert your own files** between audio formats (MP3, WAV, OGG, M4A, FLAC, OPUS) or video formats (MP4, WEBM, MKV, AVI, MOV), via drag-and-drop
+- **Convert your own files** (drag-and-drop) to 11 audio formats (MP3, AAC, M4A, OGG, OPUS, WMA, AC3, FLAC, ALAC, WAV, AIFF) or 12 video formats (MP4 H.264, MP4 H.265/HEVC, WEBM, MKV, MOV, AVI, WMV, FLV, MPG, 3GP, OGV, animated GIF). Audio settings: bitrate, sample rate, mono/stereo, loudness normalization; video settings: resolution, quality, frame rate, strip audio; trim start/end for both. Extract the audio track from any video.
 - Local download/conversion history (kept in your browser only)
 - 100% local processing using [yt-dlp](https://github.com/yt-dlp/yt-dlp) + ffmpeg — nothing is uploaded to a third party
 - Cookie support for age-restricted videos
@@ -110,7 +110,7 @@ Descargador local de vídeo/audio de YouTube **y** conversor de formatos de audi
 ## Características
 
 - **Descarga de YouTube** en MP4 (hasta 4K) o MP3/OGG (64–320 kbps), con vista previa (título, miniatura, duración) antes de descargar
-- **Convierte tus propios archivos** entre formatos de audio (MP3, WAV, OGG, M4A, FLAC, OPUS) o de vídeo (MP4, WEBM, MKV, AVI, MOV), arrastrando y soltando
+- **Convierte tus propios archivos** (arrastrando y soltando) a 11 formatos de audio (MP3, AAC, M4A, OGG, OPUS, WMA, AC3, FLAC, ALAC, WAV, AIFF) o 12 de vídeo (MP4 H.264, MP4 H.265/HEVC, WEBM, MKV, MOV, AVI, WMV, FLV, MPG, 3GP, OGV, GIF animado). Ajustes de audio: calidad, frecuencia, mono/estéreo y normalizar volumen; de vídeo: resolución, calidad, fotogramas y quitar el audio; recorte de inicio/fin en ambos. Extrae el audio de cualquier vídeo.
 - Historial local de descargas/conversiones (guardado solo en tu navegador)
 - Procesamiento 100% local usando [yt-dlp](https://github.com/yt-dlp/yt-dlp) + ffmpeg — nada se sube a terceros
 - Compatible con cookies para vídeos con restricción de edad

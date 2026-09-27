@@ -135,22 +135,65 @@ const _apiLimiter = rateLimit({
 app.use('/api/', _apiLimiter);
 
 // === Format conversion (local file upload) ===
+// Keys are what the client sends as targetFormat; `ext` is the output file
+// extension (several formats share one, e.g. m4a for both AAC and ALAC).
 const AUDIO_CONVERT_FORMATS = {
-  mp3: { codec: 'libmp3lame', contentType: 'audio/mpeg' },
-  wav: { codec: 'pcm_s16le', contentType: 'audio/wav' },
-  ogg: { codec: 'libvorbis', contentType: 'audio/ogg' },
-  m4a: { codec: 'aac', contentType: 'audio/mp4' },
-  flac: { codec: 'flac', contentType: 'audio/flac' },
-  opus: { codec: 'libopus', contentType: 'audio/opus' },
+  mp3: { ext: 'mp3', codec: 'libmp3lame', contentType: 'audio/mpeg', lossy: true },
+  aac: { ext: 'aac', codec: 'aac', contentType: 'audio/aac', lossy: true },
+  m4a: { ext: 'm4a', codec: 'aac', contentType: 'audio/mp4', lossy: true },
+  ogg: { ext: 'ogg', codec: 'libvorbis', contentType: 'audio/ogg', lossy: true },
+  // libopus only accepts its own sample rates; ffmpeg resamples automatically
+  // as long as we don't force -ar.
+  opus: { ext: 'opus', codec: 'libopus', contentType: 'audio/opus', lossy: true, fixedSampleRate: true },
+  wma: { ext: 'wma', codec: 'wmav2', contentType: 'audio/x-ms-wma', lossy: true },
+  ac3: { ext: 'ac3', codec: 'ac3', contentType: 'audio/ac3', lossy: true },
+  flac: { ext: 'flac', codec: 'flac', contentType: 'audio/flac', lossy: false },
+  alac: { ext: 'm4a', codec: 'alac', contentType: 'audio/mp4', lossy: false },
+  wav: { ext: 'wav', codec: 'pcm_s16le', contentType: 'audio/wav', lossy: false },
+  aiff: { ext: 'aiff', codec: 'pcm_s16be', contentType: 'audio/aiff', lossy: false },
 };
+// `family` selects how the quality setting maps onto the encoder's own scale.
 const VIDEO_CONVERT_FORMATS = {
-  mp4: { vcodec: 'libx264', acodec: 'aac', contentType: 'video/mp4' },
-  webm: { vcodec: 'libvpx-vp9', acodec: 'libopus', contentType: 'video/webm' },
-  mkv: { vcodec: 'libx264', acodec: 'aac', contentType: 'video/x-matroska' },
-  avi: { vcodec: 'mpeg4', acodec: 'libmp3lame', contentType: 'video/x-msvideo' },
-  mov: { vcodec: 'libx264', acodec: 'aac', contentType: 'video/quicktime' },
+  mp4: { ext: 'mp4', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/mp4', extra: ['-pix_fmt', 'yuv420p', '-movflags', '+faststart'] },
+  hevc: { ext: 'mp4', vcodec: 'libx265', acodec: 'aac', family: 'x265', contentType: 'video/mp4', extra: ['-preset', 'fast', '-pix_fmt', 'yuv420p', '-tag:v', 'hvc1', '-movflags', '+faststart'] },
+  webm: { ext: 'webm', vcodec: 'libvpx-vp9', acodec: 'libopus', family: 'vp9', contentType: 'video/webm', extra: ['-b:v', '0', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '4'] },
+  mkv: { ext: 'mkv', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/x-matroska', extra: ['-pix_fmt', 'yuv420p'] },
+  mov: { ext: 'mov', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/quicktime', extra: ['-pix_fmt', 'yuv420p'] },
+  avi: { ext: 'avi', vcodec: 'mpeg4', acodec: 'libmp3lame', family: 'qscale', contentType: 'video/x-msvideo' },
+  wmv: { ext: 'wmv', vcodec: 'wmv2', acodec: 'wmav2', family: 'qscale', contentType: 'video/x-ms-wmv' },
+  flv: { ext: 'flv', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/x-flv', extra: ['-pix_fmt', 'yuv420p'] },
+  // MPEG-2 only allows a fixed set of frame rates.
+  mpg: { ext: 'mpg', vcodec: 'mpeg2video', acodec: 'mp2', family: 'qscale', contentType: 'video/mpeg', allowedFps: ['24', '30', '60'], defaultFps: '25' },
+  '3gp': { ext: '3gp', vcodec: 'libx264', acodec: 'aac', family: 'x264', contentType: 'video/3gpp', extra: ['-pix_fmt', 'yuv420p'] },
+  ogv: { ext: 'ogv', vcodec: 'libtheora', acodec: 'libvorbis', family: 'theora', contentType: 'video/ogg' },
+  gif: { ext: 'gif', vcodec: 'gif', acodec: null, family: 'gif', contentType: 'image/gif' },
 };
+const VIDEO_QUALITY_SCALES = {
+  x264: { alta: ['-crf', '18'], media: ['-crf', '23'], baja: ['-crf', '28'] },
+  x265: { alta: ['-crf', '22'], media: ['-crf', '28'], baja: ['-crf', '32'] },
+  vp9: { alta: ['-crf', '24'], media: ['-crf', '32'], baja: ['-crf', '40'] },
+  qscale: { alta: ['-q:v', '2'], media: ['-q:v', '5'], baja: ['-q:v', '10'] },
+  theora: { alta: ['-q:v', '9'], media: ['-q:v', '7'], baja: ['-q:v', '5'] },
+};
+const AUDIO_BITRATES = ['64', '96', '128', '160', '192', '256', '320'];
+const SAMPLE_RATES = ['44100', '48000'];
+const CHANNELS = ['1', '2'];
+const RESOLUTIONS = ['2160', '1440', '1080', '720', '480', '360', '240'];
+const QUALITIES = ['alta', 'media', 'baja'];
+const FPS_VALUES = ['60', '30', '24', '15', '10'];
+const GIF_MAX_FPS = 30;
 const MAX_CONVERT_SIZE = 300 * 1024 * 1024; // 300MB
+
+const pick = (value, allowed) => (allowed.includes(String(value)) ? String(value) : null);
+
+/** "90", "1:30", "0:01:30.5" -> seconds; '' -> null; anything else -> NaN. */
+function parseTimestamp(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  if (!/^\d{1,5}(:[0-5]?\d){0,2}(\.\d{1,3})?$/.test(value)) return NaN;
+  const seconds = value.split(':').reduce((acc, part) => acc * 60 + parseFloat(part), 0);
+  return seconds <= 24 * 3600 ? seconds : NaN;
+}
 
 // Reject uploads that are clearly not media before they ever reach ffmpeg.
 // The client-supplied mimetype isn't cryptographically trustworthy, and
@@ -162,8 +205,8 @@ const MAX_CONVERT_SIZE = 300 * 1024 * 1024; // 300MB
 // .exe, .pdf, etc. with its own real mimetype) from ever reaching ffmpeg.
 // See BUGLOG.md, revisión 5.
 const ALLOWED_UPLOAD_EXTENSIONS = new Set([
-  ...Object.keys(AUDIO_CONVERT_FORMATS), 'aac', 'wma',
-  ...Object.keys(VIDEO_CONVERT_FORMATS), 'flv', 'wmv', '3gp',
+  'mp3', 'aac', 'm4a', 'ogg', 'oga', 'opus', 'wma', 'ac3', 'flac', 'wav', 'aiff', 'aif', 'amr', 'mka',
+  'mp4', 'm4v', 'webm', 'mkv', 'mov', 'avi', 'wmv', 'flv', 'mpg', 'mpeg', '3gp', 'ogv', 'ts', 'mts', 'gif',
 ]);
 const GENERIC_MIMETYPES = new Set(['application/octet-stream', 'application/x-matroska', '']);
 
@@ -171,7 +214,8 @@ const upload = multer({
   dest: os.tmpdir(),
   limits: { fileSize: MAX_CONVERT_SIZE, files: 1 },
   fileFilter: (req, file, cb) => {
-    const isMediaMime = /^(audio|video)\//.test(file.mimetype);
+    // Animated GIFs are accepted as a video source (e.g. GIF -> MP4).
+    const isMediaMime = /^(audio|video)\//.test(file.mimetype) || file.mimetype === 'image/gif';
     const ext = (file.originalname.split('.').pop() || '').toLowerCase();
     const isGenericButKnownExt = GENERIC_MIMETYPES.has(file.mimetype) && ALLOWED_UPLOAD_EXTENSIONS.has(ext);
     if (!isMediaMime && !isGenericButKnownExt) {
@@ -181,13 +225,58 @@ const upload = multer({
   },
 });
 
+function buildAudioArgs(config, body) {
+  const args = ['-vn', '-c:a', config.codec];
+  const bitrate = config.lossy ? pick(body.audioBitrate, AUDIO_BITRATES) : null;
+  if (bitrate) args.push('-b:a', `${bitrate}k`);
+  let sampleRate = config.fixedSampleRate ? null : pick(body.sampleRate, SAMPLE_RATES);
+  if (body.normalize === 'true') {
+    args.push('-af', 'loudnorm=I=-16:TP=-1.5:LRA=11');
+    // loudnorm works at 192 kHz internally; bring it back to a normal rate.
+    if (!sampleRate && !config.fixedSampleRate) sampleRate = '44100';
+  }
+  if (sampleRate) args.push('-ar', sampleRate);
+  const channels = pick(body.channels, CHANNELS);
+  if (channels) args.push('-ac', channels);
+  return args;
+}
+
+function buildVideoArgs(config, body) {
+  const resolution = pick(body.resolution, RESOLUTIONS);
+  let fps = pick(body.fps, FPS_VALUES);
+
+  if (config.family === 'gif') {
+    const gifFps = Math.min(Number(fps || 12), GIF_MAX_FPS);
+    const scale = resolution
+      ? `scale=-2:'min(${resolution},ih)':flags=lanczos`
+      : `scale='min(480,iw)':-2:flags=lanczos`;
+    // Two-pass palette in one graph: far better colours than GIF's default palette.
+    return ['-vf', `fps=${gifFps},${scale},split[a][b];[a]palettegen[p];[b][p]paletteuse`, '-loop', '0', '-an'];
+  }
+
+  // Most encoders need even dimensions; never upscale when a height is chosen.
+  const scale = resolution
+    ? `scale=-2:'min(${resolution},trunc(ih/2)*2)'`
+    : 'scale=trunc(iw/2)*2:trunc(ih/2)*2';
+  if (config.allowedFps) fps = fps && config.allowedFps.includes(fps) ? fps : config.defaultFps;
+  const quality = pick(body.quality, QUALITIES) || 'media';
+
+  const args = ['-vf', scale];
+  if (fps) args.push('-r', fps);
+  args.push('-c:v', config.vcodec, ...VIDEO_QUALITY_SCALES[config.family][quality], ...(config.extra || []));
+  if (body.removeAudio === 'true') args.push('-an');
+  else args.push('-c:a', config.acodec);
+  return args;
+}
+
 app.post('/api/convert', upload.single('file'), (req, res) => {
   const cleanupInput = () => { if (req.file) fs.unlink(req.file.path, () => {}); };
+  const body = req.body || {};
 
-  const targetFormat = String(req.body.targetFormat || '').toLowerCase();
-  const isAudio = Object.prototype.hasOwnProperty.call(AUDIO_CONVERT_FORMATS, targetFormat);
-  const isVideo = Object.prototype.hasOwnProperty.call(VIDEO_CONVERT_FORMATS, targetFormat);
-  if (!isAudio && !isVideo) {
+  const targetFormat = String(body.targetFormat || '').toLowerCase();
+  const audioConfig = Object.prototype.hasOwnProperty.call(AUDIO_CONVERT_FORMATS, targetFormat) ? AUDIO_CONVERT_FORMATS[targetFormat] : null;
+  const videoConfig = Object.prototype.hasOwnProperty.call(VIDEO_CONVERT_FORMATS, targetFormat) ? VIDEO_CONVERT_FORMATS[targetFormat] : null;
+  if (!audioConfig && !videoConfig) {
     cleanupInput();
     return res.status(400).json({ error: 'Formato de destino no soportado.' });
   }
@@ -195,27 +284,33 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
     return res.status(400).json({ error: 'No se recibió ningún archivo.' });
   }
 
-  const outId = `convert_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-  const outputPath = path.join(os.tmpdir(), `${outId}.${targetFormat}`);
-
-  const originalName = (req.file.originalname || (isAudio ? 'audio' : 'video')).replace(/[^\w\s.-]/gi, '').trim() || 'archivo';
-  const baseName = originalName.replace(/\.[^/.]+$/, '') || 'archivo';
-  const outputFilename = `${baseName}.${targetFormat}`;
-
-  let args, contentType;
-  if (isAudio) {
-    const config = AUDIO_CONVERT_FORMATS[targetFormat];
-    contentType = config.contentType;
-    args = ['-y', '-i', req.file.path, '-vn', '-map_metadata', '-1', '-acodec', config.codec, outputPath];
-  } else {
-    const config = VIDEO_CONVERT_FORMATS[targetFormat];
-    contentType = config.contentType;
-    args = ['-y', '-i', req.file.path, '-c:v', config.vcodec, '-c:a', config.acodec, outputPath];
+  const trimStart = parseTimestamp(body.trimStart);
+  const trimEnd = parseTimestamp(body.trimEnd);
+  if (Number.isNaN(trimStart) || Number.isNaN(trimEnd) || (trimStart !== null && trimEnd !== null && trimEnd <= trimStart)) {
+    cleanupInput();
+    return res.status(400).json({ error: 'Tiempo de recorte no válido. Usa segundos o mm:ss, y que "Hasta" sea mayor que "Desde".' });
   }
+
+  const config = audioConfig || videoConfig;
+  const outId = `convert_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const outputPath = path.join(os.tmpdir(), `${outId}.${config.ext}`);
+
+  const originalName = (req.file.originalname || (audioConfig ? 'audio' : 'video')).replace(/[^\w\s.-]/gi, '').trim() || 'archivo';
+  const baseName = originalName.replace(/\.[^/.]+$/, '') || 'archivo';
+  const outputFilename = `${baseName}.${config.ext}`;
+  const contentType = config.contentType;
+
+  const args = ['-y'];
+  if (trimStart !== null) args.push('-ss', String(trimStart));
+  if (trimEnd !== null) args.push('-to', String(trimEnd));
+  args.push('-i', req.file.path, '-map_metadata', '-1');
+  args.push(...(audioConfig ? buildAudioArgs(audioConfig, body) : buildVideoArgs(videoConfig, body)));
+  args.push(outputPath);
 
   console.log(`[CONVERT] ${originalName} -> ${targetFormat}`);
 
-  execFile(currentFfmpegPath, args, { timeout: 10 * 60 * 1000, windowsHide: true }, (err) => {
+  // HEVC/VP9 on long videos can take a while.
+  execFile(currentFfmpegPath, args, { timeout: 30 * 60 * 1000, windowsHide: true }, (err) => {
     cleanupInput();
 
     if (err) {

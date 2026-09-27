@@ -298,6 +298,34 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
   transform: translateY(-50%); pointer-events: none;
 }
 
+/* ===== CONVERT SETTINGS ===== */
+.settings-grid, .trim-row {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px; margin-top: 16px; align-items: end;
+}
+.trim-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.setting .option-label { margin-bottom: 8px; font-size: 0.72rem; }
+.setting .select-wrapper select { padding: 12px 36px 12px 14px; font-size: 0.88rem; }
+.setting .select-wrapper::after { right: 14px; }
+.select-wrapper select:disabled { opacity: 0.45; cursor: not-allowed; }
+.text-input {
+  width: 100%; background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text); padding: 12px 14px;
+  font-size: 0.88rem; font-family: inherit; outline: none;
+  transition: all 0.3s; user-select: text;
+}
+.text-input::placeholder { color: var(--text-muted); }
+.text-input:focus { border-color: var(--border-focus); background: rgba(0, 0, 0, 0.3); }
+.check-option {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 0.88rem; color: var(--text-dim); cursor: pointer;
+}
+.check-option input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+.setting-hint { margin-top: 12px; font-size: 0.75rem; line-height: 1.5; color: var(--text-muted); }
+.setting-hint:empty { display: none; }
+
 /* ===== DOWNLOAD BUTTON ===== */
 .btn-download {
   width: 100%; position: relative; overflow: hidden;
@@ -505,6 +533,7 @@ input, textarea, .preview-title, .preview-meta, .history-item-name, .status-mess
   .is-desktop-app .header-badge { display: none; }
 }
 @media (max-width: 480px) {
+  .settings-grid { grid-template-columns: 1fr; }
   .version-chip { max-width: 190px; }
   .format-btn { padding: 12px 8px; font-size: 0.85rem; gap: 6px; }
 }
