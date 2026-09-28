@@ -28,6 +28,8 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - 11 audio and 12 video formats, batch, presets (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiobook…), speed, rotate, resolution…
 - **Trim with a preview and waveform**: drag the handles and play the part before converting
 - **Editor** with a timeline (thumbnails, waveform, zoom): keep from any second to any other, cut with the blade (B), mark in/out (I/O), remove or restore clips, undo/redo, frame stepping and NLE-style shortcuts (Space, J/L, arrows). Export with exact cuts (re-encoded, GPU if available) or fast cuts (stream copy, lossless, keyframe-aligned)
+  - **Remove silences** in one click, a **clip list** (jump, remove, restore), **snapping** and ↑/↓ to jump between cuts
+  - Output adjustments: **vertical 9:16 / square / 4:5** centre crop (with a live frame on the viewer), **fade in/out**, **volume** or mute, **rotate/mirror**, and **each clip as its own file**
 - **Merge** several audio or video files into one (clips of other sizes are letterboxed)
 - **Compress to a size** (e.g. 8 MB for Discord, 16 MB for WhatsApp): TubeGrab works out the quality, two-pass
 - **Image**: a frame at any moment (with a slider) or the embedded cover art, as JPG/PNG/WEBP
@@ -185,6 +187,8 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - 11 formatos de audio y 12 de vídeo, por lotes, preajustes (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiolibro…), velocidad, girar, resolución…
 - **Recorte con vista previa y forma de onda**: arrastra los tiradores y escucha el tramo antes de convertir
 - **Editor** con línea de tiempo (miniaturas, forma de onda, zoom): quédate del segundo que quieras al que quieras, corta con la cuchilla (B), marca entrada/salida (I/O), quita o recupera tramos, deshaz/rehaz, avanza fotograma a fotograma y usa atajos de editor (Espacio, J/L, flechas). Exporta con cortes exactos (recodifica, con GPU si hay) o rápidos (copia sin pérdida, ajustados a fotogramas clave)
+  - **Quitar silencios** con un clic, **lista de tramos** (saltar, quitar, recuperar), **imán** y ↑/↓ para saltar entre cortes
+  - Ajustes del resultado: recorte **vertical 9:16 / cuadrado / 4:5** al centro (con el marco en el visor), **fundidos**, **volumen** o sin sonido, **girar/espejo** y **cada tramo en un archivo aparte**
 - **Unir** varios audios o vídeos en uno (los clips de otro tamaño se encajan con bandas negras)
 - **Comprimir a un tamaño** (p. ej. 8 MB para Discord, 16 MB para WhatsApp): TubeGrab calcula la calidad, en dos pasadas
 - **Imagen**: un fotograma en cualquier momento (con deslizador) o la carátula incrustada, en JPG/PNG/WEBP

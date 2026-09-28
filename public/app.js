@@ -1533,6 +1533,8 @@ const editor = (() => {
   let drag = null;               // { kind: 'scrub' } | { kind: 'cut', i }
   let raf = 0;
   let colors = null;
+  let snap = true;
+  const SNAP_PX = 8;
 
   const thumbs = new Map();      // time key → canvas
   let thumbQueue = [];
@@ -1563,6 +1565,18 @@ const editor = (() => {
   const kept = () => segs.filter((g) => !g.off);
   const keptLength = () => kept().reduce((acc, g) => acc + (g.e - g.s), 0);
   const now = () => video.currentTime || 0;
+  const cutTimes = () => segs.slice(0, -1).map((g) => g.e);
+  /** With the magnet on, `sec` sticks to a cut, the start or the end when close on screen. */
+  function snapTime(sec, targets = [0, duration, ...cutTimes()]) {
+    if (!snap) return sec;
+    let best = sec;
+    let bestPx = SNAP_PX;
+    for (const target of targets) {
+      const px = Math.abs(target - sec) * pps();
+      if (px < bestPx) { best = target; bestPx = px; }
+    }
+    return best;
+  }
 
   function readColors() {
     const cs = getComputedStyle(document.documentElement);
@@ -1919,6 +1933,7 @@ const editor = (() => {
     sizeCanvas();
     timeline.scrollLeft = 0;
     changed();
+    requestAnimationFrame(updatePreview);
   });
   video.addEventListener('error', () => {
     if (!file) return;
@@ -1936,6 +1951,7 @@ const editor = (() => {
       });
     $('edUndo').disabled = !undoStack.length;
     $('edRedo').disabled = !redoStack.length;
+    renderClips();
     updateTime();
     draw();
   }
@@ -1983,10 +1999,10 @@ const editor = (() => {
     const ci = e.offsetY > RULER ? cutNear(e.clientX) : -1;
     if (ci !== -1) {
       commit();
-      drag = { kind: 'cut', i: ci };
+      drag = { kind: 'cut', i: ci, anchor: now() };
     } else {
       drag = { kind: 'scrub' };
-      const at = timeAt(e.clientX);
+      const at = snapTime(timeAt(e.clientX));
       if (e.offsetY > RULER) sel = segAt(at);
       seek(at);
       updateTime();
@@ -1996,12 +2012,12 @@ const editor = (() => {
       if (drag.kind === 'cut') {
         const a = segs[drag.i];
         const b = segs[drag.i + 1];
-        const v = clamp(at, a.s + 0.05, b.e - 0.05);
+        const v = clamp(snapTime(at, [drag.anchor]), a.s + 0.05, b.e - 0.05);
         a.e = v; b.s = v;
         seek(v);
         changed();
       } else {
-        seek(at);
+        seek(snapTime(at));
       }
     };
     const up = () => {
@@ -2021,7 +2037,108 @@ const editor = (() => {
     toggleSel();
   });
 
+  // ---- jump between cuts ----
+  function jumpCut(dir) {
+    const edges = [0, ...cutTimes(), duration];
+    const at = now();
+    const target = dir < 0 ? [...edges].reverse().find((x) => x < at - 0.01) : edges.find((x) => x > at + 0.01);
+    if (target !== undefined) { seek(target); sel = segAt(Math.min(target, duration - 0.001)); changed(); }
+  }
+
+  // ---- remove silences (from the waveform already computed here) ----
+  function removeSilences() {
+    const status = $('editStatus');
+    if (!peaks) { setStatusEl(status, t('No se puede analizar el sonido de este archivo.'), 'error'); return; }
+    const THRESHOLD = 0.04;   // of the loudest moment (~ -28 dB)
+    const MIN_LEN = 1;        // seconds of silence to count
+    const PAD = 0.15;         // keep a little breath on each side
+    const runs = [];
+    let start = null;
+    for (let i = 0; i <= peaks.length; i++) {
+      const quiet = i < peaks.length && peaks[i] < THRESHOLD;
+      if (quiet && start === null) start = i;
+      if (!quiet && start !== null) {
+        const a = start / peaksPerSec;
+        const b = Math.min(duration, i / peaksPerSec);
+        if (b - a >= MIN_LEN) runs.push([a === 0 ? 0 : a + PAD, b >= duration - 0.01 ? duration : b - PAD]);
+        start = null;
+      }
+    }
+    const fresh = runs.filter(([a, b]) => segs.some((g) => !g.off && g.s < b && g.e > a));
+    if (!fresh.length) { setStatusEl(status, t('No hay silencios de más de un segundo.'), 'success'); return; }
+    commit();
+    for (const [a, b] of fresh) {
+      splitAt(a);
+      splitAt(b);
+      segs.forEach((g) => { if (g.s >= a - 1e-6 && g.e <= b + 1e-6) g.off = true; });
+    }
+    const secs = fresh.reduce((acc, [a, b]) => acc + (b - a), 0);
+    setStatusEl(status, t('Quitados {n} silencios ({s}). Ctrl+Z para deshacer.', { n: fresh.length, s: formatTime(secs, true) }), 'success');
+    changed();
+  }
+
+  // ---- clip list ----
+  function renderClips() {
+    const list = $('edClips');
+    list.innerHTML = '';
+    list.classList.toggle('hidden', segs.length < 2);
+    if (segs.length < 2) return;
+    segs.forEach((g, i) => {
+      const li = document.createElement('li');
+      li.className = `ed-clip${g.off ? ' off' : ''}${i === sel ? ' selected' : ''}`;
+      li.innerHTML = `<button type="button" class="ed-clip-main"><span class="ed-clip-n">${i + 1}</span>`
+        + `<span class="ed-clip-t">${escapeHtml(tc(g.s))} → ${escapeHtml(tc(g.e))}</span>`
+        + `<span class="ed-clip-d">${escapeHtml(formatTime(g.e - g.s, true))}</span></button>`
+        + `<button type="button" class="link-btn ed-clip-toggle">${escapeHtml(g.off ? t('Recuperar') : t('Quitar'))}</button>`;
+      li.querySelector('.ed-clip-main').addEventListener('click', () => { sel = i; seek(g.s); changed(); });
+      li.querySelector('.ed-clip-toggle').addEventListener('click', () => { sel = i; toggleSel(); });
+      list.appendChild(li);
+    });
+  }
+
+  // ---- live preview of the shape, rotation and volume ----
+  function updatePreview() {
+    const frame = $('edCrop');
+    const aspect = $('edAspect').value;
+    const rotate = $('edRotate').value;
+    const vol = $('edVolume').value;
+    video.muted = vol === 'mute';
+    video.volume = vol && vol !== 'mute' ? Math.min(1, Number(vol)) : 1;
+    if (!hasVideo || !video.videoWidth) { frame.classList.add('hidden'); video.style.transform = ''; return; }
+    const box = video.getBoundingClientRect();
+    const fit = Math.min(box.width / video.videoWidth, box.height / video.videoHeight);
+    let cw = video.videoWidth * fit;
+    let ch = video.videoHeight * fit;
+    const quarter = rotate === '90' || rotate === '270';
+    let k = 1;
+    if (quarter) { k = Math.min(box.width / ch, box.height / cw); [cw, ch] = [ch * k, cw * k]; }
+    const transforms = { 90: `rotate(90deg) scale(${k})`, 270: `rotate(-90deg) scale(${k})`, 180: 'rotate(180deg)', hflip: 'scaleX(-1)' };
+    video.style.transform = transforms[rotate] || '';
+    if (!aspect) { frame.classList.add('hidden'); return; }
+    const [rw, rh] = aspect.split(':').map(Number);
+    const r = rw / rh;
+    const w = cw / ch > r ? ch * r : cw;
+    const h = cw / ch > r ? ch : cw / r;
+    // Centred in the viewer (the video element is centred and not moved by the transform).
+    frame.style.width = `${w}px`;
+    frame.style.height = `${h}px`;
+    frame.style.left = `${video.offsetLeft + (video.offsetWidth - w) / 2}px`;
+    frame.style.top = `${video.offsetTop + (video.offsetHeight - h) / 2}px`;
+    $('edCropLabel').textContent = aspect;
+    frame.classList.remove('hidden');
+  }
+  new ResizeObserver(() => updatePreview()).observe($('edViewer'));
+  ['edAspect', 'edRotate', 'edVolume', 'edFade', 'edSeparate'].forEach((id) => $(id).addEventListener('change', () => { updatePreview(); refreshExportUI(); }));
+
   // ---- buttons ----
+  $('edPrevCut').addEventListener('click', () => jumpCut(-1));
+  $('edNextCut').addEventListener('click', () => jumpCut(1));
+  $('edSilence').addEventListener('click', removeSilences);
+  $('edSnap').addEventListener('click', () => {
+    snap = !snap;
+    $('edSnap').classList.toggle('active', snap);
+    $('edSnap').setAttribute('aria-pressed', String(snap));
+  });
   $('edPlay').addEventListener('click', togglePlay);
   $('edHome').addEventListener('click', () => seek(0));
   $('edEnd').addEventListener('click', () => seek(duration));
@@ -2073,6 +2190,8 @@ const editor = (() => {
     else if (k === 'ArrowRight') seek(now() + (e.shiftKey ? 1 : FRAME));
     else if (k === 'j' || k === 'J') seek(now() - 5);
     else if (k === 'l' || k === 'L') seek(now() + 5);
+    else if (k === 'ArrowUp') jumpCut(-1);
+    else if (k === 'ArrowDown') jumpCut(1);
     else if (k === 'Home') seek(0);
     else if (k === 'End') seek(duration);
     else if (k === 'i' || k === 'I') markIn();
@@ -2086,12 +2205,17 @@ const editor = (() => {
   });
 
   // ---- export ----
+  const hasEffects = () => Boolean($('edAspect').value || $('edFade').value || $('edVolume').value || $('edRotate').value);
   function refreshExportUI() {
     const format = $('edFormat').value;
-    if (format !== 'original' && mode === 'fast') mode = 'exact';
+    const fastOk = format === 'original' && !hasEffects();
+    if (!fastOk && mode === 'fast') mode = 'exact';
     $('edMode').querySelectorAll('.kind-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.mode === mode);
-      if (b.dataset.mode === 'fast') b.disabled = format !== 'original';
+      if (b.dataset.mode === 'fast') {
+        b.disabled = !fastOk;
+        b.title = fastOk ? '' : t('Los rápidos solo sirven con el formato original y sin ajustes del resultado.');
+      }
     });
     const audioOnly = ['mp3', 'm4a', 'wav', 'flac'].includes(format) || (file && duration && !hasVideo);
     $('edQualityRow').classList.toggle('hidden', mode === 'fast' || audioOnly);
@@ -2119,6 +2243,8 @@ const editor = (() => {
       await uploadTo('/api/jobs/edit', 'file', [file], {
         segments: JSON.stringify(k.map((g) => [Number(g.s.toFixed(3)), Number(g.e.toFixed(3))])),
         targetFormat: $('edFormat').value, mode, quality: $('edQuality').value,
+        aspect: $('edAspect').value, fade: $('edFade').value, volume: $('edVolume').value, rotate: $('edRotate').value,
+        separate: String($('edSeparate').checked),
       }, (pct) => { btn.textContent = `${t('Subiendo')} ${pct}%`; });
       setStatusEl(status, t('Añadido a la cola'), 'success');
     } catch (err) {

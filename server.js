@@ -486,18 +486,28 @@ app.post('/api/jobs/edit', createLimiter, requireClient, upload.single('file'), 
   const targetFormat = String((req.body || {}).targetFormat || '').toLowerCase();
   const mode = (req.body || {}).mode === 'fast' ? 'fast' : 'exact';
   const segments = convert.parseSegments((req.body || {}).segments);
+  const fx = convert.parseEditEffects(req.body || {});
   singleUpload(req, res, {
     check: () => {
       if (!segments) return 'Tramos no válidos.';
       if (targetFormat !== 'original' && (!convert.formatFor(targetFormat) || targetFormat === 'gif')) return 'Formato de destino no soportado.';
       if (mode === 'fast' && targetFormat !== 'original') return 'El modo rápido solo funciona con el formato original.';
+      if (mode === 'fast' && convert.needsEncoding(fx)) return 'Fundidos, volumen, formato de pantalla y girar necesitan cortes exactos.';
       return null;
     },
     detail: () => {
       const kept = Math.round(segments.reduce((acc, [s, e]) => acc + (e - s), 0));
       const label = targetFormat === 'original' ? 'original' : convert.formatFor(targetFormat).config.label;
       const clock = `${Math.floor(kept / 60)}:${String(kept % 60).padStart(2, '0')}`;
-      return `Editar · ${segments.length} ${segments.length === 1 ? 'tramo' : 'tramos'} · ${clock} · ${label}${mode === 'fast' ? ' · rápido' : ''}`;
+      const extras = [
+        fx.separate && segments.length > 1 ? 'por separado' : '',
+        fx.fade ? 'fundidos' : '',
+        fx.volume === 0 ? 'sin sonido' : fx.volume !== null ? `volumen ${Math.round(fx.volume * 100)} %` : '',
+        fx.aspect || '',
+        fx.rotate ? 'girado' : '',
+        mode === 'fast' ? 'rápido' : '',
+      ].filter(Boolean);
+      return [`Editar · ${segments.length} ${segments.length === 1 ? 'tramo' : 'tramos'} · ${clock} · ${label}`, ...extras].join(' · ');
     },
     makeRun: (file, body) => convert.runEdit({
       inputPath: file.path, originalName: nameOf(file), segments, targetFormat, mode, body, ffmpegPath: currentFfmpegPath(), hw: hwFor(),

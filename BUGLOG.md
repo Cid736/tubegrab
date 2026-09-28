@@ -297,3 +297,13 @@ Nueva página **Convertir → Editor**: visor, línea de tiempo con miniaturas y
 - **`/api/jobs/edit`:** los tramos llegan como JSON y se validan en `parseSegments`: máx. 200 pares de números finitos, 0 ≤ inicio < fin ≤ 24 h, ordenados y fusionados; en el grafo de filtros solo entran números formateados con `toFixed(3)`. Formato de destino de una lista cerrada (o "original", que se traduce con una tabla fija por extensión); el modo rápido solo con "original".
 - **Modo rápido:** la lista del demuxer `concat` la escribe el servidor, con nombres propios (`partN.ext`) junto a la lista, sin `-safe 0` (el modo seguro del demuxer rechaza cualquier otra ruta) y con `-protocol_whitelist file`. La entrada subida sigue pasando por la lista blanca de demuxers/protocolos. Las partes temporales se borran al terminar.
 - **Página:** la previsualización usa `blob:` locales (ya permitido por la CSP) y el archivo no sale del equipo hasta pulsar Exportar. Pruebas nuevas en `test/convert.test.js` y `test/server.test.js` (100 en total).
+
+---
+
+## 2026-09-29 — v2.7.0: Editor más completo
+
+Nuevo en el Editor: **quitar silencios** (se calcula en el navegador con la forma de onda ya decodificada; se puede deshacer), **lista de tramos**, **imán** y saltos entre cortes (↑/↓), y **ajustes del resultado**: formato de pantalla 9:16 / 1:1 / 4:5 / 16:9 (recorte al centro, con marco en el visor), fundidos de entrada y salida, volumen o sin sonido, girar/espejo y cada tramo en un archivo aparte (también con cortes rápidos).
+
+### Revisión de seguridad
+- Los ajustes nuevos solo aceptan valores de listas fijas (`parseEditEffects`: fundidos 0,5/1/2 s, volúmenes, cuatro proporciones y la tabla `ROTATIONS` ya existente); cualquier otro valor se ignora. Al grafo de filtros solo llegan números calculados en el servidor. Pedir ajustes con cortes rápidos se rechaza (400).
+- "Cada tramo aparte" usa nombres generados por el servidor (`<nombre> (tramo N)`), sin nada del cliente salvo el nombre del archivo ya saneado. Pruebas nuevas: 9:16 + fundidos + silencio, cuadrado girado, archivos por separado (exacto y rápido) y valores maliciosos.

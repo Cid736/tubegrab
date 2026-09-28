@@ -344,3 +344,6 @@ body.window-maximized .cap-restore { display: block; }
 [data-ui="windows"] .ed-btn, [data-ui="windows"] .ed-tool { border-radius: 4px; background: var(--w-control); border: 1px solid var(--w-stroke); }
 [data-ui="windows"] .ed-play { background: var(--accent); border-color: transparent; }
 [data-ui="windows"] .ed-key { border-radius: 3px; }
+[data-ui="windows"] .ed-clips { border-radius: 4px; background: var(--w-subtle); }
+[data-ui="windows"] .ed-clip-n { border-radius: 3px; }
+[data-ui="windows"] .ed-tool.ed-toggle.active { border-color: var(--accent); }

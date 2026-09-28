@@ -253,6 +253,22 @@
     'Igual que el original': 'Same as the original', 'MP3 (solo audio)': 'MP3 (audio only)', 'M4A (solo audio)': 'M4A (audio only)',
     'WAV (solo audio)': 'WAV (audio only)', 'FLAC (solo audio)': 'FLAC (audio only)', 'Baja (pesa menos)': 'Low (smaller file)',
     'Cortes': 'Cuts', 'Exactos': 'Exact', 'Rápidos': 'Fast', 'Exportar': 'Export',
+    'Corte anterior (↑)': 'Previous cut (↑)', 'Corte siguiente (↓)': 'Next cut (↓)',
+    'Busca los silencios de más de un segundo y los quita (puedes deshacerlo)': 'Finds silences longer than a second and removes them (you can undo it)',
+    'Quitar silencios': 'Remove silences', 'Imán': 'Snap', 'Imán: el cabezal y los cortes se pegan a los cortes cercanos': 'Snap: the playhead and cuts stick to nearby cuts',
+    'Tramos': 'Clips', 'Recuperar': 'Restore',
+    'Ajustes del resultado': 'Output adjustments', 'Formato de pantalla': 'Screen shape', 'recorta al centro': 'crops at the centre',
+    '9:16 vertical (TikTok, Reels, Shorts)': '9:16 vertical (TikTok, Reels, Shorts)', '1:1 cuadrado': '1:1 square', '4:5 (Instagram)': '4:5 (Instagram)',
+    '16:9 horizontal (YouTube)': '16:9 landscape (YouTube)', 'Fundido al empezar y al acabar': 'Fade in and out',
+    'Volumen': 'Volume', 'Igual': 'Unchanged', 'Sin sonido': 'No sound',
+    'Espejo': 'Mirror', 'Cada tramo en un archivo aparte': 'Each clip as its own file', 'en vez de unirlos': 'instead of joining them',
+    'No se puede analizar el sonido de este archivo.': "This file's sound can't be analysed here.",
+    'No hay silencios de más de un segundo.': 'No silences longer than a second.',
+    'Quitados {n} silencios ({s}). Ctrl+Z para deshacer.': 'Removed {n} silences ({s}). Ctrl+Z to undo.',
+    'Los rápidos solo sirven con el formato original y sin ajustes del resultado.': 'Fast cuts only work with the original format and no output adjustments.',
+    'Fundidos, volumen, formato de pantalla y girar necesitan cortes exactos.': 'Fades, volume, screen shape and rotation need exact cuts.',
+    'Sin sonido y sin vídeo no queda nada que exportar.': 'With no sound and no video there is nothing to export.',
+    'Atajos: Espacio reproducir · J / L ±5 s · ← / → fotograma (Mayús: 1 s) · ↑ / ↓ corte anterior o siguiente · I / O entrada y salida · B cortar · Supr quitar tramo · Ctrl+Z deshacer · Ctrl + rueda zoom': 'Shortcuts: Space play · J / L ±5 s · ← / → frame (Shift: 1 s) · ↑ / ↓ previous or next cut · I / O in and out · B cut · Del remove clip · Ctrl+Z undo · Ctrl + wheel zoom',
     'Exactos: corta en el fotograma justo (vuelve a codificar el vídeo).': 'Exact: cuts on the exact frame (re-encodes the video).',
     'Rápidos: sin volver a codificar, al instante y sin perder calidad, pero cada tramo empieza en el fotograma clave anterior (puede adelantarse un poco).': 'Fast: no re-encoding, instant and lossless, but each clip starts at the keyframe before it (may start a little early).',
     'Has quitado todo: recupera algún tramo para exportar.': 'You removed everything: restore a clip to export.',
@@ -274,6 +290,7 @@
   var PATTERNS = [
     [/^Uniendo (\d+) archivos$/, 'Merging $1 files'],
     [/^Cortando tramo (\d+)\/(\d+)$/, 'Cutting clip $1/$2'],
+    [/^Editando( \(GPU\))? (\d+)\/(\d+)$/, 'Editing$1 $2/$3'],
     [/^El archivo es demasiado grande \(máx\. (\d+) MB\)\.$/, 'The file is too big (max. $1 MB).'],
     [/^No se pudo iniciar (yt-dlp|ffmpeg): (.*)$/, "Couldn't start $1: $2"],
     [/^No se pudo leer "(.*)"\.$/, 'Couldn\'t read "$1".'],
@@ -287,7 +304,7 @@
   // Pieces of job descriptions ("MP4 Mejor calidad · por capítulos", "Unir 3 archivos · MP4"…).
   var PIECES = [
     ['Mejor calidad', 'Best quality'], ['por capítulos', 'by chapters'], ['–fin', '–end'], ['Comprimir a', 'Compress to'],
-    ['carátula', 'cover art'], ['fotograma', 'frame'], ['Unir ', 'Merge '], ['Editar', 'Edit'], [' tramos', ' clips'], [' tramo', ' clip'], ['rápido', 'fast'], [' archivos', ' files'], [' más', ' more'],
+    ['carátula', 'cover art'], ['fotograma', 'frame'], ['Unir ', 'Merge '], ['Editar', 'Edit'], [' tramos', ' clips'], [' tramo', ' clip'], ['rápido', 'fast'], ['por separado', 'separately'], ['fundidos', 'fades'], ['sin sonido', 'no sound'], ['volumen', 'volume'], ['girado', 'rotated'], [' archivos', ' files'], [' más', ' more'],
   ];
 
   function fill(s, vars) {

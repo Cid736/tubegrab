@@ -237,3 +237,41 @@ test('editor keeps only the chosen parts', { skip: !ffmpeg && 'ffmpeg not found'
     await assert.rejects(edit({ segments: [[20, 30]], targetFormat: 'original', mode: 'exact' }), /vacío/);
   });
 });
+
+test('editor adjustments: only fixed values, and they need exact cuts', () => {
+  const fx = convert.parseEditEffects({ fade: '1', volume: 'mute', aspect: '9:16', rotate: '90', separate: 'true' });
+  assert.deepEqual(fx, { fade: 1, volume: 0, aspect: '9:16', rotate: '90', separate: true });
+  const evil = convert.parseEditEffects({ fade: '1;x', volume: '99', aspect: '__proto__', rotate: 'toString', separate: 'yes' });
+  assert.deepEqual(evil, { fade: 0, volume: null, aspect: null, rotate: null, separate: false });
+  assert.equal(convert.needsEncoding(evil), false);
+  assert.equal(convert.needsEncoding({ ...evil, separate: true }), false, 'separate files work with fast cuts');
+  assert.equal(convert.needsEncoding(fx), true);
+});
+
+test('editor: vertical crop with fades, mute, and one file per clip', { skip: !ffmpeg && 'ffmpeg not found', timeout: 120_000 }, async (t) => {
+  const clip = path.join(work, 'edit-fx.mp4');
+  execFileSync(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=25:duration=8',
+    '-f', 'lavfi', '-i', 'sine=frequency=500:duration=8', '-shortest', '-c:v', 'libx264', '-g', '25', '-pix_fmt', 'yuv420p', '-c:a', 'aac', clip]);
+  const ctx = () => ({ dir: fs.mkdtempSync(path.join(work, 'fx-')), update() {}, setProcess() {}, isCanceled: () => false });
+  const edit = (opts) => convert.runEdit({ inputPath: clip, originalName: 'fx.mp4', ffmpegPath: ffmpeg, targetFormat: 'original', mode: 'exact', ...opts })({}, ctx());
+
+  await t.test('9:16 + fades + no sound', async () => {
+    const out = await edit({ segments: [[0, 3], [5, 7]], body: { aspect: '9:16', fade: '0.5', volume: 'mute' } });
+    const info = await convert.probe(ffmpeg, out);
+    assert.ok(info.hasVideo && !info.hasAudio && Math.abs(info.duration - 5) < 0.15, JSON.stringify(info));
+    assert.ok(info.width < info.height && Math.abs(info.width / info.height - 9 / 16) < 0.02, `${info.width}x${info.height}`);
+  });
+  await t.test('square + rotated + louder', async () => {
+    const out = await edit({ segments: [[1, 2]], body: { aspect: '1:1', rotate: '90', volume: '2' } });
+    const info = await convert.probe(ffmpeg, out);
+    assert.equal(info.width, info.height);
+    assert.ok(info.hasAudio);
+  });
+  for (const mode of ['exact', 'fast']) {
+    await t.test(`separate files (${mode})`, async () => {
+      const outs = await edit({ segments: [[0, 2], [4, 6], [6.5, 8]], mode, body: { separate: 'true' } });
+      assert.deepEqual(outs.map((f) => path.basename(f)), ['fx (tramo 1).mp4', 'fx (tramo 2).mp4', 'fx (tramo 3).mp4']);
+      assert.deepEqual(fs.readdirSync(path.dirname(outs[0])).sort(), outs.map((f) => path.basename(f)).sort(), 'no leftovers');
+    });
+  }
+});
