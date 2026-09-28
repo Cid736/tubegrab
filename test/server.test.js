@@ -354,7 +354,7 @@ test('answers on the IPv6 loopback too (same app, Host guard allows [::1])', asy
 
 test('TUBEGRAB_USERS makes the instance private (Basic auth)', async () => {
   const port = await freePort();
-  const { child, first } = startServer(port, { TUBEGRAB_USERS: 'ana:s3creta, luis:otra:con:dos-puntos' });
+  const { child, first } = startServer(port, { TUBEGRAB_USERS: 'ana:s3creta-larga, luis:otra:con:dos-puntos' });
   try {
     await first;
     const get = (headers = {}) => fetch(`http://localhost:${port}/`, { headers });
@@ -363,8 +363,8 @@ test('TUBEGRAB_USERS makes the instance private (Basic auth)', async () => {
     assert.equal(none.status, 401);
     assert.match(none.headers.get('www-authenticate'), /^Basic realm="TubeGrab"/);
     assert.equal((await get(basic('ana', 'mala'))).status, 401);
-    assert.equal((await get(basic('nadie', 's3creta'))).status, 401);
-    assert.equal((await get(basic('ana', 's3creta'))).status, 200);
+    assert.equal((await get(basic('nadie', 's3creta-larga'))).status, 401);
+    assert.equal((await get(basic('ana', 's3creta-larga'))).status, 200);
     assert.equal((await get(basic('luis', 'otra:con:dos-puntos'))).status, 200);
     // The API is behind the login too.
     const apiRes = await fetch(`http://localhost:${port}/api/jobs`, { headers: { 'x-client-id': CLIENT } });
@@ -376,4 +376,34 @@ test('TUBEGRAB_USERS makes the instance private (Basic auth)', async () => {
 
 test('without TUBEGRAB_USERS the page stays open', async () => {
   assert.equal((await fetch(`${BASE}/`)).status, 200);
+});
+
+test('a broken TUBEGRAB_USERS stops the server (never runs open), without printing passwords', async () => {
+  for (const spec of ['solousuario', 'ana:corta', 'ana:clave-larga,', 'ana:clave-larga,ana:Otra-Secreta']) {
+    const port = await freePort();
+    const { child, first } = startServer(port, { TUBEGRAB_USERS: spec });
+    let stderr = '';
+    child.stderr.on('data', (c) => { stderr += c; });
+    const code = await new Promise((resolve) => child.once('exit', resolve));
+    await assert.rejects(first, /exited 1/, spec);
+    assert.equal(code, 1, spec);
+    assert.match(stderr, /TUBEGRAB_USERS no es válida/);
+    for (const secret of ['corta', 'Otra-Secreta']) assert.ok(!stderr.includes(secret), `${spec}: ${stderr}`);
+  }
+});
+
+test('failed logins are limited per IP (then even the right password waits)', async () => {
+  const port = await freePort();
+  const { child, first } = startServer(port, { TUBEGRAB_USERS: 'ana:clave-larga' });
+  try {
+    await first;
+    const get = (pass) => fetch(`http://localhost:${port}/`, { headers: pass ? { authorization: `Basic ${Buffer.from(`ana:${pass}`).toString('base64')}` } : {} });
+    assert.equal((await get('clave-larga')).status, 200, 'right password works');
+    for (let i = 0; i < 30; i++) assert.equal((await get(`mala-${i}`)).status, 401);
+    const blocked = await get('clave-larga');
+    assert.equal(blocked.status, 429);
+    assert.ok(blocked.headers.get('ratelimit') || blocked.headers.get('ratelimit-reset') || blocked.headers.get('retry-after'));
+  } finally {
+    child.kill();
+  }
 });

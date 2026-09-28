@@ -316,3 +316,28 @@ Nuevo en el Editor: **quitar silencios** (se calcula en el navegador con la form
 - El resto de páginas ya no se quedan en 680/820 px: crecen con la ventana hasta 1200/1280 px.
 - Tiempos en tipografía monoespaciada y más grandes (regla, contador, lista de tramos) para que se lean bien en pantallas con escalado.
 - Sin cambios en el servidor ni en lo que se exporta.
+
+---
+
+## 2026-09-29 — Revisión 11 (v2.8.1): acceso privado y Editor
+
+Alcance: todo lo añadido desde la revisión 10 — `lib/auth.js` (acceso con contraseña), `/api/jobs/edit` y `runEdit` (modos exacto y rápido, ajustes, archivos por separado), y el código del Editor en la página. Método: lectura del código, hipótesis de ataque comprobadas con el servidor y ffmpeg reales, y pruebas automáticas nuevas para cada una.
+
+### [HIGH] Un `TUBEGRAB_USERS` mal escrito dejaba la instancia abierta sin avisar
+- **Archivos:** `lib/auth.js`, `server.js`
+- **Reproducción:** `TUBEGRAB_USERS=solousuario` (o `ana:`, `:clave`, `" , "`) → el servidor arrancaba y respondía `200` a cualquiera. Quien creía tener la web privada la tenía pública (y responde de lo que otros descarguen con ella).
+- **Fix:** falla cerrado. `parseUsers` devuelve los problemas de cada entrada (falta `:`, usuario vacío, contraseña de menos de 8 caracteres, usuario repetido, entrada vacía/coma de más) y, si la variable está puesta y hay alguno, el servidor no arranca (código 1) y explica qué corregir. El mensaje nunca incluye contraseñas. Sin la variable (o vacía) todo sigue como antes; la app de escritorio la ignora.
+- **Además:** aviso al arrancar si hay contraseña, el servidor escucha fuera de localhost y falta `TRUST_PROXY` (detrás de un proxy todos compartirían la IP del proxy y un atacante bloquearía a todos). README: usar solo con HTTPS y las contraseñas no pueden llevar comas.
+
+### [LOW] Exportar con muchos tramos y todos los ajustes podía superar el límite de la línea de comandos de Windows
+- **Archivo:** `lib/convert.js` (`editArgs`/`runEdit`)
+- **Reproducción:** 200 tramos + 9:16 + fundidos + volumen + girar con una ruta larga → orden de 32 236 caracteres (límite de Windows: 32 767); con algo más fallaba al lanzar ffmpeg.
+- **Fix:** el grafo de filtros se escribe en `graph.txt` dentro de la carpeta del trabajo y se pasa con `-/filter_complex` (ffmpeg ≥ 7; la app usa 9.0.2 y la imagen Docker 7.1); se borra al terminar. La orden queda en ~2 000 caracteres con cualquier número de tramos.
+
+### Comprobado sin hallazgos (con pruebas nuevas)
+- **Login:** solo pasa el par exacto usuario/contraseña (mayúsculas, espacios, base64 roto, sin `:`, 100 KB de basura, `__proto__`/`constructor` como usuario → rechazados); comparación en tiempo constante; tras 30 fallos por IP en 15 min, `429` incluso con la contraseña buena; la API y el flujo de eventos también piden login.
+- **Editor, valores maliciosos:** `aspect`, `fade`, `volume`, `rotate`, `quality`, `audioBitrate` con `drawtext`, `movie=`, `;`, `[x]` o rutas nunca llegan a los argumentos de ffmpeg (solo listas fijas); el grafo solo contiene números, nombres de filtro fijos y etiquetas propias.
+- **Nombres de archivo:** `..\..\..\Windows\evil'.mp4`, `../../etc/cron.d/x".mp4`, `it's a "test" <b>.mp4` y `CON.mp4`, en los cuatro modos (exacto, rápido, y ambos con "cada tramo aparte") → todo se crea dentro de la carpeta del trabajo, con nombres saneados y sin restos temporales. La lista del demuxer `concat` solo contiene `partN.ext` creados por el servidor, así que una comilla en el nombre subido no la puede romper.
+- **Página:** los 18 `innerHTML` de `app.js` usan plantillas fijas o `escapeHtml`; títulos y nombres de archivo que vienen del servidor van por `textContent`.
+- **Dependencias:** `npm audit` → 0 vulnerabilidades.
+- Pruebas nuevas: `test/auth.test.js` (5), y en `test/server.test.js` y `test/convert.test.js` (arranque con variable rota, límite de intentos, valores maliciosos, 200 tramos, nombres hostiles).

@@ -275,3 +275,57 @@ test('editor: vertical crop with fades, mute, and one file per clip', { skip: !f
     });
   }
 });
+
+// ---- Editor: security -------------------------------------------------------
+test('editor: hostile adjustment values never reach the ffmpeg arguments', () => {
+  const evil = {
+    aspect: "9:16',drawtext=textfile=/etc/passwd", fade: '1;movie=/etc/passwd', volume: '2,amovie=x', rotate: '90[x];[x]drawtext',
+    quality: 'alta -i /etc/passwd', audioBitrate: '320k;x', separate: 'true',
+  };
+  const fx = convert.parseEditEffects(evil);
+  const a = convert.editArgs({
+    inputPath: 'in.mp4', segs: [[0, 1], [2, 3]], withVideo: true, withAudio: true,
+    config: convert.formatFor('mp4').config, body: evil, fx, out: 'out.mp4',
+  });
+  const all = a.cpu.join(' ');
+  assert.doesNotMatch(all, /passwd|drawtext|movie|;x|\[x\]/);
+  assert.match(all, /-crf 18/, 'unknown quality falls back to the default');
+  // Only numbers, fixed filter names and our own labels in the graph.
+  const graph = a.cpu[a.cpu.indexOf('-filter_complex') + 1];
+  assert.match(graph, /^[\w\s[\]=:;,.'()*/+-]+$/);
+});
+
+test('editor: 200 parts with every adjustment stay under the Windows command-line limit', () => {
+  const segs = Array.from({ length: 200 }, (_, i) => [i * 100 + 0.123, i * 100 + 50.456]);
+  const fx = convert.parseEditEffects({ aspect: '9:16', fade: '2', volume: '1.5', rotate: '270' });
+  const long = `C:\${'carpeta muy larga\'.repeat(12)}archivo.mp4`;
+  const a = convert.editArgs({ inputPath: long, segs, withVideo: true, withAudio: true, config: convert.formatFor('mkv').config, body: {}, fx, out: long, graphFile: long });
+  const cmd = a.cpu.map((x) => (/\s/.test(x) ? `"${x}"` : x)).join(' ');
+  assert.ok(cmd.length < 4000, `${cmd.length} characters (the graph goes in a file)`);
+  const inline = convert.editArgs({ inputPath: long, segs, withVideo: true, withAudio: true, config: convert.formatFor('mkv').config, body: {}, fx, out: long });
+  const inlineCmd = inline.cpu.map((x) => (/\s/.test(x) ? `"${x}"` : x)).join(' ');
+  assert.ok(inlineCmd.length > 32000, `inline it would not have fitted (${inlineCmd.length})`);
+});
+
+test('editor: output names stay inside the job folder, whatever the upload is called', { skip: !ffmpeg && 'ffmpeg not found', timeout: 120_000 }, async (t) => {
+  const clip = path.join(work, 'edit-sec.mp4');
+  execFileSync(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=25:duration=4',
+    '-f', 'lavfi', '-i', 'sine=d=4', '-shortest', '-c:v', 'libx264', '-g', '25', '-pix_fmt', 'yuv420p', '-c:a', 'aac', clip]);
+  const names = ["..\..\..\Windows\evil'.mp4", '../../etc/cron.d/x".mp4', "it's a \"test\" <b>.mp4", 'CON.mp4'];
+  for (const originalName of names) {
+    for (const [mode, separate] of [['exact', 'false'], ['fast', 'false'], ['fast', 'true'], ['exact', 'true']]) {
+      await t.test(`${mode}${separate === 'true' ? ' separate' : ''}: ${originalName}`, async () => {
+        const dir = fs.mkdtempSync(path.join(work, 'sec-'));
+        const out = await convert.runEdit({
+          inputPath: clip, originalName, segments: [[0, 1], [2, 3]], targetFormat: 'original', mode, body: { separate }, ffmpegPath: ffmpeg,
+        })({}, { dir, update() {}, setProcess() {}, isCanceled: () => false });
+        for (const f of [].concat(out)) {
+          assert.equal(path.dirname(f), dir, f);
+          assert.ok(fs.existsSync(f), f);
+          assert.doesNotMatch(path.basename(f), /[\/<>:"|?*]|^CON\./i, f);
+        }
+        assert.deepEqual(fs.readdirSync(dir).sort(), [].concat(out).map((f) => path.basename(f)).sort(), 'no temp parts left');
+      });
+    }
+  }
+});

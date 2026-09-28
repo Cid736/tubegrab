@@ -100,7 +100,13 @@ if (HOST === '127.0.0.1') {
 
 // Private instance: TUBEGRAB_USERS="user:password,…" asks for a login on every
 // request (page included). Failed attempts are rate-limited per IP.
-const authUsers = IS_DESKTOP ? new Map() : parseUsers(process.env.TUBEGRAB_USERS);
+// A set-but-broken TUBEGRAB_USERS stops the server instead of leaving it open.
+const authSpec = IS_DESKTOP ? '' : String(process.env.TUBEGRAB_USERS || '');
+const { users: authUsers, problems: authProblems } = parseUsers(authSpec);
+if (authProblems.length) {
+  console.error(`❌ TUBEGRAB_USERS no es válida; el servidor no arranca para no quedar abierto:\n  - ${authProblems.join('\n  - ')}\n  Formato: usuario:contraseña,otro:contraseña (mín. 8 caracteres, sin comas).`);
+  process.exit(1);
+}
 if (authUsers.size) {
   app.use(rateLimit({
     windowMs: 15 * 60_000,
@@ -734,7 +740,12 @@ function onListening() {
   console.log(HOST === '0.0.0.0'
     ? '🔒 Modo despliegue: accesible externamente (contenedor/proxy).\n'
     : '🔒 Máxima seguridad: Ejecución local, solo accesible desde esta máquina.\n');
-  if (authUsers.size) console.log(`🔑 Acceso privado: ${authUsers.size} usuario(s) en TUBEGRAB_USERS.\n`);
+  if (authUsers.size) {
+    console.log(`🔑 Acceso privado: ${authUsers.size} usuario(s) en TUBEGRAB_USERS.\n`);
+    // Behind a proxy without TRUST_PROXY every visitor shares the proxy's IP,
+    // so one attacker's failed attempts would lock everybody out.
+    if (HOST !== '127.0.0.1' && !process.env.TRUST_PROXY) console.log('⚠️  Si hay un proxy delante (Render, Nginx…), pon TRUST_PROXY=true para que el límite de intentos sea por visitante.\n');
+  }
   else if (HOST !== '127.0.0.1') console.log('⚠️  Sin TUBEGRAB_USERS: cualquiera con el enlace puede usar esta instancia.\n');
 
   // Only auto-open the system browser for the standalone console build.
