@@ -253,12 +253,19 @@ test('compress, image and merge through the API', { skip: !ffmpeg && 'ffmpeg not
   assert.equal((await send('/api/jobs/image', { targetFormat: 'bmp', imageMode: 'frame' }, [['file', 'a.mp4']])).status, 400);
   assert.equal((await send('/api/jobs/merge', { targetFormat: 'mp4' }, [['files', 'solo.mp4']])).status, 400, 'merging needs two files');
   assert.equal((await send('/api/jobs/merge', { targetFormat: 'gif' }, [['files', 'a.mp4'], ['files', 'b.mp4']])).status, 400);
+  for (const bad of [
+    { segments: '[[5,2]]', targetFormat: 'original' },
+    { segments: 'x', targetFormat: 'original' },
+    { segments: '[[0,2]]', targetFormat: 'gif' },
+    { segments: '[[0,2]]', targetFormat: 'mp4', mode: 'fast' },
+  ]) assert.equal((await send('/api/jobs/edit', bad, [['file', 'a.mp4']])).status, 400, JSON.stringify(bad));
 
   const ids = [];
   for (const [endpoint, fields, files] of [
     ['/api/jobs/compress', { targetMb: '1' }, [['file', 'grande.mp4']]],
     ['/api/jobs/image', { targetFormat: 'jpg', imageMode: 'frame', time: '2' }, [['file', 'foto.mp4']]],
     ['/api/jobs/merge', { targetFormat: 'mkv' }, [['files', 'uno.mp4'], ['files', 'dos.mp4']]],
+    ['/api/jobs/edit', { segments: '[[0,1.5],[3,4]]', targetFormat: 'original', mode: 'exact' }, [['file', 'corte.mp4']]],
   ]) {
     const res = await send(endpoint, fields, files);
     assert.equal(res.status, 200, endpoint);
@@ -266,7 +273,7 @@ test('compress, image and merge through the API', { skip: !ffmpeg && 'ffmpeg not
   }
   const jobs = await waitForJobs((m) => ids.every((id) => m.get(id) && ['done', 'error'].includes(m.get(id).status)));
   const names = ids.map((id) => { const j = jobs.get(id); assert.equal(j.status, 'done', j.error); return j.fileName; });
-  assert.deepEqual(names, ['grande (1 MB).mp4', 'foto (2 s).jpg', 'uno (unido).mkv']);
+  assert.deepEqual(names, ['grande (1 MB).mp4', 'foto (2 s).jpg', 'uno (unido).mkv', 'corte (editado).mp4']);
   const img = await api(`/api/jobs/${ids[1]}/file?n=0`);
   assert.equal(img.status, 200);
   assert.equal((await api(`/api/jobs/${ids[1]}/file?n=1`)).status, 404);

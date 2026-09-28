@@ -336,3 +336,11 @@ body.window-maximized .cap-restore { display: block; }
 [data-ui="windows"] .search-bar .btn { height: 36px; }
 [data-ui="windows"] .queue-item[data-status="paused"] .queue-icon { background: #9d5d00; }
 [data-ui="windows"] .field.search-field:focus-within, [data-ui="windows"] .field:has(.field-input):focus-within { box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* Editor in the Windows interface */
+[data-ui="windows"] .editor { background: var(--w-card); border: 1px solid var(--w-stroke); border-radius: 6px; box-shadow: none; }
+[data-ui="windows"] .ed-viewer, [data-ui="windows"] .ed-timeline { border-radius: 4px; }
+[data-ui="windows"] .ed-timeline { background: var(--w-subtle); }
+[data-ui="windows"] .ed-btn, [data-ui="windows"] .ed-tool { border-radius: 4px; background: var(--w-control); border: 1px solid var(--w-stroke); }
+[data-ui="windows"] .ed-play { background: var(--accent); border-color: transparent; }
+[data-ui="windows"] .ed-key { border-radius: 3px; }

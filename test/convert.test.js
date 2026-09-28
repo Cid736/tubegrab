@@ -193,3 +193,47 @@ test('uploads posing as media cannot make ffmpeg read other files or URLs', { sk
     });
   }
 });
+
+test('parseSegments sorts, joins and refuses nonsense', () => {
+  assert.deepEqual(convert.parseSegments('[[30,41],[0,12.5],[12,14]]'), [[0, 14], [30, 41]]);
+  for (const bad of ['', '[]', '{}', '[[1]]', '[[5,2]]', '[[-1,3]]', '[["0","3"]]', '[[0,1e9]]', '[[0,0.01]]', 'x',
+    JSON.stringify(Array.from({ length: 201 }, (_, i) => [i, i + 0.5]))]) {
+    assert.equal(convert.parseSegments(bad), null, bad);
+  }
+});
+
+test('originalFormat keeps the container, audio-only videos become M4A', () => {
+  assert.equal(convert.originalFormat('a.MKV', true), 'mkv');
+  assert.equal(convert.originalFormat('song.mp4', false), 'm4a');
+  assert.equal(convert.originalFormat('x.flac', false), 'flac');
+  assert.equal(convert.originalFormat('x.3gp', true), 'mp4');
+});
+
+test('editor keeps only the chosen parts', { skip: !ffmpeg && 'ffmpeg not found', timeout: 120_000 }, async (t) => {
+  const clip = path.join(work, 'edit-src.mp4');
+  execFileSync(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=25:duration=10',
+    '-f', 'lavfi', '-i', 'sine=frequency=500:duration=10', '-shortest', '-c:v', 'libx264', '-g', '25', '-pix_fmt', 'yuv420p', '-c:a', 'aac', clip]);
+  const ctx = () => ({ dir: fs.mkdtempSync(path.join(work, 'e-')), update() {}, setProcess() {}, isCanceled: () => false });
+  const edit = (opts) => convert.runEdit({ inputPath: clip, originalName: 'mi clip.mp4', body: {}, ffmpegPath: ffmpeg, ...opts })({}, ctx());
+
+  await t.test('exact: two parts joined, same container', async () => {
+    const out = await edit({ segments: [[1, 3], [6, 7.5]], targetFormat: 'original', mode: 'exact' });
+    assert.equal(path.basename(out), 'mi clip (editado).mp4');
+    const info = await convert.probe(ffmpeg, out);
+    assert.ok(Math.abs(info.duration - 3.5) < 0.15 && info.hasVideo && info.hasAudio, JSON.stringify(info));
+  });
+  await t.test('exact: to another format, audio only', async () => {
+    const out = await edit({ segments: [[0, 2]], targetFormat: 'mp3', mode: 'exact' });
+    const info = await convert.probe(ffmpeg, out);
+    assert.ok(out.endsWith('.mp3') && !info.hasVideo && Math.abs(info.duration - 2) < 0.15, JSON.stringify(info));
+  });
+  await t.test('fast: stream copy of several parts', async () => {
+    const out = await edit({ segments: [[0, 2], [5, 8]], targetFormat: 'original', mode: 'fast' });
+    const info = await convert.probe(ffmpeg, out);
+    assert.ok(Math.abs(info.duration - 5) < 0.6 && info.hasVideo && info.hasAudio, JSON.stringify(info));
+    assert.deepEqual(fs.readdirSync(path.dirname(out)), [path.basename(out)], 'parts cleaned up');
+  });
+  await t.test('parts past the end are dropped; nothing left is an error', async () => {
+    await assert.rejects(edit({ segments: [[20, 30]], targetFormat: 'original', mode: 'exact' }), /vacío/);
+  });
+});

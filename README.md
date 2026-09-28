@@ -12,7 +12,7 @@ Local video/audio downloader **and** format converter with a job queue. Runs ent
 
 ## Features
 
-Every page is always visible in the sidebar, with no drop-down menus: **Download**, **Search**, **Subscriptions**, **Convert**, **Merge**, **Compress**, **Image**, **Queue**, **History** and **Settings** (with tabs: Appearance · Downloads · Conversion · System · About).
+Every page is always visible in the sidebar, with no drop-down menus: **Download**, **Search**, **Subscriptions**, **Convert**, **Editor**, **Merge**, **Compress**, **Image**, **Queue**, **History** and **Settings** (with tabs: Appearance · Downloads · Conversion · System · About).
 
 **Download**
 - YouTube and 20+ sites: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
@@ -27,6 +27,7 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 **Convert**
 - 11 audio and 12 video formats, batch, presets (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiobook…), speed, rotate, resolution…
 - **Trim with a preview and waveform**: drag the handles and play the part before converting
+- **Editor** with a timeline (thumbnails, waveform, zoom): keep from any second to any other, cut with the blade (B), mark in/out (I/O), remove or restore clips, undo/redo, frame stepping and NLE-style shortcuts (Space, J/L, arrows). Export with exact cuts (re-encoded, GPU if available) or fast cuts (stream copy, lossless, keyframe-aligned)
 - **Merge** several audio or video files into one (clips of other sizes are letterboxed)
 - **Compress to a size** (e.g. 8 MB for Discord, 16 MB for WhatsApp): TubeGrab works out the quality, two-pass
 - **Image**: a frame at any moment (with a slider) or the embedded cover art, as JPG/PNG/WEBP
@@ -168,7 +169,7 @@ Descargador de vídeo/audio **y** conversor de formatos con cola de trabajos. Fu
 
 ## Características
 
-Todas las páginas están siempre a la vista en la barra lateral, sin menús desplegables: **Descargar**, **Buscar**, **Suscripciones**, **Convertir**, **Unir**, **Comprimir**, **Imagen**, **Cola**, **Historial** y **Ajustes** (con pestañas: Apariencia · Descargas · Conversión · Sistema · Acerca de).
+Todas las páginas están siempre a la vista en la barra lateral, sin menús desplegables: **Descargar**, **Buscar**, **Suscripciones**, **Convertir**, **Editor**, **Unir**, **Comprimir**, **Imagen**, **Cola**, **Historial** y **Ajustes** (con pestañas: Apariencia · Descargas · Conversión · Sistema · Acerca de).
 
 **Descargar**
 - YouTube y más de 20 sitios: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
@@ -183,6 +184,7 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 **Convertir**
 - 11 formatos de audio y 12 de vídeo, por lotes, preajustes (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiolibro…), velocidad, girar, resolución…
 - **Recorte con vista previa y forma de onda**: arrastra los tiradores y escucha el tramo antes de convertir
+- **Editor** con línea de tiempo (miniaturas, forma de onda, zoom): quédate del segundo que quieras al que quieras, corta con la cuchilla (B), marca entrada/salida (I/O), quita o recupera tramos, deshaz/rehaz, avanza fotograma a fotograma y usa atajos de editor (Espacio, J/L, flechas). Exporta con cortes exactos (recodifica, con GPU si hay) o rápidos (copia sin pérdida, ajustados a fotogramas clave)
 - **Unir** varios audios o vídeos en uno (los clips de otro tamaño se encajan con bandas negras)
 - **Comprimir a un tamaño** (p. ej. 8 MB para Discord, 16 MB para WhatsApp): TubeGrab calcula la calidad, en dos pasadas
 - **Imagen**: un fotograma en cualquier momento (con deslizador) o la carátula incrustada, en JPG/PNG/WEBP

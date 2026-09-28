@@ -232,11 +232,48 @@
     'No se pudo guardar el archivo': "Couldn't save the file",
     'yt-dlp descargado no coincide con su huella SHA-256': "the downloaded yt-dlp doesn't match its SHA-256",
     'ffmpeg descargado no coincide con su huella SHA-256': "the downloaded ffmpeg doesn't match its SHA-256",
+    // --- Editor ---
+    'Editor': 'Editor', 'Recorta del segundo que quieras al que quieras, corta y quita partes': 'Trim from any second to any other, cut and remove parts',
+    'Arrastra un vídeo o un audio para editarlo': 'Drag a video or audio file to edit it',
+    'del segundo que quieras al que quieras, corta y quita partes': 'from any second to any other, cut and remove parts',
+    'Ir al inicio (Inicio)': 'Go to start (Home)', 'Fotograma anterior (←)': 'Previous frame (←)', 'Reproducir / pausa (Espacio)': 'Play / pause (Space)',
+    'Fotograma siguiente (→)': 'Next frame (→)', 'Ir al final (Fin)': 'Go to end (End)',
+    'Al reproducir, salta las partes quitadas': 'Skip removed parts while playing', 'Ver resultado': 'Preview result',
+    'Herramientas de edición': 'Editing tools',
+    'Quita todo lo anterior al cabezal (I)': 'Remove everything before the playhead (I)', 'Entrada': 'In',
+    'Quita todo lo posterior al cabezal (O)': 'Remove everything after the playhead (O)', 'Salida': 'Out',
+    'Corta el tramo en el cabezal (B)': 'Cut the clip at the playhead (B)', 'Cortar': 'Cut',
+    'Quita o recupera el tramo seleccionado (Supr)': 'Remove or restore the selected clip (Del)', 'Supr': 'Del',
+    'Quitar tramo': 'Remove clip', 'Recuperar tramo': 'Restore clip',
+    'Deshacer (Ctrl+Z)': 'Undo (Ctrl+Z)', 'Rehacer (Ctrl+Y)': 'Redo (Ctrl+Y)', 'Quita todos los cortes': 'Remove all cuts', 'Empezar de nuevo': 'Start over',
+    'Zoom (Ctrl + rueda)': 'Zoom (Ctrl + wheel)', 'Zoom de la línea de tiempo': 'Timeline zoom',
+    'Línea de tiempo: clic para mover el cabezal, arrastra las líneas de corte, doble clic para quitar o recuperar un tramo': 'Timeline: click to move the playhead, drag cut lines, double-click to remove or restore a clip',
+    'Del segundo': 'From second', 'al': 'to', 'al segundo': 'to second', 'Quedarme con esto': 'Keep only this', 'Quitar esto': 'Remove this',
+    'Atajos: Espacio reproducir · J / L ±5 s · ← / → fotograma (Mayús: 1 s) · I / O entrada y salida · B cortar · Supr quitar tramo · Ctrl+Z deshacer · Ctrl + rueda zoom': 'Shortcuts: Space play · J / L ±5 s · ← / → frame (Shift: 1 s) · I / O in and out · B cut · Del remove clip · Ctrl+Z undo · Ctrl + wheel zoom',
+    'Igual que el original': 'Same as the original', 'MP3 (solo audio)': 'MP3 (audio only)', 'M4A (solo audio)': 'M4A (audio only)',
+    'WAV (solo audio)': 'WAV (audio only)', 'FLAC (solo audio)': 'FLAC (audio only)', 'Baja (pesa menos)': 'Low (smaller file)',
+    'Cortes': 'Cuts', 'Exactos': 'Exact', 'Rápidos': 'Fast', 'Exportar': 'Export',
+    'Exactos: corta en el fotograma justo (vuelve a codificar el vídeo).': 'Exact: cuts on the exact frame (re-encodes the video).',
+    'Rápidos: sin volver a codificar, al instante y sin perder calidad, pero cada tramo empieza en el fotograma clave anterior (puede adelantarse un poco).': 'Fast: no re-encoding, instant and lossless, but each clip starts at the keyframe before it (may start a little early).',
+    'Has quitado todo: recupera algún tramo para exportar.': 'You removed everything: restore a clip to export.',
+    'Resultado: {len} · {n} de {total} tramos · {cuts} cortes': 'Result: {len} · {n} of {total} clips · {cuts} cuts',
+    'Escribe desde qué segundo y hasta cuál (p. ej. 12 y 1:30).': 'Type the start and end second (e.g. 12 and 1:30).',
+    'Tiempo no válido. Usa segundos o mm:ss (p. ej. 75 o 1:15).': 'Invalid time. Use seconds or mm:ss (e.g. 75 or 1:15).',
+    '"Al" tiene que ser mayor que "Del" y estar dentro del archivo ({d}).': '"To" must be after "From" and inside the file ({d}).',
+    'Este formato no se puede previsualizar aquí. Conviértelo antes a MP4 en Convertir → Formato.': "This format can't be previewed here. Convert it to MP4 first in Convert → Format.",
+    'Elige un archivo primero': 'Choose a file first', 'Espera a que se cargue el archivo.': 'Wait for the file to load.',
+    'Recortando': 'Trimming', 'Editando': 'Editing', 'Editando (GPU)': 'Editing (GPU)', 'Uniendo tramos': 'Joining clips',
+    'Tramos no válidos.': 'Invalid clips.', 'El modo rápido solo funciona con el formato original.': 'Fast mode only works with the original format.',
+    'El resultado quedaría vacío: no queda ningún tramo dentro del archivo.': 'The result would be empty: no clip is left inside the file.',
+    'Este archivo no tiene vídeo; elige un formato de audio.': 'This file has no video; choose an audio format.',
+    'Este archivo no tiene sonido.': 'This file has no sound.',
+    'El modo rápido solo funciona con el formato original de archivos MP4, MKV, MOV, WEBM, MP3…': 'Fast mode only works with the original format of MP4, MKV, MOV, WEBM, MP3… files',
   };
 
   // Server messages with values inside.
   var PATTERNS = [
     [/^Uniendo (\d+) archivos$/, 'Merging $1 files'],
+    [/^Cortando tramo (\d+)\/(\d+)$/, 'Cutting clip $1/$2'],
     [/^El archivo es demasiado grande \(máx\. (\d+) MB\)\.$/, 'The file is too big (max. $1 MB).'],
     [/^No se pudo iniciar (yt-dlp|ffmpeg): (.*)$/, "Couldn't start $1: $2"],
     [/^No se pudo leer "(.*)"\.$/, 'Couldn\'t read "$1".'],
@@ -250,7 +287,7 @@
   // Pieces of job descriptions ("MP4 Mejor calidad · por capítulos", "Unir 3 archivos · MP4"…).
   var PIECES = [
     ['Mejor calidad', 'Best quality'], ['por capítulos', 'by chapters'], ['–fin', '–end'], ['Comprimir a', 'Compress to'],
-    ['carátula', 'cover art'], ['fotograma', 'frame'], ['Unir ', 'Merge '], [' archivos', ' files'], [' más', ' more'],
+    ['carátula', 'cover art'], ['fotograma', 'frame'], ['Unir ', 'Merge '], ['Editar', 'Edit'], [' tramos', ' clips'], [' tramo', ' clip'], ['rápido', 'fast'], [' archivos', ' files'], [' más', ' more'],
   ];
 
   function fill(s, vars) {

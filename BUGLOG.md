@@ -286,3 +286,14 @@ Nuevas funciones: playlist a elegir, tramo antes de descargar, dividir por capí
 ### [MEDIUM] Una instancia desplegada (Render/Docker) era pública para cualquiera con el enlace
 - **Riesgo:** desconocidos podían usar el servidor para descargar contenido, y la responsabilidad legal y el consumo recaían en quien lo despliega.
 - **Fix:** nueva variable `TUBEGRAB_USERS="usuario:contraseña,…"` → autenticación HTTP Basic en todas las peticiones (página y API), comparación de tiempo constante (hash SHA-256 + `timingSafeEqual`, también para usuarios inexistentes) y límite de 30 intentos fallidos por IP cada 15 minutos. Sin la variable, todo sigue igual; la app de escritorio la ignora. Al arrancar sin ella y fuera de localhost, el servidor avisa en el registro. `render.yaml` la declara con `sync: false` (se rellena en el panel, nunca en git). Pruebas nuevas en `test/server.test.js`.
+
+---
+
+## 2026-09-29 — v2.6.0: Editor con línea de tiempo
+
+Nueva página **Convertir → Editor**: visor, línea de tiempo con miniaturas y forma de onda, zoom, cabezal, cortes (B), entrada/salida (I/O), quitar/recuperar tramos, deshacer/rehacer, "del segundo X al Y" (quedarse con o quitar) y atajos tipo editor de vídeo. Exporta con cortes exactos (filtros `trim`/`atrim` + `concat`, GPU con respaldo a CPU) o rápidos (copia de flujos por tramo y demuxer `concat`).
+
+### Revisión de seguridad
+- **`/api/jobs/edit`:** los tramos llegan como JSON y se validan en `parseSegments`: máx. 200 pares de números finitos, 0 ≤ inicio < fin ≤ 24 h, ordenados y fusionados; en el grafo de filtros solo entran números formateados con `toFixed(3)`. Formato de destino de una lista cerrada (o "original", que se traduce con una tabla fija por extensión); el modo rápido solo con "original".
+- **Modo rápido:** la lista del demuxer `concat` la escribe el servidor, con nombres propios (`partN.ext`) junto a la lista, sin `-safe 0` (el modo seguro del demuxer rechaza cualquier otra ruta) y con `-protocol_whitelist file`. La entrada subida sigue pasando por la lista blanca de demuxers/protocolos. Las partes temporales se borran al terminar.
+- **Página:** la previsualización usa `blob:` locales (ya permitido por la CSP) y el archivo no sale del equipo hasta pulsar Exportar. Pruebas nuevas en `test/convert.test.js` y `test/server.test.js` (100 en total).
