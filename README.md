@@ -8,32 +8,38 @@
 
 # TubeGrab
 
-Local video/audio downloader **and** format converter with a job queue. Runs entirely on your machine — no external servers, no trackers. Available as a self-updating Windows desktop app, and deployable to your own server.
+Local video/audio downloader **and** format converter with a job queue. Runs entirely on your machine — no external servers, no trackers. Available as a self-updating Windows desktop app (portable, light portable or installer), and deployable to your own server.
 
 ## Features
 
-**Downloads**
+Every page is always visible in the sidebar, with no drop-down menus: **Download**, **Search**, **Subscriptions**, **Convert**, **Merge**, **Compress**, **Image**, **Queue**, **History** and **Settings** (with tabs: Appearance · Downloads · Conversion · System · About).
+
+**Download**
 - YouTube and 20+ sites: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
-- Several links at once (one per line) and **whole playlists**
-- Audio: MP3, M4A, OPUS, OGG, FLAC, WAV or the **original stream without re-encoding** (96–320 kbps)
-- Video: best available up to 4K/8K or a fixed resolution, as MP4, MKV or WEBM
-- Embedded **cover art, metadata and chapters**, embedded **subtitles** (ES/EN), and **SponsorBlock** to cut sponsor segments
-- Live preview (title, thumbnail, duration) for a single link
+- Several links at once, whole playlists, or **pick which videos of a playlist** to download
+- **Search** YouTube without a link, and download the results you tick
+- **Subscriptions** (desktop app): channels or playlists checked every 1–24 h; new uploads download by themselves
+- Audio: MP3, M4A, OPUS, OGG, FLAC, WAV or the original stream (96–320 kbps). Video: up to 4K/8K as MP4, MKV or WEBM
+- **Download only a part** (e.g. 1:20–3:45, with a slider), or **split by chapters** into one file per chapter (tagged with title and track number)
+- **Music mode**: clean "Artist - Title" (without "(Official Video)"…), artist tag and **square cover art**
+- Cover art, metadata and chapters; subtitles in 9 languages, embedded or as a separate **.srt**; SponsorBlock
 
-**Conversion**
-- **Batch**: convert many files in one go
-- 11 audio formats (MP3, AAC, M4A, OGG, OPUS, WMA, AC3, FLAC, ALAC, WAV, AIFF) and 12 video formats (MP4 H.264, MP4 H.265/HEVC, WEBM, MKV, MOV, AVI, WMV, FLV, MPG, 3GP, OGV, animated GIF)
-- **Presets**: WhatsApp, Instagram/TikTok, YouTube, email, iPhone/Apple (HEVC), web, GIF; podcast, audiobook, voice note, lossless…
-- Audio: bitrate, sample rate, mono/stereo, loudness normalization. Video: resolution, quality, frame rate, rotate/mirror, strip audio. Both: speed (0.5×–2×) and trim start/end. Extract the audio from any video.
+**Convert**
+- 11 audio and 12 video formats, batch, presets (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiobook…), speed, rotate, resolution…
+- **Trim with a preview and waveform**: drag the handles and play the part before converting
+- **Merge** several audio or video files into one (clips of other sizes are letterboxed)
+- **Compress to a size** (e.g. 8 MB for Discord, 16 MB for WhatsApp): TubeGrab works out the quality, two-pass
+- **Image**: a frame at any moment (with a slider) or the embedded cover art, as JPG/PNG/WEBP
+- **Graphics card acceleration** (NVIDIA NVENC, Intel Quick Sync, AMD AMF) for H.264/H.265, with automatic CPU fallback
 
-**Queue & desktop app**
-- Job queue with **real progress**, speed and time left; several downloads run in parallel; cancel any job, **retry** failed downloads (temporary errors are retried once automatically)
-- Drag files or links anywhere onto the window; shortcuts Ctrl+1/2/3 and Ctrl+, (settings)
-- Desktop app: saves straight to a folder you choose (with "Show in folder" / "Open folder"), taskbar progress, notifications when a job finishes
-- **Self-updating**: the app updates itself from GitHub Releases in one click (SHA-256 verified), and keeps its download engine (yt-dlp) up to date automatically — sites like YouTube break old versions within weeks
-- Local history of finished jobs (stored only on your device)
-- **Two interfaces, switchable from the toolbar:** Windows 11 (default: Mica window, own title bar, navigation pane, settings cards) and macOS (Liquid Glass: floating glass sidebar, traffic lights, System Settings-style grouped lists). The star next to the switch — or Settings → Appearance → Default interface — sets which one opens at launch
-- **Personalisation** (Settings → Appearance): light/dark/automatic, 8 macOS accent colours, 6 backgrounds, glass style (clear, tinted, opaque) and text size; remembers your last download options; optional finish sound and notifications
+**Queue, history and desktop app**
+- Real progress, speed and time left; **pause/resume** downloads (they continue where they stopped), **reorder** what's waiting, cancel, retry (temporary errors retry by themselves once); downloads/conversions at once and a **speed limit** are configurable
+- **History with search**: open the file, show it in its folder, or download it again with the same options
+- Saves straight to your folder; several files (chapters, subtitles) go together in a subfolder
+- **System tray**: keep running when closed (downloads and subscriptions carry on); **detect copied links** (opt-in) and download them with one click
+- Self-updating from GitHub Releases (SHA-256 verified), and keeps yt-dlp up to date
+- Two interfaces (Windows 11 or macOS), light/dark, accent colours, backgrounds, text size, and **Spanish or English**
+- Drag files or links anywhere onto the window; shortcuts Ctrl+1 Download · Ctrl+2 Convert · Ctrl+3 Queue · Ctrl+4 History · Ctrl+, Settings
 
 ## Usage
 
@@ -45,19 +51,26 @@ npm start
 # Open http://localhost:3000
 ```
 
-### 2. Desktop app (Windows, no installation)
+### 2. Desktop app (Windows)
 
-Download the latest `.exe` from [Releases](https://github.com/Cid736/tubegrab/releases/latest) — it opens its own window, no browser or console needed. Windows SmartScreen may warn "Unknown publisher" since the app isn't code-signed; this is expected for an unsigned executable, not a sign of a broken build — click "Run anyway".
+From [Releases](https://github.com/Cid736/tubegrab/releases/latest), pick one:
 
-To build it yourself:
+| File | What it is |
+|---|---|
+| `TubeGrab.exe` | Portable, everything inside (~170 MB). No install. |
+| `TubeGrab-Lite.exe` | Portable, light (~100 MB): downloads ffmpeg and yt-dlp on first launch (SHA-256 verified). |
+| `TubeGrab-Setup.exe` | Installer, per user (no admin): Start menu and desktop shortcuts; updates by running the new installer silently. |
+
+Each one updates itself to the same kind. Windows SmartScreen may warn "Unknown publisher" because the app isn't code-signed (see *Code signing* below) — click "Run anyway".
+
+To build them yourself (needs Windows Developer Mode, so electron-builder can create symlinks):
 
 ```bash
-npm run build          # Electron app -> dist/TubeGrab.exe (the real desktop app)
+npm run build          # dist/TubeGrab.exe + dist/TubeGrab-Setup.exe
+npm run build:lite     # dist/TubeGrab-Lite.exe
 ```
 
-Building with `npm run build` needs Windows Developer Mode enabled (Settings → Privacy & security → For developers) so electron-builder can create symlinks without admin rights.
-
-The desktop app checks GitHub Releases for a newer version on launch and can update itself in one click (see below) — no manual re-download needed. **Maintainers, publishing a release:** this check reads the release's `tag_name` (`vX.Y.Z`, matching `package.json`'s version) and looks for an asset named exactly `TubeGrab.exe`, so keep using `gh release create` as before; no extra build step or metadata file is needed.
+**Maintainers, publishing a release:** tag `vX.Y.Z` (= `package.json` version) and upload the three assets with exactly those names; the updater of each kind looks for its own file and verifies GitHub's SHA-256 digest.
 
 ### 3. Docker
 
@@ -68,29 +81,43 @@ docker compose up
 
 ### 4. Deploy your own instance (e.g. Render)
 
-The repo includes a `Dockerfile` and `render.yaml`. On Render: create a Web Service from this repo (Docker runtime is auto-detected), pick the Free plan, and add an environment variable `TRUST_PROXY=true` (needed so the app binds correctly and rate-limiting reads the real client IP behind Render's proxy).
+The repo includes a `Dockerfile` and `render.yaml`. On Render: create a Web Service from this repo (Docker runtime is auto-detected), pick the Free plan, and add an environment variable `TRUST_PROXY=true`. Subscriptions, tray and clipboard features are desktop-only.
+
+## Code signing
+
+The build signs the `.exe` files automatically when a certificate is provided through electron-builder's environment variables — nothing to change in the code:
+
+- **Certificate file** (`.pfx`): set `CSC_LINK` (path or base64) and `CSC_KEY_PASSWORD`, then `npm run build`.
+- **Free for open source:** [SignPath Foundation](https://signpath.org) signs OSS projects at no cost (apply with the GitHub repo; they sign in their CI).
+- **Azure Trusted Signing** (low monthly cost): configure `win.azureSignOptions` in `package.json` and log in with the Azure CLI.
+
+Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately with EV certificates, after some reputation with standard ones).
 
 ## Structure
 
 ```
-├── server.js              # Express server: job API (SSE progress), metadata preview, security guards
+├── server.js              # Express server: job API (SSE progress), search, playlists, subscriptions, settings, security guards
 ├── lib/
-│   ├── jobs.js            # Job queue: concurrency, progress, cancel, cleanup
-│   ├── download.js        # yt-dlp: site allowlist, options, progress parsing, playlists, auto-retry
-│   ├── convert.js         # ffmpeg: formats, presets' settings, progress parsing
-│   └── filenames.js       # Safe names for files saved to the user's folder
-├── electron-main.js       # Desktop app: window, app updater, yt-dlp auto-update, save-to-folder
-├── preload.js             # Minimal bridge exposed to the page (updater + desktop features)
+│   ├── jobs.js            # Job queue: concurrency, progress, pause/resume, reorder, retry, multi-file results
+│   ├── download.js        # yt-dlp: site allowlist, options (parts, chapters, music mode, subtitles, speed), search, playlists
+│   ├── convert.js         # ffmpeg: formats, trim, compress to size, image, merge, GPU encoders
+│   ├── subscriptions.js   # Channel/playlist subscriptions (desktop)
+│   ├── filenames.js       # Safe names for files and folders saved to the user's folder
+│   └── ffmpeg-release.js  # Pinned ffmpeg build (version, URL, SHA-256)
+├── electron-main.js       # Desktop app: window, updater (3 kinds), components, tray, clipboard, save-to-folder
+├── preload.js             # Minimal bridge exposed to the page
+├── electron-builder.lite.js  # Light portable build
 ├── scripts/
-│   ├── postinstall.js     # Linux: fetches yt-dlp · Windows: runs fetch-ffmpeg.js
-│   └── fetch-ffmpeg.js    # Windows: current ffmpeg + ffprobe into bin/ (SHA-256 pinned)
+│   ├── postinstall.js     # Linux: fetches yt-dlp (SHA-256 checked) · Windows: runs fetch-ffmpeg.js
+│   └── fetch-ffmpeg.js    # Windows: pinned ffmpeg + ffprobe into bin/
 ├── public/
 │   ├── theme-init.js      # Applies saved appearance before first paint (validated values)
+│   ├── i18n.js            # Spanish / English
 │   ├── index.html
 │   ├── app.js
 │   ├── style.css          # macOS interface + shared base
 │   └── fluent.css         # Windows 11 interface (default)
-├── test/                  # npm test (node:test): unit, API end-to-end and security tests
+├── test/                  # npm test (node:test): unit, real ffmpeg, API end-to-end and security tests
 ├── Dockerfile
 ├── docker-compose.yml
 └── render.yaml
@@ -99,13 +126,13 @@ The repo includes a `Dockerfile` and `render.yaml`. On Render: create a Web Serv
 ## Tests
 
 ```bash
-npm test                    # 77 tests: options, conversions with real ffmpeg (23 formats), queue, API, security
+npm test                    # 93 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
 TG_NETWORK=1 npm test       # also real YouTube downloads
 ```
 
 ## Cookies (optional)
 
-For restricted videos, add a `cookies.txt` file (Netscape format). Desktop app: Settings → General → Cookies → "Open folder" (it goes in `%APPDATA%	ubegrab`). Server/Docker: next to `server.js`, or in the folder set by `TUBEGRAB_DATA_DIR`.
+For restricted videos, add a `cookies.txt` file (Netscape format). Desktop app: Settings → Downloads → Cookies → "Open folder" (it goes in `%APPDATA%\tubegrab`). Server/Docker: next to `server.js`, or in the folder set by `TUBEGRAB_DATA_DIR`.
 
 ## Dependencies
 
@@ -118,13 +145,13 @@ For restricted videos, add a `cookies.txt` file (Netscape format). Desktop app: 
 
 ## License
 
-MIT
+MIT. Privacy, terms of use and third-party components: [LEGAL.md](LEGAL.md#english). Only download content you have the right to download.
 
 ## Security
 
 Security reviews are AI-assisted (Claude, Anthropic) and run on significant changes to check for injection risks, insecure defaults and dependency vulnerabilities. Findings are tracked in [`BUGLOG.md`](BUGLOG.md).
 
-**Last review:** 2026-09-27 (review #9, v2.4.0) — the desktop window no longer loads whatever program answers on its port (it waits for its own server to confirm over IPC, and holds the port on both 127.0.0.1 and ::1; a foreign server on `[::1]:3000` could previously show its page with access to the app bridge); only media file types can be saved to your folder; Docker now uses a maintained ffmpeg (the `FFMPEG_BIN` setting was ignored), a committed lockfile with `npm ci`, and a checksum-verified yt-dlp; a global cap on concurrent yt-dlp lookups. Also fixed: downloads whose titles had accents/ñ/"/" failed on Windows (pipe encoding), and uploaded names with accents were garbled. New automated suite (`npm test`, 77 tests incl. security probes). 0 known vulnerabilities; all components on their latest releases. Known limit: the .exe isn't code-signed. Details in BUGLOG.md.
+**Last review:** 2026-09-28 (review #10, v2.5.0) — every new feature was reviewed: new IPC channels only take ids and booleans (files are opened or shown only if the app itself saved them; folder names are sanitised); search, playlists and subscriptions go through the same site allowlist (no generic extractor); merged uploads each pass the media-only ffmpeg input whitelist and the filter graph is built only from numbers and fixed strings; the light build and the installer update are SHA-256 verified; the page may only play local `blob:` media. Also fixed: copied-link detection crashed (Electron 44's clipboard is asynchronous), the portable app left a dead Start-menu shortcut after notifications, and the file prober misread resolutions. 0 known vulnerabilities; all components on their latest releases. Known limit: the .exe isn't code-signed yet (see *Code signing*). Details in BUGLOG.md.
 
 Found a vulnerability? Open an issue or contact directly.
 
@@ -134,32 +161,38 @@ Found a vulnerability? Open an issue or contact directly.
 
 # TubeGrab
 
-Descargador de vídeo/audio **y** conversor de formatos con cola de trabajos. Funciona completamente en tu equipo — sin servidores externos, sin trackers. Disponible como app de escritorio para Windows que se actualiza sola, y desplegable en tu propio servidor.
+Descargador de vídeo/audio **y** conversor de formatos con cola de trabajos. Funciona completamente en tu equipo — sin servidores externos, sin trackers. Disponible como app de escritorio para Windows que se actualiza sola (portable, portable ligera o con instalador), y desplegable en tu propio servidor.
 
 ## Características
 
-**Descargas**
+Todas las páginas están siempre a la vista en la barra lateral, sin menús desplegables: **Descargar**, **Buscar**, **Suscripciones**, **Convertir**, **Unir**, **Comprimir**, **Imagen**, **Cola**, **Historial** y **Ajustes** (con pestañas: Apariencia · Descargas · Conversión · Sistema · Acerca de).
+
+**Descargar**
 - YouTube y más de 20 sitios: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
-- Varios enlaces a la vez (uno por línea) y **playlists completas**
-- Audio: MP3, M4A, OPUS, OGG, FLAC, WAV o el **audio original sin recomprimir** (96–320 kbps)
-- Vídeo: la mejor calidad disponible (hasta 4K/8K) o una resolución fija, en MP4, MKV o WEBM
-- **Portada, metadatos y capítulos** incrustados, **subtítulos** incrustados (ES/EN) y **SponsorBlock** para quitar patrocinios
-- Vista previa (título, miniatura, duración) de un enlace
+- Varios enlaces a la vez, playlists completas, o **elegir qué vídeos de una playlist** descargar
+- **Buscar** en YouTube sin tener el enlace, y descargar los resultados que marques
+- **Suscripciones** (app de escritorio): canales o playlists revisados cada 1–24 h; lo nuevo se descarga solo
+- Audio: MP3, M4A, OPUS, OGG, FLAC, WAV o el original (96–320 kbps). Vídeo: hasta 4K/8K en MP4, MKV o WEBM
+- **Descargar solo un tramo** (p. ej. 1:20–3:45, con deslizador), o **dividir por capítulos** en un archivo por capítulo (con título y número de pista)
+- **Modo música**: "Artista - Título" limpio (sin "(Official Video)"…), etiqueta de artista y **portada cuadrada**
+- Portada, metadatos y capítulos; subtítulos en 9 idiomas, dentro del vídeo o como **.srt** aparte; SponsorBlock
 
-**Conversión**
-- **Por lotes**: convierte muchos archivos de una vez
-- 11 formatos de audio (MP3, AAC, M4A, OGG, OPUS, WMA, AC3, FLAC, ALAC, WAV, AIFF) y 12 de vídeo (MP4 H.264, MP4 H.265/HEVC, WEBM, MKV, MOV, AVI, WMV, FLV, MPG, 3GP, OGV, GIF animado)
-- **Preajustes**: WhatsApp, Instagram/TikTok, YouTube, email, iPhone/Apple (HEVC), web, GIF; podcast, audiolibro, nota de voz, sin pérdida…
-- Audio: calidad, frecuencia, mono/estéreo, normalizar volumen. Vídeo: resolución, calidad, fotogramas, girar/espejo, quitar audio. Ambos: velocidad (0,5×–2×) y recorte de inicio/fin. Extrae el audio de cualquier vídeo.
+**Convertir**
+- 11 formatos de audio y 12 de vídeo, por lotes, preajustes (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiolibro…), velocidad, girar, resolución…
+- **Recorte con vista previa y forma de onda**: arrastra los tiradores y escucha el tramo antes de convertir
+- **Unir** varios audios o vídeos en uno (los clips de otro tamaño se encajan con bandas negras)
+- **Comprimir a un tamaño** (p. ej. 8 MB para Discord, 16 MB para WhatsApp): TubeGrab calcula la calidad, en dos pasadas
+- **Imagen**: un fotograma en cualquier momento (con deslizador) o la carátula incrustada, en JPG/PNG/WEBP
+- **Aceleración por tarjeta gráfica** (NVIDIA NVENC, Intel Quick Sync, AMD AMF) para H.264/H.265, con vuelta automática al procesador
 
-**Cola y app de escritorio**
-- Cola de trabajos con **progreso real**, velocidad y tiempo restante; varias descargas en paralelo; cancelar cualquier trabajo y **reintentar** las descargas fallidas (los errores temporales se reintentan solos una vez)
-- Arrastra archivos o enlaces a cualquier parte de la ventana; atajos Ctrl+1/2/3 y Ctrl+, (ajustes)
-- App de escritorio: guarda directamente en la carpeta que elijas (con "Mostrar en carpeta" / "Abrir carpeta"), progreso en la barra de tareas y notificación al terminar
-- **Se actualiza sola**: la app se actualiza desde GitHub Releases con un clic (verificada por SHA-256) y mantiene al día su motor de descargas (yt-dlp) automáticamente — sitios como YouTube rompen las versiones antiguas en semanas
-- Historial local de trabajos terminados (solo en tu equipo)
-- **Dos interfaces, cambiables desde la barra superior:** Windows 11 (por defecto: ventana Mica, barra de título propia, panel de navegación, tarjetas de ajustes) y macOS (Liquid Glass: barra lateral de vidrio flotante, semáforo, listas agrupadas como Ajustes del Sistema). La estrella junto al selector —o Ajustes → Apariencia → Interfaz predeterminada— elige cuál se abre al iniciar
-- **Personalización** (Ajustes → Apariencia): claro/oscuro/automático, 8 colores de énfasis de macOS, 6 fondos, estilo de vidrio (transparente, tintado, opaco) y tamaño del texto; recuerda tus últimas opciones de descarga; sonido y aviso al terminar opcionales
+**Cola, historial y app de escritorio**
+- Progreso real, velocidad y tiempo restante; **pausar/reanudar** descargas (siguen donde se quedaron), **reordenar** lo que espera, cancelar, reintentar (los errores temporales se reintentan solos una vez); descargas/conversiones a la vez y **límite de velocidad** configurables
+- **Historial con búsqueda**: abrir el archivo, mostrarlo en su carpeta o volver a descargarlo con las mismas opciones
+- Guarda directamente en tu carpeta; varios archivos (capítulos, subtítulos) van juntos en una subcarpeta
+- **Bandeja del sistema**: seguir abierta al cerrar (descargas y suscripciones continúan); **detectar enlaces copiados** (opcional) y descargarlos con un clic
+- Se actualiza sola desde GitHub Releases (verificada por SHA-256) y mantiene al día yt-dlp
+- Dos interfaces (Windows 11 o macOS), claro/oscuro, colores, fondos, tamaño del texto, y **español o inglés**
+- Arrastra archivos o enlaces a cualquier parte de la ventana; atajos Ctrl+1 Descargar · Ctrl+2 Convertir · Ctrl+3 Cola · Ctrl+4 Historial · Ctrl+, Ajustes
 
 ## Modos de uso
 
@@ -171,19 +204,26 @@ npm start
 # Abre http://localhost:3000
 ```
 
-### 2. App de escritorio (Windows, sin instalación)
+### 2. App de escritorio (Windows)
 
-Descarga el último `.exe` desde [Releases](https://github.com/Cid736/tubegrab/releases/latest) — abre su propia ventana, no necesita navegador ni consola. Windows SmartScreen puede avisar "Editor desconocido" porque la app no tiene firma de código de pago; es normal en un ejecutable sin firmar, no significa que esté roto — dale a "Ejecutar de todas formas".
+En [Releases](https://github.com/Cid736/tubegrab/releases/latest), elige una:
 
-Para construirla tú mismo:
+| Archivo | Qué es |
+|---|---|
+| `TubeGrab.exe` | Portable, todo incluido (~170 MB). Sin instalar. |
+| `TubeGrab-Lite.exe` | Portable ligera (~100 MB): descarga ffmpeg y yt-dlp la primera vez (verificados por SHA-256). |
+| `TubeGrab-Setup.exe` | Instalador, por usuario (sin administrador): accesos en el menú Inicio y el escritorio; se actualiza ejecutando el nuevo instalador en silencio. |
+
+Cada una se actualiza a su mismo tipo. Windows SmartScreen puede avisar "Editor desconocido" porque la app no está firmada (ver *Firma de código* más abajo) — dale a "Ejecutar de todas formas".
+
+Para construirlas tú (necesitas el Modo Desarrollador de Windows, para que electron-builder pueda crear symlinks):
 
 ```bash
-npm run build          # App de Electron -> dist/TubeGrab.exe (la app de escritorio real)
+npm run build          # dist/TubeGrab.exe + dist/TubeGrab-Setup.exe
+npm run build:lite     # dist/TubeGrab-Lite.exe
 ```
 
-Para `npm run build` necesitas el Modo Desarrollador de Windows activado (Configuración → Privacidad y seguridad → Para desarrolladores), para que electron-builder pueda crear symlinks sin permisos de administrador.
-
-La app de escritorio comprueba los Releases de GitHub al arrancar y puede actualizarse sola con un clic (ver más abajo) — sin descargar nada a mano. **Para quien mantenga el repo, al publicar una release:** esta comprobación lee el `tag_name` de la release (`vX.Y.Z`, igual que la versión en `package.json`) y busca un asset llamado exactamente `TubeGrab.exe`, así que sigue usando `gh release create` como hasta ahora; no hace falta ningún paso ni archivo extra.
+**Para quien mantenga el repo, al publicar una release:** etiqueta `vX.Y.Z` (= versión de `package.json`) y sube los tres archivos con esos nombres exactos; el actualizador de cada tipo busca el suyo y verifica la huella SHA-256 que publica GitHub.
 
 ### 3. Docker
 
@@ -194,27 +234,37 @@ docker compose up
 
 ### 4. Desplegar tu propia instancia (ej. Render)
 
-El repo incluye un `Dockerfile` y `render.yaml`. En Render: crea un Web Service desde este repo (detecta Docker automáticamente), elige el plan Free, y añade la variable de entorno `TRUST_PROXY=true` (necesaria para que la app escuche correctamente y el rate-limiting lea la IP real del cliente detrás del proxy de Render).
+El repo incluye un `Dockerfile` y `render.yaml`. En Render: crea un Web Service desde este repo (detecta Docker automáticamente), elige el plan Free, y añade la variable de entorno `TRUST_PROXY=true`. Las suscripciones, la bandeja y el portapapeles solo están en la app de escritorio.
+
+## Firma de código
+
+La construcción firma los `.exe` automáticamente si se le da un certificado con las variables de entorno de electron-builder — sin tocar el código:
+
+- **Archivo de certificado** (`.pfx`): define `CSC_LINK` (ruta o base64) y `CSC_KEY_PASSWORD` y ejecuta `npm run build`.
+- **Gratis para código abierto:** [SignPath Foundation](https://signpath.org) firma proyectos open source sin coste (se solicita con el repo de GitHub; firman en su CI).
+- **Azure Trusted Signing** (coste mensual bajo): configura `win.azureSignOptions` en `package.json` e inicia sesión con la CLI de Azure.
+
+Con la firma desaparece el aviso "Editor desconocido" de SmartScreen (al momento con certificados EV; con los normales, tras ganar algo de reputación).
 
 ## Pruebas
 
 ```bash
-npm test                    # 77 pruebas: opciones, conversiones con ffmpeg real (23 formatos), cola, API, seguridad
+npm test                    # 93 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
 TG_NETWORK=1 npm test       # también descargas reales de YouTube
 ```
 
 ## Cookies (opcional)
 
-Para vídeos con restricciones, añade un archivo `cookies.txt` (formato Netscape). App de escritorio: Ajustes → General → Cookies → "Abrir carpeta" (va en `%APPDATA%	ubegrab`). Servidor/Docker: junto a `server.js`, o en la carpeta indicada en `TUBEGRAB_DATA_DIR`.
+Para vídeos con restricciones, añade un archivo `cookies.txt` (formato Netscape). App de escritorio: Ajustes → Descargas → Cookies → "Abrir carpeta" (va en `%APPDATA%\tubegrab`). Servidor/Docker: junto a `server.js`, o en la carpeta indicada en `TUBEGRAB_DATA_DIR`.
 
 ## Seguridad
 
 Las revisiones de seguridad son asistidas por IA (Claude, Anthropic) y se ejecutan en cambios significativos para detectar riesgos de inyección, configuraciones inseguras y vulnerabilidades en dependencias. Los hallazgos se registran en [`BUGLOG.md`](BUGLOG.md).
 
-**Última revisión:** 2026-09-27 (revisión 9, v2.4.0) — la ventana de escritorio ya no carga cualquier programa que responda en su puerto (espera a que su propio servidor lo confirme por IPC y reserva el puerto en 127.0.0.1 y en ::1; antes un servidor ajeno en `[::1]:3000` podía mostrar su página con acceso al puente de la app); solo se pueden guardar en tu carpeta archivos multimedia; Docker usa un ffmpeg mantenido (se ignoraba `FFMPEG_BIN`), lockfile versionado con `npm ci` y yt-dlp verificado por SHA-256; límite global de consultas simultáneas a yt-dlp. También corregido: en Windows fallaban las descargas con tildes/ñ/"/" en el título (codificación de la tubería) y los nombres subidos con tildes se corrompían. Nueva batería automática (`npm test`, 77 pruebas incluidas las de seguridad). 0 vulnerabilidades conocidas; todos los componentes en su última versión. Límite conocido: el .exe no está firmado. Detalles en BUGLOG.md.
+**Última revisión:** 2026-09-28 (revisión 10, v2.5.0) — se revisó cada función nueva: los nuevos canales IPC solo aceptan ids y booleanos (solo se abren o muestran archivos que la propia app guardó; los nombres de carpeta se sanean); búsqueda, playlists y suscripciones pasan por la misma lista de sitios permitidos (sin extractor genérico); cada archivo de "Unir" pasa la lista blanca de entradas multimedia de ffmpeg y el grafo de filtros solo se construye con números y textos fijos; la versión ligera y la actualización del instalador se verifican por SHA-256; la página solo puede reproducir medios locales `blob:`. También corregido: la detección de enlaces copiados fallaba (el portapapeles de Electron 44 es asíncrono), la versión portable dejaba un acceso roto en el menú Inicio tras las notificaciones, y el analizador de archivos leía mal las resoluciones. 0 vulnerabilidades conocidas; todos los componentes en su última versión. Límite conocido: el .exe aún no está firmado (ver *Firma de código*). Detalles en BUGLOG.md.
 
 ¿Encontraste una vulnerabilidad? Abre un issue o contacta directamente.
 
 ## Licencia
 
-MIT
+MIT. Privacidad, condiciones de uso y componentes de terceros: [LEGAL.md](LEGAL.md#español). Descarga solo contenido que tengas derecho a descargar.

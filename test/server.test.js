@@ -219,6 +219,59 @@ test('convert end to end: upload → progress → file → private → release',
   assert.equal((await api(`/api/jobs/${id}`, { method: 'DELETE' })).status, 200);
 });
 
+test('new endpoints validate their input', async () => {
+  const cfg = await (await api('/api/config')).json();
+  assert.equal(cfg.desktop, false);
+  assert.ok(['auto', 'off'].includes(cfg.hwAccel));
+  assert.equal((await api('/api/config', json({ downloadConcurrency: 6 }))).status, 403, 'web version cannot change server settings');
+  assert.equal((await api('/api/subscriptions')).status, 404, 'subscriptions are desktop-only');
+  assert.equal((await api('/api/search', json({ query: '' }))).status, 400);
+  assert.equal((await api('/api/search', json({ query: 'x'.repeat(201) }))).status, 400);
+  assert.equal((await api('/api/playlist', json({ url: 'https://evil.example.com/list' }))).status, 400);
+  const bad = await api('/api/jobs/download', json({ urls: ['https://youtu.be/x'], sectionStart: '9', sectionEnd: '3' }));
+  assert.equal(bad.status, 400);
+  const items = await api('/api/jobs/download', json({ items: [{ url: 'https://evil.example.com/v', title: 'x' }] }));
+  assert.equal(items.status, 400, 'picked items go through the same allowlist');
+  const fake = 'a'.repeat(32);
+  for (const action of ['pause', 'resume', 'move']) assert.equal((await api(`/api/jobs/${fake}/${action}`, json({}))).status, 404);
+  assert.equal((await api(`/api/jobs/${fake}/file?n=../../x`)).status, 404);
+});
+
+test('compress, image and merge through the API', { skip: !ffmpeg && 'ffmpeg not found', timeout: 180_000 }, async () => {
+  const clip = path.join(os.tmpdir(), `tg-api-${process.pid}.mp4`);
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=25:duration=6', '-f', 'lavfi', '-i', 'sine=d=6',
+    '-shortest', '-c:v', 'libx264', '-c:a', 'aac', clip]);
+  const blob = new Blob([fs.readFileSync(clip)], { type: 'video/mp4' });
+  fs.rmSync(clip, { force: true });
+  const send = async (endpoint, fields, files) => {
+    const fd = new FormData();
+    Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
+    files.forEach(([field, name]) => fd.append(field, blob, name));
+    return api(endpoint, { method: 'POST', body: fd });
+  };
+  assert.equal((await send('/api/jobs/compress', { targetMb: '0' }, [['file', 'a.mp4']])).status, 400);
+  assert.equal((await send('/api/jobs/image', { targetFormat: 'bmp', imageMode: 'frame' }, [['file', 'a.mp4']])).status, 400);
+  assert.equal((await send('/api/jobs/merge', { targetFormat: 'mp4' }, [['files', 'solo.mp4']])).status, 400, 'merging needs two files');
+  assert.equal((await send('/api/jobs/merge', { targetFormat: 'gif' }, [['files', 'a.mp4'], ['files', 'b.mp4']])).status, 400);
+
+  const ids = [];
+  for (const [endpoint, fields, files] of [
+    ['/api/jobs/compress', { targetMb: '1' }, [['file', 'grande.mp4']]],
+    ['/api/jobs/image', { targetFormat: 'jpg', imageMode: 'frame', time: '2' }, [['file', 'foto.mp4']]],
+    ['/api/jobs/merge', { targetFormat: 'mkv' }, [['files', 'uno.mp4'], ['files', 'dos.mp4']]],
+  ]) {
+    const res = await send(endpoint, fields, files);
+    assert.equal(res.status, 200, endpoint);
+    ids.push((await res.json()).id);
+  }
+  const jobs = await waitForJobs((m) => ids.every((id) => m.get(id) && ['done', 'error'].includes(m.get(id).status)));
+  const names = ids.map((id) => { const j = jobs.get(id); assert.equal(j.status, 'done', j.error); return j.fileName; });
+  assert.deepEqual(names, ['grande (1 MB).mp4', 'foto (2 s).jpg', 'uno (unido).mkv']);
+  const img = await api(`/api/jobs/${ids[1]}/file?n=0`);
+  assert.equal(img.status, 200);
+  assert.equal((await api(`/api/jobs/${ids[1]}/file?n=1`)).status, 404);
+});
+
 // ---- Real downloads (network; TG_NETWORK=1) -----------------------------------
 test('download from YouTube: audio + video, cancel and retry', { skip: (!NETWORK && 'set TG_NETWORK=1') || (!ytDlpPath() && 'yt-dlp not found'), timeout: 600_000 }, async () => {
   const url = 'https://www.youtube.com/watch?v=jNQXAC9IVRw'; // "Me at the zoo", 19 s

@@ -107,6 +107,65 @@ test('remove deletes the job and its files; releaseFile keeps it listed', async 
   assert.equal(jm.get(b.id, A), null);
 });
 
+test('a job can produce several files; each is served by index', async () => {
+  const jm = new JobManager({ root });
+  const job = jm.create({
+    clientId: A, type: 'download', title: 'álbum', source: 'https://youtu.be/x', request: { mode: 'audio' },
+    run: (j, ctx) => {
+      const files = ['01 - uno.mp3', '02 - dos.mp3'].map((n) => { const p = path.join(ctx.dir, n); fs.writeFileSync(p, n); return p; });
+      return Promise.resolve(files);
+    },
+  });
+  await until(() => job.status === 'done');
+  const view = jm.listFor(A)[0];
+  assert.deepEqual(view.files.map((f) => f.name), ['01 - uno.mp3', '02 - dos.mp3']);
+  assert.equal(view.fileName, '2 archivos');
+  assert.equal(view.source, 'https://youtu.be/x');
+  assert.deepEqual(view.request, { mode: 'audio' });
+  assert.match(jm.filePath(job, 1), /02 - dos\.mp3$/);
+  assert.equal(jm.filePath(job, 2), null);
+});
+
+test('pause keeps the folder and resume continues in it; move reorders the waiting queue', async () => {
+  const jm = new JobManager({ root });
+  jm.setConcurrency('download', 1);
+  const dirs = [];
+  const slow = (ms) => (job, ctx) => new Promise((resolve, reject) => {
+    dirs.push(ctx.dir);
+    fs.writeFileSync(path.join(ctx.dir, 'partial.part'), 'x');
+    const timer = setTimeout(() => { const p = path.join(ctx.dir, 'out.mp3'); fs.writeFileSync(p, 'data'); resolve(p); }, ms);
+    ctx.setProcess({ exitCode: 0, pid: -1 });
+    const poll = setInterval(() => { if (ctx.isCanceled()) { clearTimeout(timer); clearInterval(poll); reject(new Error('Cancelado')); } }, 5);
+    setTimeout(() => clearInterval(poll), ms + 50);
+  });
+  const a = jm.create({ clientId: A, type: 'download', title: 'a', run: slow(300), retryable: true });
+  const b = jm.create({ clientId: A, type: 'download', title: 'b', run: slow(50), retryable: true });
+  const c = jm.create({ clientId: A, type: 'download', title: 'c', run: slow(50), retryable: true });
+  await until(() => a.status === 'running');
+  assert.ok(jm.move(c, 'top'), 'c jumps ahead of b');
+  assert.ok(jm.pause(a));
+  assert.equal(a.status, 'paused');
+  await until(() => c.status === 'running' || c.status === 'done');
+  assert.equal(b.status, 'queued', 'b waits: c was moved to the top');
+  assert.ok(fs.existsSync(path.join(dirs[0], 'partial.part')), 'paused job keeps its partial files');
+  assert.ok(jm.resume(a));
+  await until(() => [a, b, c].every((j) => j.status === 'done'), 5000);
+  assert.equal(dirs.filter((d) => d === dirs[0]).length, 2, 'resumed in the same folder');
+  assert.equal(jm.move(a, 'up'), false, 'finished jobs cannot move');
+  assert.equal(jm.pause(a), false);
+});
+
+test('concurrency can be changed within limits', () => {
+  const jm = new JobManager({ root });
+  jm.setConcurrency('download', 99);
+  assert.equal(jm.concurrency.download, 6);
+  jm.setConcurrency('convert', 0);
+  assert.equal(jm.concurrency.convert, 1);
+  jm.setConcurrency('__proto__', 3);
+  jm.setConcurrency('download', 'x');
+  assert.equal(jm.concurrency.download, 6);
+});
+
 test('each process has its own folder; stale folders of dead processes are swept', () => {
   const stale = path.join(root, '999999');
   const old = path.join(root, 'deadbeef'.repeat(4)); // pre-2.4 layout

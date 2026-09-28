@@ -10,9 +10,7 @@ const https = require('https');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
-const VERSION = '9.0.2';
-const ZIP_URL = `https://github.com/GyanD/codexffmpeg/releases/download/${VERSION}/ffmpeg-${VERSION}-essentials_build.zip`;
-const ZIP_SHA256 = '60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba';
+const { VERSION, ZIP_URL, ZIP_SHA256, ZIP_BIN_DIR, STAMP } = require('../lib/ffmpeg-release');
 const ALLOWED_HOSTS = new Set(['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com']);
 
 const binDir = path.join(__dirname, '..', 'bin');
@@ -20,7 +18,7 @@ const stamp = path.join(binDir, 'ffmpeg.version');
 
 const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
-if (fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8').trim() === `${VERSION} ${ZIP_SHA256}`
+if (fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8').trim() === STAMP
   && fs.existsSync(path.join(binDir, 'ffmpeg.exe')) && fs.existsSync(path.join(binDir, 'ffprobe.exe'))) {
   console.log(`[ffmpeg] ${VERSION} ya instalado.`);
   process.exit(0);
@@ -57,7 +55,7 @@ function download(url, dest, redirects) {
     const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
     execFileSync(tar, ['-xf', zip, '-C', work], { stdio: 'ignore' });
 
-    const src = path.join(work, `ffmpeg-${VERSION}-essentials_build`, 'bin');
+    const src = path.join(work, ...ZIP_BIN_DIR.split('/'));
     fs.mkdirSync(binDir, { recursive: true });
     for (const exe of ['ffmpeg.exe', 'ffprobe.exe']) fs.copyFileSync(path.join(src, exe), path.join(binDir, exe));
     fs.writeFileSync(stamp, `${VERSION} ${ZIP_SHA256}\n`);

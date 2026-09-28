@@ -245,3 +245,36 @@ Se añadió una batería de pruebas automáticas (`npm test`, 77 pruebas con el 
 - **Descripción:** El actualizador usaba el cliente HTTPS de Node, que **no usa el almacén de certificados de Windows ni el proxy del sistema**. En equipos con antivirus que inspecciona HTTPS (Avast, ESET, Kaspersky…) o redes corporativas, la conexión con GitHub se rechazaba aunque el navegador funcionara. Además solo se comprobaba una vez al arrancar, y el motivo solo se veía al pasar el ratón.
 - **Fix:** Las peticiones pasan por la pila de red de Chromium (`electron.net`): certificados de Windows y proxy del sistema, como el navegador. Se sigue comprobando **cada** redirección contra la lista de hosts de GitHub y se mantiene la verificación SHA-256 del `.exe`. Mensajes claros (sin conexión, fecha/hora incorrecta, antivirus/red, proxy, límite de GitHub), reintento automático a los 10 minutos tras un error y comprobación cada 6 horas. Ajustes → Actualizaciones muestra la versión, el estado y el motivo del error, con botón para reintentar.
 - **Verificado:** con una build de prueba 2.3.9, detecta la 2.4.0, la descarga (170 MB, con la redirección al CDN de GitHub) y la huella SHA-256 coincide; con un proxy roto muestra "No se pudo conectar a través del proxy" y programa el reintento.
+
+---
+
+## 2026-09-28 — Revisión 10 (v2.5.0: barra lateral plana, 21 funciones nuevas y su revisión)
+
+Nuevas funciones: playlist a elegir, tramo antes de descargar, dividir por capítulos, modo música, suscripciones, búsqueda, subtítulos .srt y 9 idiomas, unir, comprimir a un tamaño, imagen/carátula, recorte con forma de onda, aceleración por GPU, detección de enlaces copiados, bandeja del sistema, historial con búsqueda/abrir/volver a descargar, cola con pausa y prioridades, límite de velocidad, inglés, instalador, versión ligera y preparación para firmar. La barra lateral muestra todas las páginas a la vista, sin desplegables (Ajustes usa pestañas). Añadidos LEGAL.md (privacidad y condiciones de uso, enlazado desde Ajustes → Acerca de) y nombres accesibles (`aria-label`) en los campos de enlace, búsqueda, suscripciones e historial.
+
+### [MEDIA — funcional] La detección de enlaces copiados provocaba un error del proceso principal
+- **Descripción:** En Electron 44 `clipboard.readText()` devuelve una Promise, no texto: `text.trim is not a function` salía en un diálogo cada 1,5 s (lo vio el usuario durante las pruebas).
+- **Fix:** Se espera la Promise; cualquier fallo al leer el portapapeles (bloqueado por otra app, contenido no textual) cuenta como "nada nuevo" y nunca lanza. Probado: solo ofrece enlaces de sitios compatibles (ignora texto normal y dominios no permitidos), sin errores.
+
+### [BAJA — funcional] La versión portable dejaba un acceso roto en el menú Inicio
+- **Descripción:** Para mostrar notificaciones, Windows/Electron crea un acceso "TubeGrab Pro" en el menú Inicio que apunta a la copia temporal del `.exe` portable; al cerrar la app queda roto (ocurría desde que hay notificaciones).
+- **Fix:** La portable borra su acceso al cerrarse y, al arrancar, los accesos rotos de sesiones anteriores. Solo toca accesos a un "TubeGrab Pro.exe" dentro de la carpeta temporal, nunca el del instalador.
+
+### [BAJA — funcional] El analizador de archivos no leía la resolución
+- **Descripción:** Al quitar etiquetas de códec tipo `0x31637661`, también quitaba el "0x720" de "1280x720". "Unir" usaba 16:9 a 720p en vez del tamaño del primer vídeo. **Fix:** solo se quitan etiquetas completas (`\b0x…\b`). Con prueba.
+
+### [BAJA — funcional] Otros encontrados al probar
+- Música: el título conservaba "(Official Video)" (la expresión distinguía mayúsculas) y el nombre de archivo perdía el artista. Tramo de audio: empezaba en el fotograma clave anterior (25 s en vez de 15); ahora el corte es exacto. Capítulos: cada archivo llevaba el título del vídeo entero; ahora título, pista (1/10…) y álbum propios.
+- Versión ligera: la GPU se detectaba antes de que ffmpeg estuviera descargado y se quedaba en "sin GPU"; ahora se reintenta.
+- "Reanudar todo" no respetaba el orden de la cola. Nombres de carpeta: "AC/DC" pasaba a "DC"; ahora "AC_DC".
+- README: `%APPDATA%\tubegrab` salía con un tabulador en lugar de "\t".
+
+### Revisión de seguridad de lo nuevo
+- **IPC nuevo** (`openSaved`, `savedExists`, `setOptions`, `components:retry`, `saveJob` con varios archivos): solo acepta ids de trabajo y booleanos. Abrir/mostrar solo funciona con rutas que la propia app guardó (registro en `saved.json`); el nombre de subcarpeta se sanea a un único nombre (nunca una ruta; nombres de dispositivo de Windows evitados) y lo guardado sigue limitado a extensiones multimedia, subtítulos e imágenes.
+- **Búsqueda, playlists y suscripciones:** la búsqueda es un único argumento `ytsearch15:<texto>` tras `--` (máx. 200 caracteres); los resultados, las entradas de playlist y los enlaces de suscripción pasan por la lista de sitios permitidos, con el extractor genérico desactivado. Suscripciones solo en escritorio, por cliente, máx. 100, con el mismo límite de procesos simultáneos.
+- **Unir / comprimir / imagen:** cada archivo subido pasa por el filtro de tipos y por la lista blanca de demuxers/protocolos de ffmpeg (probado otra vez con HLS/concat/subfile). El grafo de filtros de "Unir" solo contiene números calculados y textos fijos; tamaño objetivo, momento y formatos se validan contra listas o rangos. Máx. 50 archivos (10 en la web).
+- **GPU:** los codificadores se eligen de una tabla fija tras una prueba de 1 fotograma; si fallan, se repite con el procesador.
+- **Versión ligera e instalador:** ffmpeg se descarga con huella SHA-256 fijada y yt-dlp contra las sumas publicadas en su release, por la pila de red de Chromium y solo desde hosts de GitHub; la actualización del instalador usa el `.exe` verificado por SHA-256 igual que la portable. Instalador por usuario (sin permisos de administrador).
+- **Página:** CSP añade solo `media-src 'self' blob:` (vista previa local del recorte). Las preferencias nuevas (idioma, límite de velocidad) se validan contra listas cerradas; los ajustes de servidor (concurrencia, GPU) solo se pueden cambiar desde la app de escritorio y se acotan (1–6 descargas, 1–4 conversiones).
+- **Portapapeles:** desactivado por defecto; solo se lee mientras la app está abierta y nada sale del equipo.
+- `npm audit` → 0 vulnerabilidades; Electron, express, multer, helmet, express-rate-limit, yt-dlp y ffmpeg en su última versión. 93 pruebas automáticas (incluidas las nuevas de seguridad). **Límite conocido:** el `.exe` aún no está firmado; la construcción ya firma sola si se aporta un certificado (ver README).

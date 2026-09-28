@@ -1,4 +1,6 @@
-const { app, BrowserWindow, ipcMain, shell, screen, dialog, nativeTheme, net: electronNet } = require('electron');
+const {
+  app, BrowserWindow, ipcMain, shell, screen, dialog, nativeTheme, net: electronNet, Tray, Menu, Notification, clipboard,
+} = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -27,7 +29,14 @@ let shuttingDown = false;
 // off to a detached PowerShell one-liner that waits for this process to exit,
 // swaps the file, and relaunches it.
 const GITHUB_REPO = 'Cid736/tubegrab';
-const UPDATE_ASSET_NAME = 'TubeGrab.exe';
+// Three builds, each updating to its own release asset:
+//  - portable (TubeGrab.exe): one .exe with ffmpeg and yt-dlp inside;
+//  - light portable (TubeGrab-Lite.exe): downloads ffmpeg/yt-dlp on first launch;
+//  - installed (TubeGrab-Setup.exe): per-user NSIS install, updated by
+//    running the new installer silently.
+const IS_PORTABLE = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
+const IS_LITE = !fs.existsSync(path.join(__dirname, 'bin', 'ffmpeg.exe'));
+const UPDATE_ASSET_NAME = !IS_PORTABLE && app.isPackaged ? 'TubeGrab-Setup.exe' : IS_LITE ? 'TubeGrab-Lite.exe' : 'TubeGrab.exe';
 // Only ever talk to GitHub (API + its release-asset CDN), over HTTPS, even when
 // following redirects.
 const ALLOWED_UPDATE_HOSTS = new Set([
@@ -252,6 +261,16 @@ ipcMain.on('updater:download', async (event) => {
 ipcMain.on('updater:install', (event) => {
   if (!isTrustedSender(event) || !downloadedExePath) return;
 
+  if (!IS_PORTABLE) {
+    // Installed copy: the new installer (already SHA-256 verified) updates it
+    // in place silently and starts the app again when done.
+    const setup = spawn(downloadedExePath, ['/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true });
+    setup.unref();
+    quitting = true;
+    app.quit();
+    return;
+  }
+
   // electron-builder's portable launcher exposes the real on-disk exe path here;
   // process.execPath would instead point at the self-extracted temp copy.
   const targetExePath = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
@@ -330,12 +349,93 @@ function ensureEngine() {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.copyFileSync(bundled, target);
     }
-    return fs.existsSync(target) ? target : null;
   } catch (err) {
     console.error('[Engine] seed failed:', err.message);
-    return null;
+  }
+  // Returned even when missing: the light build downloads it next, and the
+  // server looks the path up on every use.
+  return target;
+}
+
+// === Components the light build downloads on first launch ===
+const ffmpegRelease = require('./lib/ffmpeg-release');
+const ffmpegUserPath = () => path.join(app.getPath('userData'), 'bin', 'ffmpeg.exe');
+/** ffmpeg the server should use: the bundled one, else the downloaded copy. */
+function ffmpegPathForServer() {
+  const bundled = path.join(__dirname, 'bin', 'ffmpeg.exe');
+  return fs.existsSync(bundled) ? bundled : ffmpegUserPath();
+}
+
+let componentsState = { status: 'ready', progress: null, error: null }; // ready | downloading | error
+
+function setComponents(patch) {
+  componentsState = { ...componentsState, ...patch };
+  setEngineState({ components: componentsState });
+}
+
+async function fetchBuffer(url) {
+  return new Promise((resolve, reject) => {
+    httpsGet(url, MAX_REDIRECTS, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    }, reject);
+  });
+}
+
+/** Light build: fetches whatever is missing (yt-dlp, ffmpeg), each verified by SHA-256. */
+async function ensureComponents() {
+  if (process.platform !== 'win32') return;
+  const needYtdlp = !fs.existsSync(engineUserPath());
+  const ffmpegDir = path.dirname(ffmpegUserPath());
+  const stamp = path.join(ffmpegDir, 'ffmpeg.version');
+  const needFfmpeg = ffmpegPathForServer() === ffmpegUserPath()
+    && !(fs.existsSync(ffmpegUserPath()) && fs.existsSync(path.join(ffmpegDir, 'ffprobe.exe'))
+      && fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8').trim() === ffmpegRelease.STAMP);
+  if (!needYtdlp && !needFfmpeg) return;
+
+  setComponents({ status: 'downloading', progress: 0, error: null });
+  try {
+    fs.mkdirSync(ffmpegDir, { recursive: true });
+    if (needYtdlp) {
+      // yt-dlp: the latest release, checked against its published SHA2-256SUMS.
+      const base = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download';
+      const [exe, sums] = await Promise.all([fetchBuffer(`${base}/yt-dlp.exe`), fetchBuffer(`${base}/SHA2-256SUMS`)]);
+      const line = sums.toString('utf8').split('\n').find((l) => /\syt-dlp\.exe$/.test(l.trim()));
+      const expected = line && line.trim().split(/\s+/)[0].toLowerCase();
+      if (!expected || crypto.createHash('sha256').update(exe).digest('hex') !== expected) {
+        throw new Error('yt-dlp descargado no coincide con su huella SHA-256');
+      }
+      fs.writeFileSync(engineUserPath(), exe);
+      setComponents({ progress: needFfmpeg ? 10 : 100 });
+    }
+    if (needFfmpeg) {
+      const work = fs.mkdtempSync(path.join(os.tmpdir(), 'tubegrab-ffmpeg-'));
+      try {
+        const zip = path.join(work, 'ffmpeg.zip');
+        const result = await downloadToFile(ffmpegRelease.ZIP_URL, zip, (p) => setComponents({ progress: 10 + Math.round(p * 0.85) }));
+        if (result.sha256 !== ffmpegRelease.ZIP_SHA256) throw new Error('ffmpeg descargado no coincide con su huella SHA-256');
+        // Windows' own tar (bsdtar) reads zip files.
+        const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+        await new Promise((resolve, reject) => execFile(tar, ['-xf', zip, '-C', work], { windowsHide: true }, (err) => (err ? reject(err) : resolve())));
+        const src = path.join(work, ...ffmpegRelease.ZIP_BIN_DIR.split('/'));
+        for (const exe of ['ffmpeg.exe', 'ffprobe.exe']) fs.copyFileSync(path.join(src, exe), path.join(ffmpegDir, exe));
+        fs.writeFileSync(stamp, `${ffmpegRelease.STAMP}\n`);
+      } finally {
+        fs.rm(work, { recursive: true, force: true }, () => {});
+      }
+    }
+    setComponents({ status: 'ready', progress: 100 });
+  } catch (err) {
+    console.error('[Components] download failed:', err.message);
+    setComponents({ status: 'error', error: friendlyNetError(err) });
   }
 }
+
+ipcMain.on('components:retry', (event) => {
+  if (isTrustedSender(event) && componentsState.status === 'error') ensureComponents().then(() => maintainEngine(false));
+});
 
 function engineVersion(exePath) {
   return new Promise((resolve) => {
@@ -388,10 +488,34 @@ ipcMain.handle('engine:getState', (event) => (isTrustedSender(event) ? engineSta
 ipcMain.on('engine:update', (event) => { if (isTrustedSender(event)) maintainEngine(true); });
 
 // === Saving finished jobs straight into the chosen folder ===
-const jobFileMatch = (url) => new RegExp(`^${APP_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/jobs/([a-f0-9]{32})/file\\?client=[a-f0-9]{32}$`).exec(url);
-const savedFiles = new Map(); // jobId -> absolute path we wrote
+const jobFileMatch = (url) => new RegExp(`^${APP_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/jobs/([a-f0-9]{32})/file\\?client=[a-f0-9]{32}&n=(\\d{1,4})$`).exec(url);
 
-const { safeSaveName } = require('./lib/filenames');
+const { safeSaveName, safeFolderName } = require('./lib/filenames');
+
+// Files this app itself saved, per job (kept across restarts so History can
+// open them later). The renderer only ever names a job id, never a path.
+const SAVED_PATH = () => path.join(app.getPath('userData'), 'saved.json');
+const SAVED_MAX = 500;
+let savedFiles = null; // Map jobId -> [absolute paths]
+function saved() {
+  if (!savedFiles) {
+    savedFiles = new Map();
+    try {
+      for (const [id, paths] of Object.entries(JSON.parse(fs.readFileSync(SAVED_PATH(), 'utf8')))) {
+        if (/^[a-f0-9]{32}$/.test(id) && Array.isArray(paths)) savedFiles.set(id, paths.filter((p) => typeof p === 'string' && path.isAbsolute(p)));
+      }
+    } catch { /* first run */ }
+  }
+  return savedFiles;
+}
+function rememberSaved(jobId, paths) {
+  const map = saved();
+  map.delete(jobId);
+  map.set(jobId, paths);
+  while (map.size > SAVED_MAX) map.delete(map.keys().next().value);
+  try { fs.writeFileSync(SAVED_PATH(), JSON.stringify(Object.fromEntries(map))); } catch { /* not fatal */ }
+}
+const pendingSaves = new Map(); // jobId -> { dir, total, paths: [], failed }
 
 function uniquePath(dir, fileName) {
   const ext = path.extname(fileName);
@@ -427,16 +551,20 @@ function setupDownloads() {
     const match = jobFileMatch(item.getURL());
     if (!match) return; // anything else keeps Electron's normal save dialog
     const jobId = match[1];
-    const dir = getSettings().downloadDir;
-    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* reported on failure below */ }
-    const target = uniquePath(dir, safeSaveName(item.getFilename()));
+    const pending = pendingSaves.get(jobId) || { dir: getSettings().downloadDir, total: 1, paths: [], failed: false };
+    pendingSaves.set(jobId, pending);
+    try { fs.mkdirSync(pending.dir, { recursive: true }); } catch { /* reported on failure below */ }
+    const target = uniquePath(pending.dir, safeSaveName(item.getFilename()));
     item.setSavePath(target);
     item.once('done', (_e, state) => {
-      if (state === 'completed') {
-        savedFiles.set(jobId, target);
-        sendToRenderer('desktop:saved', { jobId, ok: true, path: target });
+      if (state === 'completed') pending.paths.push(target); else pending.failed = state;
+      if (pending.paths.length + (pending.failed ? 1 : 0) < pending.total && !pending.failed) return;
+      pendingSaves.delete(jobId);
+      if (pending.paths.length) rememberSaved(jobId, pending.paths);
+      if (!pending.failed) {
+        sendToRenderer('desktop:saved', { jobId, ok: true, count: pending.paths.length });
       } else {
-        sendToRenderer('desktop:saved', { jobId, ok: false, error: state === 'cancelled' ? 'Guardado cancelado' : 'No se pudo guardar el archivo' });
+        sendToRenderer('desktop:saved', { jobId, ok: false, error: pending.failed === 'cancelled' ? 'Guardado cancelado' : 'No se pudo guardar el archivo' });
       }
     });
   });
@@ -444,9 +572,111 @@ function setupDownloads() {
 
 const cookiesFile = () => path.join(app.getPath('userData'), 'cookies.txt');
 
-ipcMain.handle('desktop:getSettings', (event) => (isTrustedSender(event)
-  ? { downloadDir: getSettings().downloadDir, hasCookies: fs.existsSync(cookiesFile()) }
-  : null));
+ipcMain.handle('desktop:getSettings', (event) => {
+  if (!isTrustedSender(event)) return null;
+  const s = getSettings();
+  return {
+    downloadDir: s.downloadDir,
+    hasCookies: fs.existsSync(cookiesFile()),
+    closeToTray: s.closeToTray === true,
+    clipboardWatch: s.clipboardWatch === true,
+    flavor: !IS_PORTABLE && app.isPackaged ? 'installed' : IS_LITE ? 'lite' : 'portable',
+  };
+});
+
+// Booleans only; anything else is ignored.
+ipcMain.on('desktop:setOptions', (event, patch) => {
+  if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return;
+  const next = {};
+  for (const key of ['closeToTray', 'clipboardWatch']) if (typeof patch[key] === 'boolean') next[key] = patch[key];
+  saveSettings(next);
+  applyClipboardWatch();
+});
+
+// === System tray, close-to-tray and copied-link detection ===
+let tray = null;
+let quitting = false;
+let trayHintShown = false;
+app.on('before-quit', () => { quitting = true; });
+
+function showWindow() {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function setupTray() {
+  if (tray) return;
+  tray = new Tray(path.join(__dirname, 'build', 'icon.ico'));
+  tray.setToolTip('TubeGrab');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Abrir TubeGrab', click: showWindow },
+    { type: 'separator' },
+    { label: 'Salir', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', showWindow);
+}
+
+// Close button with "keep running in the tray" on: hide instead of quitting,
+// so downloads and subscriptions carry on.
+function onWindowClose(event) {
+  if (quitting || getSettings().closeToTray !== true) return;
+  event.preventDefault();
+  mainWindow.hide();
+  if (!trayHintShown && Notification.isSupported()) {
+    trayHintShown = true;
+    new Notification({ title: 'TubeGrab sigue abierto', body: 'Está en la bandeja del sistema. Haz clic en su icono para volver, o "Salir" para cerrarlo.', silent: true }).show();
+  }
+}
+
+let clipboardTimer = null;
+let lastClipboard = '';
+const { normalizeMediaUrl } = require('./lib/download');
+
+// Polls the clipboard (only while enabled): a supported link copied in any
+// other app offers a one-click download. Nothing leaves the computer.
+function applyClipboardWatch() {
+  clearInterval(clipboardTimer);
+  clipboardTimer = null;
+  if (getSettings().clipboardWatch !== true) return;
+  // Electron 44's clipboard.readText() returns a Promise (older versions a
+  // string), and the clipboard can be locked by another app or hold something
+  // that isn't text: any read problem is just "nothing new", never an error.
+  const readClipboard = async () => {
+    try {
+      const value = await clipboard.readText();
+      return typeof value === 'string' ? value : '';
+    } catch {
+      return '';
+    }
+  };
+  let reading = false;
+  readClipboard().then((v) => { lastClipboard = v; });
+  clipboardTimer = setInterval(async () => {
+    if (reading) return;
+    reading = true;
+    try {
+      const text = await readClipboard();
+      if (!text || text === lastClipboard) return;
+      lastClipboard = text;
+      const value = text.trim();
+      const url = value.length < 2048 && !/\s/.test(value) ? normalizeMediaUrl(value) : null;
+      if (!url || !mainWindow || mainWindow.isDestroyed() || mainWindow.isFocused() || !Notification.isSupported()) return;
+      console.log('[Clipboard] offering a copied link');
+      const note = new Notification({ title: 'Enlace copiado', body: 'Haz clic para descargarlo con TubeGrab.', silent: true });
+      note.on('click', () => {
+        showWindow();
+        sendToRenderer('desktop:pasteUrl', { url });
+      });
+      note.show();
+    } catch (err) {
+      console.error('[Clipboard] check failed:', err.message);
+    } finally {
+      reading = false;
+    }
+  }, 1500);
+}
 
 // Opens the data folder (where cookies.txt goes). The renderer can't pick the path.
 ipcMain.on('desktop:openDataFolder', (event) => {
@@ -472,17 +702,43 @@ ipcMain.on('desktop:openFolder', (event) => {
   shell.openPath(dir);
 });
 
+const MAX_FILES_PER_JOB = 300;
+
 ipcMain.on('desktop:saveJob', (event, payload) => {
   if (!isTrustedSender(event) || !payload) return;
   const { jobId, clientId } = payload;
-  if (!/^[a-f0-9]{32}$/.test(String(jobId)) || !/^[a-f0-9]{32}$/.test(String(clientId))) return;
-  mainWindow.webContents.downloadURL(`${APP_ORIGIN}/api/jobs/${jobId}/file?client=${clientId}`);
+  if (!/^[a-f0-9]{32}$/.test(String(jobId)) || !/^[a-f0-9]{32}$/.test(String(clientId)) || pendingSaves.has(jobId)) return;
+  const count = Math.min(MAX_FILES_PER_JOB, Math.max(1, Math.floor(Number(payload.count) || 1)));
+  // Several files (chapters, video + subtitles) go together in a subfolder
+  // named after the job; the name is sanitised here, never used as a path.
+  const dir = count > 1
+    ? uniquePath(getSettings().downloadDir, safeFolderName(payload.folder))
+    : getSettings().downloadDir;
+  pendingSaves.set(jobId, { dir, total: count, paths: [], failed: false });
+  for (let n = 0; n < count; n++) {
+    mainWindow.webContents.downloadURL(`${APP_ORIGIN}/api/jobs/${jobId}/file?client=${clientId}&n=${n}`);
+  }
 });
 
+// Only paths this app itself saved (looked up by job id) can be shown or
+// opened; the renderer never supplies a path.
+const savedFor = (jobId) => (/^[a-f0-9]{32}$/.test(String(jobId)) ? (saved().get(jobId) || []).filter((p) => fs.existsSync(p)) : []);
+
 ipcMain.on('desktop:showInFolder', (event, jobId) => {
-  // Only paths this process itself saved; the renderer never supplies a path.
-  if (!isTrustedSender(event) || !savedFiles.has(jobId)) return;
-  shell.showItemInFolder(savedFiles.get(jobId));
+  const paths = isTrustedSender(event) ? savedFor(jobId) : [];
+  if (paths.length) shell.showItemInFolder(paths[0]);
+});
+
+ipcMain.on('desktop:openSaved', (event, jobId) => {
+  const paths = isTrustedSender(event) ? savedFor(jobId) : [];
+  // One file opens in its app; several (chapters…) open their folder.
+  if (paths.length === 1) shell.openPath(paths[0]);
+  else if (paths.length > 1) shell.openPath(path.dirname(paths[0]));
+});
+
+ipcMain.handle('desktop:savedExists', (event, ids) => {
+  if (!isTrustedSender(event) || !Array.isArray(ids)) return {};
+  return Object.fromEntries(ids.slice(0, 200).map((id) => [id, savedFor(id).length > 0]));
 });
 
 ipcMain.on('desktop:setProgress', (event, value) => {
@@ -539,6 +795,7 @@ function startServer(port, enginePath, retriesLeft = 2) {
       env: {
         ...process.env, NODE_ENV: 'production', TUBEGRAB_ELECTRON: '1', PORT: String(port),
         TUBEGRAB_DATA_DIR: app.getPath('userData'),
+        FFMPEG_BIN: ffmpegPathForServer(),
         ...(enginePath ? { TUBEGRAB_YTDLP: enginePath } : {}),
       },
       windowsHide: true,
@@ -646,7 +903,10 @@ function createWindow() {
   mainWindow.on('maximize', sendWindowState);
   mainWindow.on('unmaximize', sendWindowState);
 
+  mainWindow.on('close', onWindowClose);
   setupDownloads();
+  setupTray();
+  applyClipboardWatch();
 
   // Start the Express server. windowsHide keeps this (and anything it in turn
   // spawns, like yt-dlp.exe/ffmpeg.exe) from ever flashing a console window.
@@ -655,7 +915,8 @@ function createWindow() {
     APP_ORIGIN = `http://localhost:${appPort}`;
     if (mainWindow) mainWindow.loadURL(APP_ORIGIN);
     checkForUpdates().finally(() => { if (updateState.status !== 'error') scheduleUpdateCheck(UPDATE_PERIOD_MS); });
-    maintainEngine(false);
+    // Light build: fetch ffmpeg / yt-dlp first if they're not there yet.
+    ensureComponents().then(() => maintainEngine(false));
   }, (err) => {
     console.error('[Electron] Server failed to start:', err.message);
     dialog.showErrorBox('TubeGrab', `No se pudo iniciar TubeGrab: ${err.message}.`);
@@ -672,11 +933,8 @@ function createWindow() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  });
+  // (It may be hidden in the tray.)
+  app.on('second-instance', showWindow);
   app.on('ready', createWindow);
 }
 
@@ -684,6 +942,33 @@ app.on('window-all-closed', function () {
   killServerTree();
   if (process.platform !== 'darwin') app.quit();
 });
+
+// Portable build: Windows needs a Start menu shortcut to show notifications,
+// and one is created pointing at this run's temporary copy of the app — a
+// dead link once it exits. Remove ours on quit, and dead ones left by
+// earlier runs on start. Only links to a "TubeGrab Pro.exe" inside the temp
+// folder are touched (never the installer's shortcut or anything else).
+function cleanPortableShortcuts({ onlyCurrent }) {
+  if (process.platform !== 'win32' || !IS_PORTABLE) return;
+  const dir = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+  let names = [];
+  try { names = fs.readdirSync(dir).filter((n) => /\.lnk$/i.test(n)); } catch { return; }
+  const tmp = path.resolve(os.tmpdir()).toLowerCase();
+  for (const name of names) {
+    const file = path.join(dir, name);
+    let target = '';
+    try { target = shell.readShortcutLink(file).target || ''; } catch { continue; }
+    const resolved = path.resolve(target).toLowerCase();
+    const ours = path.basename(resolved) === path.basename(process.execPath).toLowerCase() && resolved.startsWith(`${tmp}${path.sep}`);
+    if (!ours) continue;
+    const isCurrent = resolved === path.resolve(process.execPath).toLowerCase();
+    if (onlyCurrent ? isCurrent : (!isCurrent && !fs.existsSync(target))) {
+      try { fs.rmSync(file, { force: true }); } catch { /* in use: next time */ }
+    }
+  }
+}
+app.on('ready', () => cleanPortableShortcuts({ onlyCurrent: false }));
+app.on('will-quit', () => cleanPortableShortcuts({ onlyCurrent: true }));
 
 // Safety net: make sure nothing is left running even if quit happens some
 // other way (Cmd+Q on macOS, task manager "end task" on the Electron window, etc.)

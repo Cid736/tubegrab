@@ -53,6 +53,7 @@ test('tampered storage never reaches the page', () => {
   const { attrs, prefs } = boot({ local: { tubegrab_prefs: JSON.stringify(evil) }, session: { tubegrab_ui: 'evil' } });
   assert.deepEqual({ ...attrs }, {
     'data-ui': 'windows', 'data-theme': 'light', 'data-accent': 'blue', 'data-wall': 'aurora', 'data-glass': 'tinted', 'data-size': 'medium',
+    lang: 'es',
   });
   const p = prefs.get();
   assert.equal(p.remember, true);
@@ -63,6 +64,15 @@ test('tampered storage never reaches the page', () => {
   prefs.set({ accent: 'red', theme: '"><script>' });
   assert.equal(attrs['data-accent'], 'red');
   assert.equal(attrs['data-theme'], 'light');
+});
+
+test('language and speed limit only take listed values', () => {
+  const ok = boot({ local: { tubegrab_prefs: JSON.stringify({ lang: 'en', rateLimit: '2M' }) } });
+  assert.equal(ok.attrs.lang, 'en');
+  assert.equal(ok.prefs.get().rateLimit, '2M');
+  const bad = boot({ local: { tubegrab_prefs: JSON.stringify({ lang: '"><x', rateLimit: '999999999M; rm' }) } });
+  assert.equal(bad.attrs.lang, 'es');
+  assert.equal(bad.prefs.get().rateLimit, '');
 });
 
 test('broken JSON in storage falls back to defaults', () => {

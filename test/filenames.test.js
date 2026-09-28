@@ -23,6 +23,20 @@ test('safeSaveName strips paths, forbidden characters and dot tricks', () => {
   assert.ok(safeSaveName(`${'a'.repeat(500)}.mp3`).length <= 204);
 });
 
+test('subtitles and images next to media are allowed; folders are single names', () => {
+  const { safeFolderName } = require('../lib/filenames');
+  assert.equal(safeSaveName('video.es.srt'), 'video.es.srt');
+  assert.equal(safeSaveName('portada.jpg'), 'portada.jpg');
+  assert.equal(safeFolderName('Álbum: Lo mejor / 2024'), 'Álbum_ Lo mejor _ 2024');
+  assert.equal(safeFolderName('AC/DC - Live'), 'AC_DC - Live');
+  assert.equal(safeFolderName('../../Windows'), '_.._Windows', 'one folder, never a path');
+  assert.equal(safeFolderName('..\\..\\x'), '_.._x');
+  assert.equal(safeFolderName('...'), 'TubeGrab');
+  assert.equal(safeFolderName('CON'), '_CON');
+  assert.equal(safeFolderName('Carpeta.'), 'Carpeta');
+  assert.ok(safeFolderName('x'.repeat(300)).length <= 100);
+});
+
 test('Windows device names are never used as file names', () => {
   for (const name of ['CON.mp3', 'nul.mp4', 'Com1.flac', 'lpt9.wav', 'aux']) {
     assert.match(safeSaveName(name), /^_/, name);

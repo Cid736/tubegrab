@@ -1,13 +1,14 @@
 {
   "name": "tubegrab",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "main": "electron-main.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
     "postinstall": "node scripts/postinstall.js",
     "build": "electron-builder",
-    "test": "node --test --test-concurrency=1 \"test/*.test.js\""
+    "test": "node --test --test-concurrency=1 \"test/*.test.js\"",
+    "build:lite": "electron-builder --config electron-builder.lite.js"
   },
   "engines": {
     "node": ">=22"
@@ -17,13 +18,15 @@
     "productName": "TubeGrab Pro",
     "asar": false,
     "win": {
-      "target": "portable",
+      "target": [
+        "portable",
+        "nsis"
+      ],
       "icon": "build/icon.ico"
     },
     "portable": {
       "artifactName": "TubeGrab.exe"
     },
-    "cscLink": null,
     "files": [
       "electron-main.js",
       "preload.js",
@@ -36,7 +39,17 @@
       "bin/ffprobe.exe",
       "yt-dlp.exe",
       "!node_modules/ffmpeg-static/*.exe"
-    ]
+    ],
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "TubeGrab-Setup.exe",
+      "shortcutName": "TubeGrab",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
   },
   "keywords": [],
   "author": "",

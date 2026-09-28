@@ -39,7 +39,8 @@ test('parseDownloadOptions falls back to safe defaults for unknown values', () =
   });
   assert.deepEqual(o, {
     mode: 'audio', audioFormat: 'mp3', audioBitrate: '192', quality: '1080', container: 'mp4',
-    metadata: true, subtitles: false, sponsorblock: false, playlist: false,
+    metadata: true, subtitles: false, subLangs: 'es,en', subMode: 'embed', sponsorblock: false, playlist: false,
+    music: false, chapters: false, sectionStart: null, sectionEnd: null, rateLimit: null,
   });
   assert.equal(download.parseDownloadOptions({ mode: 'video', subtitles: true }).subtitles, true);
   assert.equal(download.parseDownloadOptions({ mode: 'audio', subtitles: true }).subtitles, false);
@@ -66,6 +67,46 @@ test('buildArgs maps every audio format and video container', () => {
     assert.equal(args[args.indexOf('--merge-output-format') + 1], container);
     assert.match(args[args.indexOf('-S') + 1], /^res:720/);
   }
+});
+
+test('new options: part of a video, chapters, music mode, subtitles, speed limit', () => {
+  const part = download.parseDownloadOptions({ sectionStart: '1:20', sectionEnd: '3:45', rateLimit: '2M' });
+  assert.equal(download.validateOptions(part), null);
+  let args = download.buildArgs('https://youtu.be/x', part, env);
+  assert.equal(args[args.indexOf('--download-sections') + 1], '*80-225');
+  assert.ok(args.includes('--force-keyframes-at-cuts'));
+  assert.equal(args[args.indexOf('--limit-rate') + 1], '2M');
+  assert.match(download.describeOptions(part), /1:20–3:45/);
+
+  for (const bad of [{ sectionStart: '50', sectionEnd: '10' }, { sectionStart: 'x' }, { sectionEnd: '1;rm' }, { chapters: true, sectionStart: '5' }]) {
+    assert.ok(download.validateOptions(download.parseDownloadOptions(bad)), JSON.stringify(bad));
+  }
+  assert.equal(download.parseDownloadOptions({ rateLimit: '999G' }).rateLimit, null);
+
+  args = download.buildArgs('https://youtu.be/x', download.parseDownloadOptions({ chapters: true }), env);
+  assert.ok(args.includes('--split-chapters'));
+  assert.match(args.find((a) => a.startsWith('chapter:')), /capitulos/);
+
+  args = download.buildArgs('https://youtu.be/x', download.parseDownloadOptions({ mode: 'audio', music: true }), env);
+  assert.ok(args.includes('--parse-metadata') && args.includes('--replace-in-metadata'));
+  assert.match(args[args.indexOf('-o') + 1], /%\(artist&\{\} - \|\)s/);
+  assert.ok(args.some((a) => a.startsWith('ThumbnailsConvertor+FFmpeg_o:') && a.includes('crop=')), 'square cover');
+  assert.equal(download.parseDownloadOptions({ mode: 'video', music: true }).music, false, 'music mode is audio only');
+
+  const subs = download.parseDownloadOptions({ mode: 'video', subtitles: true, subLangs: 'fr', subMode: 'file' });
+  args = download.buildArgs('https://youtu.be/x', subs, env);
+  assert.equal(args[args.indexOf('--sub-langs') + 1], 'fr,fr-FR');
+  assert.ok(args.includes('--convert-subs') && !args.includes('--embed-subs'));
+  const bogus = download.parseDownloadOptions({ mode: 'video', subtitles: true, subLangs: 'all,--exec x', subMode: 'x' });
+  assert.equal(bogus.subLangs, 'es,en');
+  assert.equal(bogus.subMode, 'embed');
+});
+
+test('subscriptions point at a channel\'s videos, not its tabs', () => {
+  assert.equal(download.subscriptionTarget('https://www.youtube.com/@jawed'), 'https://www.youtube.com/@jawed/videos');
+  assert.equal(download.subscriptionTarget('https://www.youtube.com/channel/UC123/'), 'https://www.youtube.com/channel/UC123/videos');
+  assert.equal(download.subscriptionTarget('https://www.youtube.com/playlist?list=PL1'), 'https://www.youtube.com/playlist?list=PL1');
+  assert.equal(download.subscriptionTarget('https://soundcloud.com/artist'), 'https://soundcloud.com/artist');
 });
 
 test('SponsorBlock is only requested for YouTube', () => {
@@ -122,8 +163,8 @@ test('a failed download is retried once automatically, unless the error is perma
 
   process.env.FAKE_MODE = 'ok-second';
   const c1 = ctx();
-  const file = await dl.runDownload('https://youtu.be/x', opts, env)({ title: 't' }, c1);
-  assert.equal(path.basename(file), 'song.mp3');
+  const files = await dl.runDownload('https://youtu.be/x', opts, env)({ title: 't' }, c1);
+  assert.deepEqual(files.map((f) => path.basename(f)), ['song.mp3']);
   assert.ok(c1.updates.some((u) => u.stage === 'Reintentando…'));
 
   fs.rmSync(path.join(dir, 'count'));

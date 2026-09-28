@@ -29,7 +29,7 @@
     </header>
 
     <div class="frame">
-    <!-- ===== Sidebar ===== -->
+    <!-- ===== Sidebar (sections with submenus) ===== -->
     <aside class="sidebar">
       <div class="sidebar-top">
         <div class="traffic hidden" id="trafficLights">
@@ -47,27 +47,52 @@
       </div>
 
       <nav class="nav" id="nav">
-        <button class="nav-item active" data-view="download" type="button" title="Descargar (Ctrl+1)">
+        <button class="nav-item" data-view="dl-link" type="button" title="Descargar (Ctrl+1)">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8m0 0l-3.2-3.2M12 15.5l3.2-3.2"/></svg>
           <span>Descargar</span>
-          <span class="nav-badge hidden" id="navBadge"></span>
         </button>
-        <button class="nav-item" data-view="convert" type="button" title="Convertir (Ctrl+2)">
+        <button class="nav-item" data-view="dl-search" type="button" title="Buscar">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>
+          <span>Buscar</span>
+        </button>
+        <button class="nav-item desktop-only" data-view="dl-subs" type="button" title="Suscripciones">
+          <svg viewBox="0 0 24 24"><path d="M5 11a8 8 0 0 1 8 8M5 5a14 14 0 0 1 14 14"/><circle cx="6" cy="18" r="1.3"/></svg>
+          <span>Suscripciones</span>
+        </button>
+        <button class="nav-item" data-view="cv-format" type="button" title="Convertir (Ctrl+2)">
           <svg viewBox="0 0 24 24"><path d="M16.5 4.5l3 3-3 3"/><path d="M4.5 12V10a2.5 2.5 0 0 1 2.5-2.5h12.5"/><path d="M7.5 19.5l-3-3 3-3"/><path d="M19.5 12v2a2.5 2.5 0 0 1-2.5 2.5H4.5"/></svg>
           <span>Convertir</span>
         </button>
-        <button class="nav-item" data-view="recents" type="button" title="Recientes (Ctrl+3)">
+        <button class="nav-item" data-view="cv-merge" type="button" title="Unir">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="7" height="14" rx="1.5"/><rect x="14" y="5" width="7" height="14" rx="1.5"/><path d="M10 12h4"/></svg>
+          <span>Unir</span>
+        </button>
+        <button class="nav-item" data-view="cv-compress" type="button" title="Comprimir">
+          <svg viewBox="0 0 24 24"><path d="M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5"/></svg>
+          <span>Comprimir</span>
+        </button>
+        <button class="nav-item" data-view="cv-image" type="button" title="Imagen">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg>
+          <span>Imagen</span>
+        </button>
+        <button class="nav-item" data-view="queue" type="button" title="Cola (Ctrl+3)">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          <span>Cola</span>
+          <span class="nav-badge hidden" id="navBadge"></span>
+        </button>
+        <button class="nav-item" data-view="history" type="button" title="Historial (Ctrl+4)">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg>
-          <span>Recientes</span>
+          <span>Historial</span>
         </button>
       </nav>
 
       <div class="sidebar-bottom">
-        <button class="nav-item" data-view="settings" id="navSettings" type="button" title="Ajustes (Ctrl+,)">
+        <!-- One button; its sections are tabs at the top of the Ajustes page. -->
+        <button class="nav-item" data-view="set-appearance" data-section="settings" type="button" title="Ajustes (Ctrl+,)">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span>Ajustes</span>
         </button>
-        <button class="version-chip hidden" id="versionChip" type="button" title="Buscar actualizaciones"></button>
+        <button class="version-chip hidden" id="versionChip" type="button" title="Buscar actualizaciones" aria-label="Buscar actualizaciones"></button>
       </div>
     </aside>
 
@@ -99,8 +124,10 @@
           </div>
         </div>
       </header>
+      <!-- Submenu tabs for narrow windows (the sidebar then only shows sections). -->
+      <nav class="subnav" id="subnav" aria-label="Submenú"></nav>
 
-      <div class="scroll">
+      <div class="scroll" id="scroll">
         <!-- Update notice (desktop app) -->
         <section class="notice hidden" id="updateBanner">
           <svg class="notice-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16V8m0 0l-3.2 3.2M12 8l3.2 3.2"/></svg>
@@ -117,13 +144,29 @@
           </div>
         </section>
 
-        <!-- ===== Download & Convert form ===== -->
-        <section class="view" data-views="download convert" id="mainCard">
+        <!-- Light build: ffmpeg / yt-dlp being fetched -->
+        <section class="notice hidden" id="componentsBanner">
+          <svg class="notice-icon" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/></svg>
+          <div class="notice-text">
+            <strong id="componentsTitle">Preparando TubeGrab…</strong>
+            <span id="componentsSubtitle">Descargando los componentes de conversión y descarga (solo la primera vez).</span>
+          </div>
+          <div class="notice-actions">
+            <div class="update-progress" id="componentsProgress">
+              <div class="bar"><div class="bar-fill" id="componentsFill"></div></div>
+              <span id="componentsLabel">0%</span>
+            </div>
+            <button class="btn hidden" id="btnComponentsRetry" type="button">Reintentar</button>
+          </div>
+        </section>
+
+        <!-- ===== Descargar → Enlace, and Convertir → Formato ===== -->
+        <section class="view" data-views="dl-link cv-format" id="mainCard">
           <!-- Links -->
           <div id="inputGroup">
             <div class="field input-wrapper">
               <svg class="field-icon" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              <textarea id="urlInput" rows="1" placeholder="Pega un enlace o varios, uno por línea" autocomplete="off" spellcheck="false"></textarea>
+              <textarea id="urlInput" rows="1" placeholder="Pega un enlace o varios, uno por línea" aria-label="Pega un enlace o varios, uno por línea" autocomplete="off" spellcheck="false"></textarea>
               <button class="btn-clear" id="btnClear" title="Borrar" type="button" aria-label="Borrar">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm3.53 12.47a.75.75 0 1 1-1.06 1.06L12 13.06l-2.47 2.47a.75.75 0 1 1-1.06-1.06L10.94 12 8.47 9.53a.75.75 0 1 1 1.06-1.06L12 10.94l2.47-2.47a.75.75 0 1 1 1.06 1.06L13.06 12z"/></svg>
               </button>
@@ -136,9 +179,27 @@
                 <p class="preview-meta" id="previewMeta"></p>
               </div>
             </div>
+            <!-- Playlist: pick which videos -->
+            <div class="picker-card hidden" id="playlistCard">
+              <div class="picker-head">
+                <div class="picker-head-text">
+                  <strong id="playlistTitle">Playlist</strong>
+                  <span id="playlistMeta"></span>
+                </div>
+                <div class="row-actions">
+                  <button class="link-btn" id="playlistAll" type="button">Todos</button>
+                  <button class="link-btn" id="playlistNone" type="button">Ninguno</button>
+                </div>
+              </div>
+              <ul class="pick-list" id="playlistList"></ul>
+              <div class="picker-foot">
+                <span class="hint" id="playlistHint"></span>
+                <button class="btn btn-primary" id="btnPlaylistDownload" type="button">Descargar seleccionados</button>
+              </div>
+            </div>
           </div>
 
-          <!-- Files -->
+          <!-- Files (Convertir → Formato) -->
           <div class="hidden" id="uploadGroup">
             <label class="dropzone" id="fileDrop" for="fileInput">
               <input type="file" id="fileInput" multiple accept="audio/*,video/*,image/gif,.mp3,.aac,.m4a,.ogg,.opus,.wma,.ac3,.flac,.wav,.aiff,.aif,.amr,.mp4,.m4v,.webm,.mkv,.mov,.avi,.wmv,.flv,.mpg,.mpeg,.3gp,.ogv,.ts,.mts,.gif" hidden>
@@ -147,6 +208,22 @@
               <span class="dropzone-hint">o haz clic para elegirlos · audio, vídeo o GIF</span>
             </label>
             <ul class="file-list hidden" id="fileList"></ul>
+            <!-- Preview with waveform: drag the handles to trim -->
+            <div class="trim-panel hidden" id="trimPanel">
+              <div class="trim-media" id="trimMediaWrap"></div>
+              <div class="range" id="trimRange">
+                <canvas class="range-wave" id="trimWave"></canvas>
+                <div class="range-sel"></div>
+                <div class="range-play"></div>
+                <button class="range-handle" data-handle="start" type="button" aria-label="Inicio del recorte"></button>
+                <button class="range-handle" data-handle="end" type="button" aria-label="Final del recorte"></button>
+              </div>
+              <div class="trim-foot">
+                <button class="btn" id="btnTrimPlay" type="button">▶ Escuchar el tramo</button>
+                <span class="hint" id="trimLabel"></span>
+                <button class="link-btn" id="btnTrimReset" type="button">Todo el archivo</button>
+              </div>
+            </div>
           </div>
 
           <!-- Download settings -->
@@ -198,9 +275,57 @@
           <div class="group" id="downloadExtras">
             <label class="row switch"><span class="row-label">Portada y metadatos</span><input type="checkbox" id="optMetadata" checked><span class="switch-ui"></span></label>
             <label class="row switch"><span class="row-label">Playlist completa</span><input type="checkbox" id="optPlaylist"><span class="switch-ui"></span></label>
-            <label class="row switch" id="optSubtitlesWrap"><span class="row-label">Subtítulos (español e inglés)</span><input type="checkbox" id="optSubtitles"><span class="switch-ui"></span></label>
             <label class="row switch"><span class="row-label">Quitar patrocinios <small>SponsorBlock</small></span><input type="checkbox" id="optSponsorblock"><span class="switch-ui"></span></label>
           </div>
+
+          <details class="more" id="dlMoreOptions">
+            <summary>
+              <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+              Más opciones
+            </summary>
+            <div class="more-body">
+              <div class="group">
+                <label class="row switch" id="optMusicWrap"><span class="row-label">Modo música <small>artista y título limpios, portada cuadrada</small></span><input type="checkbox" id="optMusic"><span class="switch-ui"></span></label>
+                <label class="row switch"><span class="row-label">Dividir por capítulos <small>un archivo por capítulo</small></span><input type="checkbox" id="optChapters"><span class="switch-ui"></span></label>
+                <label class="row switch" id="optSubtitlesWrap"><span class="row-label">Subtítulos</span><input type="checkbox" id="optSubtitles"><span class="switch-ui"></span></label>
+                <label class="row hidden" id="subLangsRow"><span class="row-label">Idioma de los subtítulos</span>
+                  <select id="subLangs">
+                    <option value="es,en" selected>Español e inglés</option>
+                    <option value="es">Español</option>
+                    <option value="en">Inglés</option>
+                    <option value="fr">Francés</option>
+                    <option value="de">Alemán</option>
+                    <option value="it">Italiano</option>
+                    <option value="pt">Portugués</option>
+                    <option value="ja">Japonés</option>
+                    <option value="ko">Coreano</option>
+                  </select>
+                </label>
+                <label class="row hidden" id="subModeRow"><span class="row-label">Guardar los subtítulos</span>
+                  <select id="subMode">
+                    <option value="embed" selected>Dentro del vídeo</option>
+                    <option value="file">Como archivo .srt aparte</option>
+                  </select>
+                </label>
+              </div>
+              <div class="group">
+                <div class="row"><span class="row-label">Descargar solo un tramo <small>opcional</small></span>
+                  <div class="row-actions">
+                    <input class="text-input small" type="text" id="dlStart" placeholder="Desde 0:00" autocomplete="off" aria-label="Desde">
+                    <input class="text-input small" type="text" id="dlEnd" placeholder="Hasta el final" autocomplete="off" aria-label="Hasta">
+                  </div>
+                </div>
+                <div class="row row-range hidden" id="dlRangeRow">
+                  <div class="range" id="dlRange">
+                    <div class="range-sel"></div>
+                    <button class="range-handle" data-handle="start" type="button" aria-label="Inicio del tramo"></button>
+                    <button class="range-handle" data-handle="end" type="button" aria-label="Final del tramo"></button>
+                  </div>
+                </div>
+              </div>
+              <p class="hint" id="dlMoreHint"></p>
+            </div>
+          </details>
 
           <!-- Convert settings -->
           <div class="group hidden" id="convertOptions">
@@ -320,11 +445,189 @@
           </div>
         </section>
 
-        <!-- ===== Activity (visible while downloading/converting) ===== -->
-        <section class="view" data-views="download convert" id="queueSection">
+        <!-- ===== Descargar → Buscar ===== -->
+        <section class="view hidden" data-views="dl-search" id="searchSection">
+          <form class="search-bar" id="searchForm">
+            <div class="field search-field">
+              <svg class="field-icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input id="searchInput" type="search" placeholder="Busca una canción, un vídeo, un artista…" aria-label="Busca una canción, un vídeo, un artista…" autocomplete="off" spellcheck="false" maxlength="200">
+            </div>
+            <button class="btn btn-primary" id="btnSearch" type="submit">Buscar</button>
+          </form>
+          <p class="hint" id="searchHint">Busca en YouTube sin tener el enlace. Se descargará con el formato elegido arriba (Audio o Vídeo) y en Descargar → Enlace.</p>
+          <div class="picker-card hidden" id="searchResults">
+            <div class="picker-head">
+              <div class="picker-head-text"><strong id="searchCount"></strong><span id="searchFormat"></span></div>
+              <div class="row-actions">
+                <button class="link-btn" id="searchAll" type="button">Todos</button>
+                <button class="link-btn" id="searchNone" type="button">Ninguno</button>
+              </div>
+            </div>
+            <ul class="pick-list" id="searchList"></ul>
+            <div class="picker-foot">
+              <span class="status-message" id="searchStatus" role="status"></span>
+              <button class="btn btn-primary" id="btnSearchDownload" type="button">Descargar seleccionados</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== Descargar → Suscripciones (desktop) ===== -->
+        <section class="view hidden" data-views="dl-subs" id="subsSection">
+          <div class="web-only-note desktop-hide">
+            <p>Las suscripciones funcionan en la app de escritorio, que es la que puede revisar tus canales cada pocas horas.</p>
+          </div>
+          <div class="desktop-only">
+            <div class="field">
+              <svg class="field-icon" viewBox="0 0 24 24" fill="none"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="5" cy="19" r="1.5" fill="currentColor"/></svg>
+              <input class="field-input" id="subUrl" type="text" placeholder="Enlace de un canal o playlist (YouTube, SoundCloud…)" aria-label="Enlace de un canal o playlist (YouTube, SoundCloud…)" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="group">
+              <label class="row"><span class="row-label">Revisar cada</span>
+                <select id="subInterval">
+                  <option value="1">Hora</option>
+                  <option value="3">3 horas</option>
+                  <option value="6" selected>6 horas</option>
+                  <option value="12">12 horas</option>
+                  <option value="24">Día</option>
+                </select>
+              </label>
+              <label class="row"><span class="row-label">Al suscribirte, descargar ya</span>
+                <select id="subBackfill">
+                  <option value="0" selected>Nada, solo lo nuevo</option>
+                  <option value="1">El último vídeo</option>
+                  <option value="3">Los 3 últimos</option>
+                  <option value="5">Los 5 últimos</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-footer">
+              <div class="status-message" id="subStatus" role="status"></div>
+              <button class="btn btn-primary" id="btnSubscribe" type="button">Suscribirse</button>
+            </div>
+            <p class="footnote" id="subFormatNote"></p>
+
+            <div class="section-header"><h2>Tus suscripciones</h2></div>
+            <div class="group list-group">
+              <div class="empty" id="subsEmpty"><p>Aún no sigues ningún canal. Lo nuevo que publiquen se descargará solo mientras TubeGrab esté abierto (también en la bandeja).</p></div>
+              <ul class="sub-list" id="subsList"></ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== Convertir → Unir ===== -->
+        <section class="view hidden" data-views="cv-merge" id="mergeSection">
+          <label class="dropzone" id="mergeDrop" for="mergeInput">
+            <input type="file" id="mergeInput" multiple accept="audio/*,video/*,image/gif,.mp3,.aac,.m4a,.ogg,.opus,.wma,.ac3,.flac,.wav,.aiff,.aif,.amr,.mp4,.m4v,.webm,.mkv,.mov,.avi,.wmv,.flv,.mpg,.mpeg,.3gp,.ogv,.ts,.mts,.gif" hidden>
+            <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="7" height="14" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="5" width="7" height="14" rx="1.5" stroke="currentColor" stroke-width="1.8"/><path d="M10 12h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span class="dropzone-title" id="mergeDropText">Arrastra los archivos que quieres unir</span>
+            <span class="dropzone-hint">se unen en este orden; puedes cambiarlo abajo</span>
+          </label>
+          <ul class="order-list hidden" id="mergeList"></ul>
+          <div class="group">
+            <div class="row"><span class="row-label">Resultado</span>
+              <div class="segmented segmented-small" id="mergeKind">
+                <button class="kind-btn active" data-kind="audio" type="button">Audio</button>
+                <button class="kind-btn" data-kind="video" type="button">Vídeo</button>
+              </div>
+            </div>
+            <label class="row"><span class="row-label">Formato</span><select id="mergeFormat"></select></label>
+            <label class="row" id="mergeBitrateRow"><span class="row-label">Calidad</span>
+              <select id="mergeBitrate">
+                <option value="">Automática</option>
+                <option value="320">320 kbps</option>
+                <option value="192" selected>192 kbps</option>
+                <option value="128">128 kbps</option>
+              </select>
+            </label>
+            <label class="row hidden" id="mergeResolutionRow"><span class="row-label">Tamaño del vídeo</span>
+              <select id="mergeResolution">
+                <option value="" selected>Como el primer vídeo</option>
+                <option value="2160">4K</option>
+                <option value="1080">1080p</option>
+                <option value="720">720p</option>
+                <option value="480">480p</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">En vídeo, los clips de otro tamaño se encajan con bandas negras; los archivos de audio aparecen con imagen en negro.</p>
+          <div class="form-footer">
+            <div class="status-message" id="mergeStatus" role="status"></div>
+            <button class="btn btn-primary btn-download" id="btnMerge" type="button">Unir</button>
+          </div>
+        </section>
+
+        <!-- ===== Convertir → Comprimir ===== -->
+        <section class="view hidden" data-views="cv-compress" id="compressSection">
+          <label class="dropzone" id="compressDrop" for="compressInput">
+            <input type="file" id="compressInput" multiple accept="audio/*,video/*,.mp3,.aac,.m4a,.ogg,.opus,.wma,.flac,.wav,.mp4,.m4v,.webm,.mkv,.mov,.avi,.wmv,.flv,.mpg,.mpeg,.3gp,.ts,.mts" hidden>
+            <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none"><path d="M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="dropzone-title" id="compressDropText">Arrastra los vídeos o audios que quieres que pesen menos</span>
+            <span class="dropzone-hint">cada archivo se comprime por separado</span>
+          </label>
+          <ul class="file-list hidden" id="compressList"></ul>
+          <div class="group">
+            <div class="row row-tall"><span class="row-label">Que pese como mucho</span>
+              <div class="chips" id="compressChips">
+                <button class="chip" data-mb="8" type="button">8 MB <small>Discord</small></button>
+                <button class="chip" data-mb="16" type="button">16 MB <small>WhatsApp</small></button>
+                <button class="chip active" data-mb="25" type="button">25 MB <small>Email</small></button>
+                <button class="chip" data-mb="50" type="button">50 MB</button>
+                <button class="chip" data-mb="100" type="button">100 MB</button>
+              </div>
+            </div>
+            <label class="row"><span class="row-label">Otro tamaño (MB)</span><input class="text-input" type="text" id="compressCustom" placeholder="p. ej. 12" inputmode="decimal" autocomplete="off"></label>
+          </div>
+          <p class="hint">TubeGrab calcula la calidad para que quepa. Si el tamaño es muy pequeño para la duración, baja la resolución o te avisa.</p>
+          <div class="form-footer">
+            <div class="status-message" id="compressStatus" role="status"></div>
+            <button class="btn btn-primary btn-download" id="btnCompress" type="button">Comprimir</button>
+          </div>
+        </section>
+
+        <!-- ===== Convertir → Imagen ===== -->
+        <section class="view hidden" data-views="cv-image" id="imageSection">
+          <label class="dropzone" id="imageDrop" for="imageInput">
+            <input type="file" id="imageInput" multiple accept="audio/*,video/*,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.m4v,.webm,.mkv,.mov,.avi,.wmv,.flv,.mpg,.mpeg,.3gp,.ts,.mts,.gif" hidden>
+            <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="2" stroke="currentColor" stroke-width="1.8"/><path d="M21 16l-5-5-8 9" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            <span class="dropzone-title" id="imageDropText">Arrastra un vídeo o una canción</span>
+            <span class="dropzone-hint">saca un fotograma o la carátula como imagen</span>
+          </label>
+          <ul class="file-list hidden" id="imageList"></ul>
+          <div class="frame-preview hidden" id="framePreview">
+            <video id="frameVideo" muted preload="metadata"></video>
+            <input type="range" id="frameSlider" min="0" max="1" step="0.04" value="0" aria-label="Momento del vídeo">
+          </div>
+          <div class="group">
+            <div class="row"><span class="row-label">Qué imagen</span>
+              <div class="segmented segmented-small" id="imageMode">
+                <button class="kind-btn active" data-mode="frame" type="button">Fotograma</button>
+                <button class="kind-btn" data-mode="cover" type="button">Carátula</button>
+              </div>
+            </div>
+            <label class="row" id="imageTimeRow"><span class="row-label">En el momento</span><input class="text-input" type="text" id="imageTime" placeholder="0:00" autocomplete="off"></label>
+            <label class="row"><span class="row-label">Formato</span>
+              <select id="imageFormat">
+                <option value="jpg" selected>JPG</option>
+                <option value="png">PNG (sin pérdida)</option>
+                <option value="webp">WEBP</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-footer">
+            <div class="status-message" id="imageStatus" role="status"></div>
+            <button class="btn btn-primary btn-download" id="btnImage" type="button">Extraer imagen</button>
+          </div>
+        </section>
+
+        <!-- ===== Cola (also shown under the forms) ===== -->
+        <section class="view" data-views="dl-link dl-search cv-format cv-merge cv-compress cv-image queue" id="queueSection">
           <div class="section-header">
             <h2>Actividad <span class="count" id="queueCount"></span></h2>
-            <button class="link-btn" id="btnClearFinished" type="button">Borrar terminadas</button>
+            <div class="row-actions">
+              <button class="link-btn queue-only" id="btnPauseAll" type="button">Pausar todo</button>
+              <button class="link-btn queue-only" id="btnResumeAll" type="button">Reanudar todo</button>
+              <button class="link-btn" id="btnClearFinished" type="button">Borrar terminadas</button>
+            </div>
           </div>
           <div class="group list-group">
             <div class="empty" id="queueEmpty">
@@ -332,12 +635,16 @@
             </div>
             <ul class="queue-list" id="queueList"></ul>
           </div>
+          <p class="footnote queue-only">Ordena lo que está esperando con ↑ ↓, o pulsa ⤒ para que sea lo siguiente. Las descargas en pausa siguen donde se quedaron.</p>
         </section>
 
-        <!-- ===== Recents ===== -->
-        <section class="view hidden" data-views="recents">
-          <div class="section-header">
-            <h2>Descargas y conversiones terminadas</h2>
+        <!-- ===== Historial ===== -->
+        <section class="view hidden" data-views="history" id="historyView">
+          <div class="history-tools">
+            <div class="field search-field">
+              <svg class="field-icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input id="historySearch" type="search" placeholder="Buscar en el historial" aria-label="Buscar en el historial" autocomplete="off" spellcheck="false">
+            </div>
             <button class="link-btn" id="btnClearHistory" type="button">Borrar historial</button>
           </div>
           <div class="group list-group" id="historySection">
@@ -345,17 +652,23 @@
           </div>
           <div class="empty-page hidden" id="historyEmpty">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg>
-            <p>Aún no hay nada aquí.</p>
+            <p id="historyEmptyText">Aún no hay nada aquí.</p>
           </div>
         </section>
 
-        <!-- ===== Settings ===== -->
-        <section class="view hidden" data-views="settings" id="settingsSection">
+        <!-- ===== Ajustes → Apariencia ===== -->
+        <section class="view hidden" data-views="set-appearance" id="settingsSection">
           <div class="section-header">
             <h2>Apariencia</h2>
             <button class="link-btn" id="btnResetPrefs" type="button">Restablecer</button>
           </div>
           <div class="group">
+            <div class="row"><span class="row-label">Idioma</span>
+              <div class="segmented segmented-small picker" id="langPicker" role="radiogroup" aria-label="Idioma">
+                <button data-value="es" type="button" role="radio">Español</button>
+                <button data-value="en" type="button" role="radio">English</button>
+              </div>
+            </div>
             <div class="row"><span class="row-label">Interfaz predeterminada <small>al abrir la app</small></span>
               <div class="segmented segmented-small picker" id="uiDefaultPicker" role="radiogroup" aria-label="Interfaz predeterminada">
                 <button data-value="windows" type="button" role="radio">Windows</button>
@@ -406,15 +719,11 @@
               </div>
             </div>
           </div>
+        </section>
 
-          <div class="section-header"><h2>Comportamiento</h2></div>
-          <div class="group">
-            <label class="row switch"><span class="row-label">Recordar mis últimas opciones <small>formato, calidad…</small></span><input type="checkbox" id="prefRemember"><span class="switch-ui"></span></label>
-            <label class="row switch desktop-only"><span class="row-label">Avisar al terminar</span><input type="checkbox" id="prefNotify"><span class="switch-ui"></span></label>
-            <label class="row switch"><span class="row-label">Sonido al terminar</span><input type="checkbox" id="prefSound"><span class="switch-ui"></span></label>
-          </div>
-
-          <div class="section-header desktop-only"><h2>General</h2></div>
+        <!-- ===== Ajustes → Descargas ===== -->
+        <section class="view hidden" data-views="set-downloads">
+          <div class="section-header desktop-only"><h2>Carpeta</h2></div>
           <div class="group desktop-only">
             <div class="row">
               <div class="row-text">
@@ -426,14 +735,82 @@
                 <button class="btn" id="btnChooseFolder" type="button">Cambiar…</button>
               </div>
             </div>
+          </div>
+          <div class="section-header"><h2>Descargas</h2></div>
+          <div class="group">
+            <label class="row"><span class="row-label">Límite de velocidad <small>por descarga</small></span>
+              <select id="prefRateLimit">
+                <option value="">Sin límite</option>
+                <option value="500K">500 KB/s</option>
+                <option value="1M">1 MB/s</option>
+                <option value="2M">2 MB/s</option>
+                <option value="5M">5 MB/s</option>
+                <option value="10M">10 MB/s</option>
+                <option value="20M">20 MB/s</option>
+              </select>
+            </label>
+            <label class="row desktop-only"><span class="row-label">Descargas a la vez</span>
+              <select id="cfgDownloadConcurrency">
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+              </select>
+            </label>
+            <label class="row switch"><span class="row-label">Recordar mis últimas opciones <small>formato, calidad…</small></span><input type="checkbox" id="prefRemember"><span class="switch-ui"></span></label>
+          </div>
+          <p class="footnote">Si YouTube corta descargas al bajar muchas a la vez, baja "Descargas a la vez" a 1 o 2.</p>
+          <div class="section-header desktop-only"><h2>Cookies</h2></div>
+          <div class="group desktop-only">
             <div class="row">
               <div class="row-text">
-                <span class="row-label">Cookies <small>opcional</small></span>
+                <span class="row-label">cookies.txt <small>opcional</small></span>
                 <span class="row-sub row-sub-wrap" id="cookiesLabel">Para vídeos con restricción de edad o que piden iniciar sesión: guarda un cookies.txt en la carpeta de datos.</span>
               </div>
               <div class="row-actions"><button class="btn" id="btnOpenDataFolder" type="button">Abrir carpeta</button></div>
             </div>
           </div>
+        </section>
+
+        <!-- ===== Ajustes → Conversión ===== -->
+        <section class="view hidden" data-views="set-convert">
+          <div class="section-header"><h2>Conversión</h2></div>
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label">Aceleración por tarjeta gráfica</span>
+                <span class="row-sub row-sub-wrap" id="gpuLabel">Comprobando tu tarjeta gráfica…</span>
+              </div>
+              <div class="segmented segmented-small" id="hwPicker" role="radiogroup" aria-label="Aceleración por tarjeta gráfica">
+                <button data-value="auto" type="button" role="radio">Activada</button>
+                <button data-value="off" type="button" role="radio">Desactivada</button>
+              </div>
+            </div>
+            <label class="row desktop-only"><span class="row-label">Conversiones a la vez</span>
+              <select id="cfgConvertConcurrency">
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+              </select>
+            </label>
+          </div>
+          <p class="footnote">La tarjeta gráfica acelera los vídeos MP4, MKV, MOV y H.265 varias veces. Si algo sale mal con ella, TubeGrab lo repite con el procesador automáticamente.</p>
+        </section>
+
+        <!-- ===== Ajustes → Sistema ===== -->
+        <section class="view hidden" data-views="set-system">
+          <div class="section-header"><h2>Avisos</h2></div>
+          <div class="group">
+            <label class="row switch desktop-only"><span class="row-label">Avisar al terminar</span><input type="checkbox" id="prefNotify"><span class="switch-ui"></span></label>
+            <label class="row switch"><span class="row-label">Sonido al terminar</span><input type="checkbox" id="prefSound"><span class="switch-ui"></span></label>
+          </div>
+          <div class="section-header desktop-only"><h2>Windows</h2></div>
+          <div class="group desktop-only">
+            <label class="row switch"><span class="row-label">Seguir en la bandeja al cerrar <small>las descargas y suscripciones continúan</small></span><input type="checkbox" id="optCloseToTray"><span class="switch-ui"></span></label>
+            <label class="row switch"><span class="row-label">Detectar enlaces copiados <small>te ofrece descargarlos con un clic</small></span><input type="checkbox" id="optClipboard"><span class="switch-ui"></span></label>
+          </div>
+          <p class="footnote desktop-only">Con "Detectar enlaces copiados", TubeGrab mira el portapapeles solo mientras está abierto y solo reacciona a enlaces de sitios compatibles. Nada sale de tu equipo.</p>
+          <p class="footnote desktop-hide">Estos ajustes están en la app de escritorio.</p>
+        </section>
+
+        <!-- ===== Ajustes → Acerca de ===== -->
+        <section class="view hidden" data-views="set-about">
           <div class="section-header desktop-only"><h2>Actualizaciones</h2></div>
           <div class="group desktop-only">
             <div class="row">
@@ -450,15 +827,38 @@
               </div>
               <div class="row-actions"><button class="btn" id="btnUpdateEngine" type="button">Buscar actualización</button></div>
             </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label">Versión instalada</span>
+                <span class="row-sub row-sub-wrap" id="flavorLabel">—</span>
+              </div>
+            </div>
           </div>
           <p class="footnote desktop-only">El motor (yt-dlp) se actualiza solo una vez al día. Los sitios cambian a menudo; si una descarga falla, prueba a actualizarlo.</p>
+          <div class="section-header"><h2>TubeGrab</h2></div>
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label">Código abierto</span>
+                <span class="row-sub row-sub-wrap">Todo se procesa en tu equipo. Para uso personal; respeta los derechos de autor.</span>
+              </div>
+              <div class="row-actions"><a class="btn" href="https://github.com/Cid736/tubegrab" target="_blank" rel="noopener">GitHub</a></div>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label">Privacidad y condiciones</span>
+                <span class="row-sub row-sub-wrap">Sin analíticas ni rastreadores. Descarga solo contenido que tengas derecho a descargar.</span>
+              </div>
+              <div class="row-actions"><a class="btn" href="https://github.com/Cid736/tubegrab/blob/main/LEGAL.md" target="_blank" rel="noopener">Leer</a></div>
+            </div>
+          </div>
         </section>
 
         <!-- Desktop app pitch (web only; removed inside the desktop app) -->
-        <section class="view promo" data-views="download convert" id="desktopBanner">
+        <section class="view promo" data-views="dl-link cv-format" id="desktopBanner">
           <div class="promo-text">
             <h2>TubeGrab para Windows</h2>
-            <p>Un único .exe, sin instalación. Guarda directamente en tu carpeta y se actualiza solo. Windows puede avisar de "Editor desconocido" porque la app no tiene firma de pago: pulsa "Ejecutar de todas formas". Código abierto en <a href="https://github.com/Cid736/tubegrab" target="_blank" rel="noopener">GitHub</a>.</p>
+            <p>Un único .exe, sin instalación (o con instalador). Guarda directamente en tu carpeta, se actualiza solo y tiene suscripciones. Windows puede avisar de "Editor desconocido" porque la app no tiene firma de pago: pulsa "Ejecutar de todas formas". Código abierto en <a href="https://github.com/Cid736/tubegrab" target="_blank" rel="noopener">GitHub</a>.</p>
           </div>
           <a class="btn" id="btnDesktopDownload" href="#" target="_blank" rel="noopener">Descargar</a>
         </section>
@@ -469,6 +869,7 @@
     </div>
   </div>
 
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

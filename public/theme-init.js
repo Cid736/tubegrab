@@ -4,13 +4,15 @@
   var KEY = 'tubegrab_prefs';
   var UI_KEY = 'tubegrab_ui';
   var DEFAULTS = {
-    uiDefault: 'windows', theme: 'auto', accent: 'blue', wall: 'aurora', glass: 'tinted', size: 'medium',
+    uiDefault: 'windows', lang: 'es', rateLimit: '', theme: 'auto', accent: 'blue', wall: 'aurora', glass: 'tinted', size: 'medium',
     remember: true, notify: true, sound: false,
   };
   // Every stored value is checked against a fixed list: prefs end up in
   // attributes and CSS, so nothing arbitrary from storage is ever applied.
   var ALLOWED = {
     uiDefault: ['windows', 'mac'],
+    lang: ['es', 'en'],
+    rateLimit: ['', '500K', '1M', '2M', '5M', '10M', '20M'],
     theme: ['auto', 'light', 'dark'],
     accent: ['blue', 'purple', 'pink', 'red', 'orange', 'yellow', 'green', 'graphite'],
     wall: ['aurora', 'ocean', 'sunset', 'forest', 'graphite', 'none'],
@@ -58,6 +60,7 @@
     root.setAttribute('data-wall', p.wall);
     root.setAttribute('data-glass', p.glass);
     root.setAttribute('data-size', p.size);
+    root.setAttribute('lang', p.lang);
     // Desktop app: make the native window (acrylic, scrollbars, menus) match.
     if (window.desktop && window.desktop.setTheme) window.desktop.setTheme(p.theme);
   }

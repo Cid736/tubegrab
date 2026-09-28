@@ -313,3 +313,26 @@ body.window-maximized .cap-restore { display: block; }
 @media (max-width: 520px) {
   [data-ui="windows"] .toolbar { flex-wrap: wrap; }
 }
+
+/* ===== v2.5 pages in the Windows interface ===== */
+[data-ui="windows"] .nav-item:focus-visible { box-shadow: none; outline: 2px solid var(--text); outline-offset: -2px; }
+[data-ui="windows"] .picker-card,
+[data-ui="windows"] .trim-panel,
+[data-ui="windows"] .frame-preview,
+[data-ui="windows"] .order-list,
+[data-ui="windows"] .web-only-note { background: var(--w-card); border: 1px solid var(--w-stroke); border-radius: 6px; box-shadow: none; }
+[data-ui="windows"] .pick-thumb { border-radius: 4px; }
+[data-ui="windows"] .range { border-radius: 4px; background: var(--w-subtle); }
+[data-ui="windows"] .range-handle { border-radius: 3px; }
+[data-ui="windows"] .chip {
+  border-radius: 4px; background: var(--w-control); border-color: var(--w-stroke); border-bottom-color: var(--w-stroke-strong);
+  height: 32px; font-size: 13px; font-weight: 400;
+}
+[data-ui="windows"] .chip.active { background: var(--accent); border-color: var(--accent); }
+[data-ui="windows"] .subnav:not(.empty) { padding: 0 36px 12px; }
+[data-ui="windows"] .subnav-tab { border-radius: 4px; height: 30px; font-size: 13px; }
+[data-ui="windows"] .order-num { border-radius: 4px; }
+[data-ui="windows"] .toast { border-radius: 6px; background: var(--w-base); border: 1px solid var(--w-stroke); backdrop-filter: none; }
+[data-ui="windows"] .search-bar .btn { height: 36px; }
+[data-ui="windows"] .queue-item[data-status="paused"] .queue-icon { background: #9d5d00; }
+[data-ui="windows"] .field.search-field:focus-within, [data-ui="windows"] .field:has(.field-input):focus-within { box-shadow: inset 0 -2px 0 var(--accent); }

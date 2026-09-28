@@ -107,6 +107,68 @@ test('converts to every audio and video format with real ffmpeg', { skip: !ffmpe
   });
 });
 
+test('GPU arguments: libx264/libx265 swapped for the vendor encoder, others untouched', () => {
+  const mp4 = convert.buildVideoArgs(convert.formatFor('mp4').config, { quality: 'alta' });
+  const nv = convert.toHardware(mp4, 'nvidia');
+  assert.equal(nv[nv.indexOf('-c:v') + 1], 'h264_nvenc');
+  assert.equal(nv[nv.indexOf('-cq') + 1], '18');
+  assert.equal(nv[nv.indexOf('-pix_fmt') + 1], 'nv12');
+  const hevc = convert.toHardware(convert.buildVideoArgs(convert.formatFor('hevc').config, {}), 'amd');
+  assert.equal(hevc[hevc.indexOf('-c:v') + 1], 'hevc_amf');
+  assert.ok(!hevc.includes('fast'), 'libx265 preset dropped');
+  assert.ok(hevc.includes('hvc1'), 'Apple tag kept');
+  assert.equal(convert.toHardware(convert.buildVideoArgs(convert.formatFor('webm').config, {}), 'nvidia'), null);
+  assert.equal(convert.toHardware(mp4, 'nope'), null);
+});
+
+test('target size parsing', () => {
+  assert.equal(convert.parseTargetMb('25'), 25);
+  assert.equal(convert.parseTargetMb('8,5'), 8.5);
+  for (const bad of ['0', '-3', '5000', 'abc', '', '1e9']) assert.equal(convert.parseTargetMb(bad), null, bad);
+});
+
+test('compress, extract an image and merge with real ffmpeg', { skip: !ffmpeg && 'ffmpeg not found', timeout: 300_000 }, async (t) => {
+  const clip = path.join(work, 'c.mp4');
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1280x720:rate=30:duration=10', '-f', 'lavfi', '-i', 'sine=d=10',
+    '-shortest', '-c:v', 'libx264', '-b:v', '6M', '-c:a', 'aac', clip]);
+  // A 3 s song with embedded cover art (audio first, then the cover added as a copy).
+  const bare = path.join(work, 'bare.mp3');
+  const cover = path.join(work, 'cover.jpg');
+  const song = path.join(work, 's.mp3');
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=d=3', '-c:a', 'libmp3lame', bare]);
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=red:s=200x200', '-frames:v', '1', cover]);
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-i', bare, '-i', cover, '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v', 'attached_pic', song]);
+  const ctx = () => ({ dir: fs.mkdtempSync(path.join(work, 'n-')), update() {}, setProcess() {}, isCanceled: () => false });
+
+  await t.test('compress lands close to the target', async () => {
+    const out = await convert.runCompress({ inputPath: clip, originalName: 'c.mp4', targetMb: 2, ffmpegPath: ffmpeg })({}, ctx());
+    const mb = fs.statSync(out).size / 1048576;
+    // Never over the target (a test pattern compresses so well it can land well under).
+    assert.ok(mb <= 2.05 && mb > 0.5, `${mb.toFixed(2)} MB`);
+  });
+  await t.test('too small for the length is refused with the minimum', async () => {
+    await assert.rejects(convert.runCompress({ inputPath: clip, originalName: 'c.mp4', targetMb: 0.05, ffmpegPath: ffmpeg })({}, ctx()), /al menos/);
+  });
+  await t.test('frame and cover images', async () => {
+    const frame = await convert.runImage({ inputPath: clip, originalName: 'c.mp4', targetFormat: 'png', body: { imageMode: 'frame', time: '4' }, ffmpegPath: ffmpeg })({}, ctx());
+    assert.match(path.basename(frame), /\(4 s\)\.png$/);
+    const cover = await convert.runImage({ inputPath: song, originalName: 's.mp3', targetFormat: 'jpg', body: { imageMode: 'cover' }, ffmpegPath: ffmpeg })({}, ctx());
+    assert.ok(fs.statSync(cover).size > 100);
+    await assert.rejects(convert.runImage({ inputPath: clip, originalName: 'c.mp4', targetFormat: 'jpg', body: { imageMode: 'frame', time: '99' }, ffmpegPath: ffmpeg })({}, ctx()), /fuera/);
+  });
+  await t.test('merge video + song, and two songs', async () => {
+    const v = await convert.runMerge({ inputs: [{ path: clip, name: 'c.mp4' }, { path: song, name: 's.mp3' }], targetFormat: 'mp4', body: {}, ffmpegPath: ffmpeg })({}, ctx());
+    const info = await convert.probe(ffmpeg, v);
+    assert.ok(Math.abs(info.duration - 13) < 0.3 && info.hasVideo && info.hasAudio, JSON.stringify(info));
+    assert.deepEqual([info.width, info.height], [1280, 720], 'size of the first clip');
+    const songInfo = await convert.probe(ffmpeg, song);
+    assert.ok(songInfo.hasCover && !songInfo.hasVideo, 'a cover is not a video');
+    const a = await convert.runMerge({ inputs: [{ path: song, name: 's.mp3' }, { path: song, name: 's.mp3' }], targetFormat: 'flac', body: {}, ffmpegPath: ffmpeg })({}, ctx());
+    const ainfo = await convert.probe(ffmpeg, a);
+    assert.ok(Math.abs(ainfo.duration - 6) < 0.3 && !ainfo.hasVideo);
+  });
+});
+
 test('uploads posing as media cannot make ffmpeg read other files or URLs', { skip: !ffmpeg && 'ffmpeg not found', timeout: 120_000 }, async (t) => {
   const secret = path.join(work, 'secret.txt');
   fs.writeFileSync(secret, 'SECRET-TOKEN-12345\n');

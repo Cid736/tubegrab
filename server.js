@@ -3,7 +3,6 @@ const path = require('path');
 const ffmpegPath = require('ffmpeg-static');
 const { execFile } = require('child_process');
 const fs = require('fs');
-const os = require('os');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
@@ -11,6 +10,12 @@ const helmet = require('helmet');
 const { JobManager } = require('./lib/jobs');
 const download = require('./lib/download');
 const convert = require('./lib/convert');
+const { Subscriptions, INTERVALS_H } = require('./lib/subscriptions');
+const { EventEmitter } = require('events');
+
+// App-wide notifications for open event streams (e.g. subscriptions changed).
+const events = new EventEmitter();
+events.setMaxListeners(0);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,29 +26,30 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 const IS_DESKTOP = Boolean(process.env.TUBEGRAB_ELECTRON);
 
-// Initialize yt-dlp and ffmpeg paths
-let ytDlpPath;
 const isWindows = process.platform === 'win32';
 
-// Windows: scripts/fetch-ffmpeg.js keeps a current, SHA-256-pinned ffmpeg (and
-// ffprobe beside it) in bin/; ffmpeg-static's own binary is only a fallback.
-// Elsewhere FFMPEG_BIN points at a system ffmpeg (the Docker image sets
-// /usr/bin/ffmpeg, which is current and has ffprobe next to it).
+// Both binaries are looked up on every use: the light desktop build downloads
+// them into its data folder after the server has already started.
+//
+// ffmpeg — FFMPEG_BIN (the desktop app's copy, or the Docker image's
+// /usr/bin/ffmpeg, which has ffprobe next to it), else the SHA-256-pinned
+// bin/ffmpeg.exe from scripts/fetch-ffmpeg.js; ffmpeg-static is a last resort.
 const pinnedFfmpeg = path.join(__dirname, 'bin', 'ffmpeg.exe');
-const envFfmpeg = process.env.FFMPEG_BIN;
-const currentFfmpegPath = envFfmpeg && path.isAbsolute(envFfmpeg) && fs.existsSync(envFfmpeg) ? envFfmpeg
-  : isWindows && fs.existsSync(pinnedFfmpeg) ? pinnedFfmpeg : ffmpegPath;
+function currentFfmpegPath() {
+  const env = process.env.FFMPEG_BIN;
+  if (env && path.isAbsolute(env) && fs.existsSync(env)) return env;
+  if (isWindows && fs.existsSync(pinnedFfmpeg)) return pinnedFfmpeg;
+  return ffmpegPath;
+}
 
-if (process.env.TUBEGRAB_YTDLP && fs.existsSync(process.env.TUBEGRAB_YTDLP)) {
-  // Desktop app: a self-updating copy kept in the user's app-data folder.
-  ytDlpPath = process.env.TUBEGRAB_YTDLP;
-} else if (isWindows) {
-  ytDlpPath = path.join(__dirname, 'yt-dlp.exe');
-} else {
-  // On Linux hosts (Render, Railway, Docker), scripts/postinstall.js downloads
-  // a local yt-dlp binary at npm-install time. Fall back to PATH if missing.
+// yt-dlp — the desktop app's self-updating copy in its data folder, else the
+// one next to this file (Windows) / from postinstall (Linux), else PATH.
+function currentYtDlpPath() {
+  const env = process.env.TUBEGRAB_YTDLP;
+  if (env && fs.existsSync(env)) return env;
+  if (isWindows) return path.join(__dirname, 'yt-dlp.exe');
   const localYtDlp = path.join(__dirname, 'yt-dlp');
-  ytDlpPath = fs.existsSync(localYtDlp) ? localYtDlp : 'yt-dlp';
+  return fs.existsSync(localYtDlp) ? localYtDlp : 'yt-dlp';
 }
 
 // Optional cookies.txt (age-restricted / sign-in videos). The desktop app
@@ -55,8 +61,8 @@ const cookiesPath = path.join(dataDir, 'cookies.txt');
 // runs this server (Node, or Electron acting as Node inside the desktop app —
 // ELECTRON_RUN_AS_NODE is inherited by yt-dlp's child) is one.
 const ytEnv = () => ({
-  ytDlpPath,
-  ffmpegPath: currentFfmpegPath,
+  ytDlpPath: currentYtDlpPath(),
+  ffmpegPath: currentFfmpegPath(),
   jsRuntime: process.execPath,
   cookiesPath: fs.existsSync(cookiesPath) ? cookiesPath : null,
 });
@@ -72,8 +78,9 @@ if (process.env.TRUST_PROXY) {
 app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
-    // Video thumbnails come from the source site's CDN.
-    directives: { 'img-src': ["'self'", 'data:', 'https:'] },
+    // Video thumbnails come from the source site's CDN; the trim preview
+    // plays the chosen local file through a blob: URL.
+    directives: { 'img-src': ["'self'", 'data:', 'https:'], 'media-src': ["'self'", 'blob:'] },
   },
 }));
 
@@ -151,6 +158,47 @@ const infoSlots = slots(IS_DESKTOP ? 4 : 8);
 const playlistSlots = slots(IS_DESKTOP ? 3 : 4);
 const BUSY = { error: 'El servidor está ocupado, inténtalo en unos segundos.' };
 
+// === Settings the desktop app can change (persisted in its data folder) ===
+const CONFIG_FILE = path.join(dataDir, 'server-config.json');
+const config = { downloadConcurrency: 3, convertConcurrency: 1, hwAccel: 'auto' };
+if (IS_DESKTOP) {
+  try { Object.assign(config, JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))); } catch { /* defaults */ }
+}
+function applyConfig() {
+  jobs.setConcurrency('download', config.downloadConcurrency);
+  jobs.setConcurrency('convert', config.convertConcurrency);
+  config.downloadConcurrency = jobs.concurrency.download;
+  config.convertConcurrency = jobs.concurrency.convert;
+  if (!['auto', 'off'].includes(config.hwAccel)) config.hwAccel = 'auto';
+}
+applyConfig();
+
+// GPU encoder, detected once in the background (a 1-frame test encode).
+// Cached per ffmpeg binary; retried while ffmpeg is still being downloaded.
+let gpuVendor = null;
+const detectGpu = () => convert.detectHwEncoder(currentFfmpegPath()).then((v) => { gpuVendor = v; return v; }, () => null);
+detectGpu();
+const hwFor = () => {
+  if (!gpuVendor) detectGpu(); // ready for the next conversion
+  return config.hwAccel === 'auto' ? gpuVendor : null;
+};
+
+app.get('/api/config', async (req, res) => {
+  if (!gpuVendor) await detectGpu();
+  res.json({ ...config, gpu: gpuVendor, desktop: IS_DESKTOP });
+});
+
+app.post('/api/config', (req, res) => {
+  if (!IS_DESKTOP) return res.status(403).json({ error: 'Solo en la app de escritorio.' });
+  const body = req.body || {};
+  if (body.downloadConcurrency !== undefined) config.downloadConcurrency = Number(body.downloadConcurrency);
+  if (body.convertConcurrency !== undefined) config.convertConcurrency = Number(body.convertConcurrency);
+  if (['auto', 'off'].includes(body.hwAccel)) config.hwAccel = body.hwAccel;
+  applyConfig();
+  try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2)); } catch { /* not fatal */ }
+  res.json({ ...config, gpu: gpuVendor, desktop: IS_DESKTOP });
+});
+
 // === Media info preview (title, thumbnail, duration) ===
 app.post('/api/info', infoLimiter, (req, res) => {
   const url = download.normalizeMediaUrl((req.body || {}).url);
@@ -163,23 +211,54 @@ app.post('/api/info', infoLimiter, (req, res) => {
   if (env.cookiesPath) args.push('--cookies', env.cookiesPath);
   args.push('--', url);
 
-  execFile(ytDlpPath, args, { windowsHide: true, timeout: 60_000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout) => {
+  execFile(env.ytDlpPath, args, { windowsHide: true, timeout: 60_000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout) => {
     infoSlots.release();
     if (err) return res.status(500).json({ error: 'No se pudo obtener información del enlace.' });
     try {
       const data = JSON.parse(stdout);
       const thumbnail = typeof data.thumbnail === 'string' && data.thumbnail.startsWith('https://') ? data.thumbnail : null;
+      const chapters = Array.isArray(data.chapters) ? data.chapters.length : 0;
       return res.json({
         title: data.title || 'Sin título',
         thumbnail,
         duration: data.duration || null,
         uploader: data.uploader || data.channel || null,
         site: data.extractor_key || null,
+        chapters,
+        isPlaylist: false,
       });
     } catch {
       return res.status(500).json({ error: 'No se pudo obtener información del enlace.' });
     }
   });
+});
+
+// === Search (YouTube, free text) ===
+app.post('/api/search', infoLimiter, async (req, res) => {
+  const query = String((req.body || {}).query || '').trim();
+  if (!query || query.length > 200) return res.status(400).json({ error: 'Escribe qué quieres buscar (máx. 200 caracteres).' });
+  if (!infoSlots.take()) return res.status(429).json(BUSY);
+  try {
+    const results = await download.search(query, ytEnv(), 15);
+    if (!results) return res.status(502).json({ error: 'No se pudo buscar ahora mismo. Inténtalo de nuevo.' });
+    res.json({ results });
+  } finally {
+    infoSlots.release();
+  }
+});
+
+// === Playlist contents (to pick which videos to download) ===
+app.post('/api/playlist', infoLimiter, async (req, res) => {
+  const url = download.normalizeMediaUrl((req.body || {}).url);
+  if (!url) return res.status(400).json({ error: 'Enlace no válido o sitio no soportado.' });
+  if (!playlistSlots.take()) return res.status(429).json(BUSY);
+  try {
+    const list = await download.expandPlaylist(url, ytEnv());
+    if (!list || !list.entries.length) return res.status(404).json({ error: 'Ese enlace no es una playlist, o está vacía.' });
+    res.json(list);
+  } finally {
+    playlistSlots.release();
+  }
 });
 
 // === Jobs ===
@@ -206,65 +285,79 @@ app.get('/api/jobs/events', requireClient, (req, res) => {
 
   const onUpdate = (clientId, job) => { if (clientId === req.clientId) send('job', job); };
   const onRemoved = (clientId, id) => { if (clientId === req.clientId) send('removed', { id }); };
+  const onSubs = (clientId) => { if (clientId === req.clientId) send('subscriptions', {}); };
   jobs.on('update', onUpdate);
   jobs.on('removed', onRemoved);
+  events.on('subscriptions', onSubs);
   const heartbeat = setInterval(() => res.write(': ping\n\n'), 25_000);
   req.on('close', () => {
     clearInterval(heartbeat);
     jobs.off('update', onUpdate);
     jobs.off('removed', onRemoved);
+    events.off('subscriptions', onSubs);
     const left = (sseConnections.get(req.clientId) || 1) - 1;
     if (left > 0) sseConnections.set(req.clientId, left); else sseConnections.delete(req.clientId);
     sseTotal -= 1;
   });
 });
 
+const TOO_MANY_JOBS = { error: 'Hay demasiados trabajos en la cola. Elimina algunos terminados e inténtalo de nuevo.' };
+
+/** Queues one download job per item ({ url, title }) with validated options. */
+function queueDownloads(clientId, items, opts) {
+  const env = ytEnv();
+  const detail = download.describeOptions(opts);
+  for (const item of items) {
+    jobs.create({
+      clientId,
+      type: 'download',
+      title: item.title || item.url,
+      detail,
+      source: item.url,
+      request: opts,
+      run: download.runDownload(item.url, opts, env),
+      retryable: true,
+    });
+  }
+}
+
 app.post('/api/jobs/download', createLimiter, requireClient, async (req, res) => {
   const body = req.body || {};
   const opts = download.parseDownloadOptions(body);
-  // Each playlist is a yt-dlp run of up to 90 s before anything is queued.
-  const maxUrls = opts.playlist ? (IS_DESKTOP ? 10 : 3) : (IS_DESKTOP ? 100 : 20);
-  const rawUrls = Array.isArray(body.urls) ? body.urls.slice(0, maxUrls) : [];
-  const urls = [];
+  const invalid = download.validateOptions(opts);
+  if (invalid) return res.status(400).json({ error: invalid });
+
+  // Either links (urls) or picked results with their titles (items: search / playlist picker).
+  const maxUrls = opts.playlist ? (IS_DESKTOP ? 10 : 3) : (IS_DESKTOP ? 300 : 20);
+  const raw = Array.isArray(body.items)
+    ? body.items.slice(0, maxUrls).map((i) => ({ url: i && i.url, title: i && typeof i.title === 'string' ? i.title.slice(0, 300) : null }))
+    : (Array.isArray(body.urls) ? body.urls.slice(0, maxUrls) : []).map((url) => ({ url, title: null }));
+  const picked = [];
   const rejected = [];
-  for (const raw of rawUrls) {
-    const url = download.normalizeMediaUrl(raw);
-    if (url) urls.push(url); else rejected.push(String(raw).slice(0, 200));
+  for (const entry of raw) {
+    const url = download.normalizeMediaUrl(entry.url);
+    if (url) picked.push({ url, title: entry.title }); else rejected.push(String(entry.url).slice(0, 200));
   }
-  if (!urls.length) {
+  if (!picked.length) {
     return res.status(400).json({ error: 'Ningún enlace válido. Sitios soportados: YouTube, Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp y más.', rejected });
   }
 
-  const env = ytEnv();
   const items = [];
   if (opts.playlist && !playlistSlots.take()) return res.status(429).json(BUSY);
   try {
-    for (const url of urls) {
-      const expanded = opts.playlist ? await download.expandPlaylist(url, env) : null;
+    for (const item of picked) {
+      const expanded = opts.playlist ? await download.expandPlaylist(item.url, ytEnv()) : null;
       if (expanded && expanded.entries.length) {
         for (const entry of expanded.entries) items.push({ url: entry.url, title: entry.title || entry.url });
       } else {
-        items.push({ url, title: url });
+        items.push(item);
       }
     }
   } finally {
     if (opts.playlist) playlistSlots.release();
   }
-  if (!jobs.canCreate(req.clientId, items.length)) {
-    return res.status(429).json({ error: 'Hay demasiados trabajos en la cola. Elimina algunos terminados e inténtalo de nuevo.' });
-  }
-
-  const detail = download.describeOptions(opts);
-  for (const item of items) {
-    jobs.create({
-      clientId: req.clientId,
-      type: 'download',
-      title: item.title,
-      detail,
-      run: download.runDownload(item.url, opts, env),
-      retryable: true,
-    });
-  }
+  if (!jobs.canCreate(req.clientId, items.length)) return res.status(429).json(TOO_MANY_JOBS);
+  queueDownloads(req.clientId, items, opts);
   res.json({ created: items.length, rejected });
 });
 
@@ -280,14 +373,14 @@ const ALLOWED_UPLOAD_EXTENSIONS = new Set([
 ]);
 const GENERIC_MIMETYPES = new Set(['application/octet-stream', 'application/x-matroska', '']);
 
-const upload = multer({
+const uploader = (files) => multer({
   // Browsers send the file name as UTF-8; multer's default (latin1) turned
   // "Canción.wav" into "CanciÃ³n.mp3".
   defParamCharset: 'utf8',
   // Inside this process's job folder: swept on the next start if the server
   // is killed mid-upload/conversion, instead of piling up in %TEMP%.
   dest: path.join(jobs.dir, 'uploads'),
-  limits: { fileSize: MAX_UPLOAD_SIZE, files: 1, fields: 30 },
+  limits: { fileSize: MAX_UPLOAD_SIZE, files, fields: 30 },
   fileFilter: (req, file, cb) => {
     // Animated GIFs are accepted as a video source (e.g. GIF -> MP4).
     const isMediaMime = /^(audio|video)\//.test(file.mimetype) || file.mimetype === 'image/gif';
@@ -299,36 +392,104 @@ const upload = multer({
     cb(null, true);
   },
 });
+const upload = uploader(1);
+const MAX_MERGE_FILES = IS_DESKTOP ? convert.MAX_MERGE : 10;
+const uploadMany = uploader(MAX_MERGE_FILES);
 
-app.post('/api/jobs/convert', createLimiter, requireClient, upload.single('file'), (req, res) => {
+const nameOf = (file) => String(file.originalname || 'archivo').slice(0, 255);
+
+/** Shared by the single-file endpoints: validates, then queues `makeRun(file)`. */
+function singleUpload(req, res, { check, detail, makeRun }) {
   const discard = () => { if (req.file) fs.unlink(req.file.path, () => {}); };
-  const body = req.body || {};
-  const targetFormat = String(body.targetFormat || '').toLowerCase();
-  const format = convert.formatFor(targetFormat);
-  if (!format) {
+  const problem = check(req.body || {});
+  if (problem) {
     discard();
-    return res.status(400).json({ error: 'Formato de destino no soportado.' });
+    return res.status(400).json({ error: problem });
   }
   if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo.' });
-
-  const trimStart = convert.parseTimestamp(body.trimStart);
-  const trimEnd = convert.parseTimestamp(body.trimEnd);
-  if (Number.isNaN(trimStart) || Number.isNaN(trimEnd) || (trimStart !== null && trimEnd !== null && trimEnd <= trimStart)) {
-    discard();
-    return res.status(400).json({ error: 'Tiempo de recorte no válido. Usa segundos o mm:ss, y que "Hasta" sea mayor que "Desde".' });
-  }
   if (!jobs.canCreate(req.clientId)) {
     discard();
-    return res.status(429).json({ error: 'Hay demasiados trabajos en la cola. Elimina algunos terminados e inténtalo de nuevo.' });
+    return res.status(429).json(TOO_MANY_JOBS);
   }
-
-  const originalName = String(req.file.originalname || 'archivo').slice(0, 255);
   const job = jobs.create({
     clientId: req.clientId,
     type: 'convert',
-    title: originalName,
-    detail: convert.describeConvert(format.kind, format.config, body),
-    run: convert.runConvert({ inputPath: req.file.path, originalName, targetFormat, body, ffmpegPath: currentFfmpegPath }),
+    title: nameOf(req.file),
+    detail: detail(req.body || {}),
+    run: makeRun(req.file, req.body || {}),
+    cleanupInput: discard,
+  });
+  res.json({ id: job.id });
+}
+
+app.post('/api/jobs/convert', createLimiter, requireClient, upload.single('file'), (req, res) => {
+  const targetFormat = String((req.body || {}).targetFormat || '').toLowerCase();
+  const format = convert.formatFor(targetFormat);
+  singleUpload(req, res, {
+    check: (body) => {
+      if (!format) return 'Formato de destino no soportado.';
+      const s = convert.parseTimestamp(body.trimStart);
+      const e = convert.parseTimestamp(body.trimEnd);
+      if (Number.isNaN(s) || Number.isNaN(e) || (s !== null && e !== null && e <= s)) {
+        return 'Tiempo de recorte no válido. Usa segundos o mm:ss, y que "Hasta" sea mayor que "Desde".';
+      }
+      return null;
+    },
+    detail: (body) => convert.describeConvert(format.kind, format.config, body),
+    makeRun: (file, body) => convert.runConvert({
+      inputPath: file.path, originalName: nameOf(file), targetFormat, body, ffmpegPath: currentFfmpegPath(), hw: hwFor(),
+    }),
+  });
+});
+
+app.post('/api/jobs/compress', createLimiter, requireClient, upload.single('file'), (req, res) => {
+  const targetMb = convert.parseTargetMb((req.body || {}).targetMb);
+  singleUpload(req, res, {
+    check: () => (targetMb ? null : 'Indica un tamaño entre 1 y 4000 MB.'),
+    detail: () => `Comprimir a ${String(targetMb).replace('.', ',')} MB`,
+    makeRun: (file) => convert.runCompress({ inputPath: file.path, originalName: nameOf(file), targetMb, ffmpegPath: currentFfmpegPath() }),
+  });
+});
+
+app.post('/api/jobs/image', createLimiter, requireClient, upload.single('file'), (req, res) => {
+  const targetFormat = String((req.body || {}).targetFormat || '').toLowerCase();
+  singleUpload(req, res, {
+    check: (body) => {
+      if (!Object.prototype.hasOwnProperty.call(convert.IMAGE_FORMATS, targetFormat)) return 'Formato de imagen no soportado.';
+      if (!['frame', 'cover'].includes(body.imageMode)) return 'Elige fotograma o carátula.';
+      if (body.imageMode === 'frame' && Number.isNaN(convert.parseTimestamp(body.time))) return 'Momento no válido. Usa segundos o mm:ss.';
+      return null;
+    },
+    detail: (body) => `${convert.IMAGE_FORMATS[targetFormat].label} · ${body.imageMode === 'cover' ? 'carátula' : `fotograma ${body.time || '0'}`}`,
+    makeRun: (file, body) => convert.runImage({ inputPath: file.path, originalName: nameOf(file), targetFormat, body, ffmpegPath: currentFfmpegPath() }),
+  });
+});
+
+app.post('/api/jobs/merge', createLimiter, requireClient, uploadMany.array('files', MAX_MERGE_FILES), (req, res) => {
+  const files = req.files || [];
+  const discard = () => files.forEach((f) => fs.unlink(f.path, () => {}));
+  const body = req.body || {};
+  const targetFormat = String(body.targetFormat || '').toLowerCase();
+  const format = convert.formatFor(targetFormat);
+  if (!format || targetFormat === 'gif') {
+    discard();
+    return res.status(400).json({ error: 'Formato de destino no soportado para unir.' });
+  }
+  if (files.length < 2) {
+    discard();
+    return res.status(400).json({ error: 'Elige al menos dos archivos para unir.' });
+  }
+  if (!jobs.canCreate(req.clientId)) {
+    discard();
+    return res.status(429).json(TOO_MANY_JOBS);
+  }
+  const inputs = files.map((f) => ({ path: f.path, name: nameOf(f) }));
+  const job = jobs.create({
+    clientId: req.clientId,
+    type: 'convert',
+    title: `${inputs[0].name} + ${inputs.length - 1} más`,
+    detail: `Unir ${inputs.length} archivos · ${format.config.label}`,
+    run: convert.runMerge({ inputs, targetFormat, body, ffmpegPath: currentFfmpegPath() }),
     cleanupInput: discard,
   });
   res.json({ id: job.id });
@@ -344,6 +505,34 @@ app.post('/api/jobs/:id/retry', createLimiter, requireClient, requireJob, (req, 
   res.json({ ok: true });
 });
 
+app.post('/api/jobs/:id/pause', requireClient, requireJob, (req, res) => {
+  if (!jobs.pause(req.job)) return res.status(409).json({ error: 'Este trabajo no se puede pausar.' });
+  res.json({ ok: true });
+});
+
+app.post('/api/jobs/:id/resume', requireClient, requireJob, (req, res) => {
+  if (!jobs.resume(req.job)) return res.status(409).json({ error: 'Este trabajo no está en pausa.' });
+  res.json({ ok: true });
+});
+
+app.post('/api/jobs/:id/move', requireClient, requireJob, (req, res) => {
+  const where = String((req.body || {}).where || '');
+  if (!jobs.move(req.job, where)) return res.status(409).json({ error: 'No se puede mover ese trabajo.' });
+  res.json({ ok: true });
+});
+
+/** Pause or resume every download of this client at once. */
+app.post('/api/jobs/pause-all', requireClient, (req, res) => {
+  const resume = (req.body || {}).resume === true;
+  let n = 0;
+  for (const job of [...jobs.jobs.values()]) {
+    if (job.clientId !== req.clientId) continue;
+    if (resume ? jobs.resume(job, { schedule: false }) : jobs.pause(job)) n += 1;
+  }
+  jobs.schedule();
+  res.json({ changed: n });
+});
+
 app.delete('/api/jobs/:id', requireClient, requireJob, (req, res) => {
   jobs.remove(req.job);
   res.json({ ok: true });
@@ -355,7 +544,8 @@ app.delete('/api/jobs/:id/file', requireClient, requireJob, (req, res) => {
 });
 
 app.get('/api/jobs/:id/file', requireClient, requireJob, (req, res) => {
-  const filePath = jobs.filePath(req.job);
+  const n = /^\d{1,4}$/.test(String(req.query.n || '0')) ? Number(req.query.n || 0) : -1;
+  const filePath = n >= 0 ? jobs.filePath(req.job, n) : null;
   if (!filePath) return res.status(404).json({ error: 'El archivo ya no está disponible.' });
   const stat = fs.statSync(filePath);
   res.setHeader('Content-Type', 'application/octet-stream');
@@ -366,9 +556,68 @@ app.get('/api/jobs/:id/file', requireClient, requireJob, (req, res) => {
   stream.on('error', () => { if (!res.headersSent) res.status(500).end(); else res.destroy(); });
 });
 
+// === Subscriptions (desktop app only: they need the app running to check) ===
+const subscriptions = IS_DESKTOP ? new Subscriptions({
+  file: path.join(dataDir, 'subscriptions.json'),
+  latest: (url) => download.latestEntries(url, ytEnv(), 30),
+  enqueue: (sub, entries) => {
+    const opts = download.parseDownloadOptions(sub.options || {});
+    const items = entries.map((e) => ({ url: e.url, title: e.title }));
+    if (jobs.canCreate(sub.clientId, items.length)) queueDownloads(sub.clientId, items, opts);
+    events.emit('subscriptions', sub.clientId);
+  },
+}) : null;
+
+function requireSubs(req, res, next) {
+  if (!subscriptions) return res.status(404).json({ error: 'Las suscripciones solo están en la app de escritorio.' });
+  next();
+}
+function requireSub(req, res, next) {
+  req.sub = subscriptions.get(String(req.params.id), req.clientId);
+  if (!req.sub) return res.status(404).json({ error: 'Suscripción no encontrada.' });
+  next();
+}
+
+app.get('/api/subscriptions', requireSubs, requireClient, (req, res) => {
+  res.json({ subscriptions: subscriptions.list(req.clientId), intervals: INTERVALS_H });
+});
+
+app.post('/api/subscriptions', createLimiter, requireSubs, requireClient, async (req, res) => {
+  const body = req.body || {};
+  const url = download.normalizeMediaUrl(body.url);
+  if (!url) return res.status(400).json({ error: 'Enlace no válido o sitio no soportado.' });
+  const opts = download.parseDownloadOptions({ ...(body.options || {}), playlist: false, chapters: false, sectionStart: '', sectionEnd: '' });
+  if (!playlistSlots.take()) return res.status(429).json(BUSY);
+  try {
+    const sub = await subscriptions.add({
+      clientId: req.clientId, url, options: opts, detail: download.describeOptions(opts),
+      interval: body.interval, backfill: body.backfill,
+    });
+    res.json(sub);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  } finally {
+    playlistSlots.release();
+  }
+});
+
+app.patch('/api/subscriptions/:id', requireSubs, requireClient, requireSub, (req, res) => {
+  res.json(subscriptions.update(req.sub, req.body || {}));
+});
+
+app.post('/api/subscriptions/:id/check', createLimiter, requireSubs, requireClient, requireSub, async (req, res) => {
+  const found = await subscriptions.check(req.sub);
+  res.json({ found, subscription: subscriptions.view(req.sub) });
+});
+
+app.delete('/api/subscriptions/:id', requireSubs, requireClient, requireSub, (req, res) => {
+  subscriptions.remove(req.sub);
+  res.json({ ok: true });
+});
+
 // Download engine version (shown in the desktop app's settings).
 app.get('/api/engine', (req, res) => {
-  execFile(ytDlpPath, ['--version'], { windowsHide: true, timeout: 30_000 }, (err, stdout) => {
+  execFile(currentYtDlpPath(), ['--version'], { windowsHide: true, timeout: 30_000 }, (err, stdout) => {
     res.json({ ytDlp: err ? null : stdout.trim() });
   });
 });
