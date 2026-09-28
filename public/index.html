@@ -520,35 +520,131 @@
 
         <!-- ===== Convertir → Editor ===== -->
         <section class="view hidden" data-views="cv-edit" id="editSection">
-          <label class="dropzone" id="editDrop" for="editInput">
+          <label class="dropzone ed-drop" id="editDrop" for="editInput">
             <input type="file" id="editInput" accept="audio/*,video/*,.mp3,.aac,.m4a,.ogg,.opus,.wma,.ac3,.flac,.wav,.aiff,.aif,.mp4,.m4v,.webm,.mkv,.mov,.avi,.wmv,.flv,.mpg,.mpeg,.ogv" hidden>
             <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.6" stroke="currentColor" stroke-width="1.8"/><circle cx="6" cy="18" r="2.6" stroke="currentColor" stroke-width="1.8"/><path d="M8.2 7.6L20 17M8.2 16.4L20 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
             <span class="dropzone-title" id="editDropText">Arrastra un vídeo o un audio para editarlo</span>
             <span class="dropzone-hint">del segundo que quieras al que quieras, corta y quita partes</span>
           </label>
+          <div class="status-message" id="editLoadStatus" role="status"></div>
 
           <div class="editor hidden" id="editor">
-            <div class="ed-viewer" id="edViewer">
-              <video id="edVideo" playsinline preload="auto"></video>
-              <div class="ed-crop hidden" id="edCrop" aria-hidden="true"><span id="edCropLabel"></span></div>
-              <div class="ed-audio-only hidden" id="edAudioOnly">
-                <svg viewBox="0 0 24 24" fill="none"><path d="M9 18V5l11-2v13" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="16" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
-                <span id="edAudioName"></span>
+            <div class="ed-top">
+              <div class="ed-stage">
+                <div class="ed-viewer" id="edViewer">
+                  <video id="edVideo" playsinline preload="auto"></video>
+                  <div class="ed-crop hidden" id="edCrop" aria-hidden="true"><span id="edCropLabel"></span></div>
+                  <div class="ed-audio-only hidden" id="edAudioOnly">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M9 18V5l11-2v13" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="16" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
+                    <span id="edAudioName"></span>
+                  </div>
+                </div>
+                <div class="ed-transport">
+                  <span class="ed-tc"><span id="edTime">0:00:00.00</span><span class="ed-tc-dur"> / <span id="edDur">0:00:00.00</span></span></span>
+                  <div class="ed-buttons">
+                    <button class="ed-btn" id="edHome" type="button" title="Ir al inicio (Inicio)" aria-label="Ir al inicio (Inicio)"><svg viewBox="0 0 24 24"><path d="M6 5v14M19 5l-9 7 9 7z"/></svg></button>
+                    <button class="ed-btn" id="edPrevCut" type="button" title="Corte anterior (↑)" aria-label="Corte anterior (↑)"><svg viewBox="0 0 24 24"><path d="M5 5v14M19 7l-6 5 6 5M13 7l-6 5 6 5"/></svg></button>
+                    <button class="ed-btn" id="edPrev" type="button" title="Fotograma anterior (←)" aria-label="Fotograma anterior (←)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+                    <button class="ed-btn ed-play" id="edPlay" type="button" title="Reproducir / pausa (Espacio)" aria-label="Reproducir / pausa (Espacio)"><svg class="ed-ico-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="ed-ico-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
+                    <button class="ed-btn" id="edNext" type="button" title="Fotograma siguiente (→)" aria-label="Fotograma siguiente (→)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+                    <button class="ed-btn" id="edNextCut" type="button" title="Corte siguiente (↓)" aria-label="Corte siguiente (↓)"><svg viewBox="0 0 24 24"><path d="M19 5v14M5 7l6 5-6 5M11 7l6 5-6 5"/></svg></button>
+                    <button class="ed-btn" id="edEnd" type="button" title="Ir al final (Fin)" aria-label="Ir al final (Fin)"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></svg></button>
+                  </div>
+                  <label class="ed-check" title="Al reproducir, salta las partes quitadas"><input type="checkbox" id="edSkip" checked> Ver resultado</label>
+                </div>
               </div>
-            </div>
 
-            <div class="ed-transport">
-              <span class="ed-tc"><span id="edTime">0:00:00.00</span><span class="ed-tc-dur"> / <span id="edDur">0:00:00.00</span></span></span>
-              <div class="ed-buttons">
-                <button class="ed-btn" id="edHome" type="button" title="Ir al inicio (Inicio)" aria-label="Ir al inicio (Inicio)"><svg viewBox="0 0 24 24"><path d="M6 5v14M19 5l-9 7 9 7z"/></svg></button>
-                <button class="ed-btn" id="edPrevCut" type="button" title="Corte anterior (↑)" aria-label="Corte anterior (↑)"><svg viewBox="0 0 24 24"><path d="M5 5v14M19 7l-6 5 6 5M13 7l-6 5 6 5"/></svg></button>
-                <button class="ed-btn" id="edPrev" type="button" title="Fotograma anterior (←)" aria-label="Fotograma anterior (←)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-                <button class="ed-btn ed-play" id="edPlay" type="button" title="Reproducir / pausa (Espacio)" aria-label="Reproducir / pausa (Espacio)"><svg class="ed-ico-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="ed-ico-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
-                <button class="ed-btn" id="edNext" type="button" title="Fotograma siguiente (→)" aria-label="Fotograma siguiente (→)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
-                <button class="ed-btn" id="edNextCut" type="button" title="Corte siguiente (↓)" aria-label="Corte siguiente (↓)"><svg viewBox="0 0 24 24"><path d="M19 5v14M5 7l6 5-6 5M11 7l6 5-6 5"/></svg></button>
-                <button class="ed-btn" id="edEnd" type="button" title="Ir al final (Fin)" aria-label="Ir al final (Fin)"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></svg></button>
-              </div>
-              <label class="ed-check" title="Al reproducir, salta las partes quitadas"><input type="checkbox" id="edSkip" checked> Ver resultado</label>
+              <aside class="ed-inspector" aria-label="Ajustes">
+                <h3 class="ed-panel-title">Recortar</h3>
+                <div class="group ed-range">
+                  <div class="row ed-range-fields">
+                    <span class="row-label">Del segundo</span>
+                    <input class="text-input small" type="text" id="edFrom" placeholder="0:00" autocomplete="off" aria-label="Del segundo">
+                    <span class="row-label">al</span>
+                    <input class="text-input small" type="text" id="edTo" placeholder="1:30" autocomplete="off" aria-label="al segundo">
+                  </div>
+                  <div class="row ed-range-buttons">
+                    <button class="btn" id="edKeep" type="button">Quedarme con esto</button>
+                    <button class="btn" id="edRemove" type="button">Quitar esto</button>
+                  </div>
+                </div>
+
+                <h3 class="ed-panel-title">Ajustes del resultado</h3>
+                <div class="group" id="edFx">
+                  <label class="row"><span class="row-label">Formato de pantalla <small>recorta al centro</small></span>
+                    <select id="edAspect">
+                      <option value="" selected>Original</option>
+                      <option value="9:16">9:16 vertical (TikTok, Reels, Shorts)</option>
+                      <option value="1:1">1:1 cuadrado</option>
+                      <option value="4:5">4:5 (Instagram)</option>
+                      <option value="16:9">16:9 horizontal (YouTube)</option>
+                    </select>
+                  </label>
+                  <label class="row"><span class="row-label">Fundido al empezar y al acabar</span>
+                    <select id="edFade">
+                      <option value="" selected>No</option>
+                      <option value="0.5">0,5 s</option>
+                      <option value="1">1 s</option>
+                      <option value="2">2 s</option>
+                    </select>
+                  </label>
+                  <label class="row"><span class="row-label">Volumen</span>
+                    <select id="edVolume">
+                      <option value="" selected>Igual</option>
+                      <option value="mute">Sin sonido</option>
+                      <option value="0.5">50 %</option>
+                      <option value="0.75">75 %</option>
+                      <option value="1.5">150 %</option>
+                      <option value="2">200 %</option>
+                    </select>
+                  </label>
+                  <label class="row"><span class="row-label">Girar</span>
+                    <select id="edRotate">
+                      <option value="" selected>No</option>
+                      <option value="90">90° a la derecha</option>
+                      <option value="270">90° a la izquierda</option>
+                      <option value="180">180°</option>
+                      <option value="hflip">Espejo</option>
+                    </select>
+                  </label>
+                  <label class="row switch"><span class="row-label">Cada tramo en un archivo aparte <small>en vez de unirlos</small></span><input type="checkbox" id="edSeparate"><span class="switch-ui"></span></label>
+                </div>
+
+                <h3 class="ed-panel-title">Exportar</h3>
+                <div class="group">
+                  <label class="row"><span class="row-label">Formato</span>
+                    <select id="edFormat">
+                      <option value="original" selected>Igual que el original</option>
+                      <option value="mp4">MP4</option>
+                      <option value="mkv">MKV</option>
+                      <option value="mov">MOV</option>
+                      <option value="webm">WEBM</option>
+                      <option value="mp3">MP3 (solo audio)</option>
+                      <option value="m4a">M4A (solo audio)</option>
+                      <option value="wav">WAV (solo audio)</option>
+                      <option value="flac">FLAC (solo audio)</option>
+                    </select>
+                  </label>
+                  <label class="row" id="edQualityRow"><span class="row-label">Calidad</span>
+                    <select id="edQuality">
+                      <option value="alta" selected>Alta</option>
+                      <option value="media">Media</option>
+                      <option value="baja">Baja (pesa menos)</option>
+                    </select>
+                  </label>
+                  <div class="row"><span class="row-label">Cortes</span>
+                    <div class="segmented segmented-small" id="edMode">
+                      <button class="kind-btn active" data-mode="exact" type="button">Exactos</button>
+                      <button class="kind-btn" data-mode="fast" type="button">Rápidos</button>
+                    </div>
+                  </div>
+                </div>
+                <p class="hint" id="edModeHint">Exactos: corta en el fotograma justo (vuelve a codificar el vídeo).</p>
+                <div class="ed-export">
+                  <div class="status-message" id="editStatus" role="status"></div>
+                  <button class="btn btn-primary btn-download" id="btnEdit" type="button">Exportar</button>
+                </div>
+              </aside>
             </div>
 
             <div class="ed-toolbar" role="toolbar" aria-label="Herramientas de edición">
@@ -566,100 +662,21 @@
               <label class="ed-zoom" title="Zoom (Ctrl + rueda)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3M8 11h6M11 8v6"/></svg><input type="range" id="edZoom" min="0" max="100" value="0" aria-label="Zoom de la línea de tiempo"></label>
             </div>
 
-            <div class="ed-timeline" id="edTimeline" tabindex="0" aria-label="Línea de tiempo: clic para mover el cabezal, arrastra las líneas de corte, doble clic para quitar o recuperar un tramo">
-              <canvas id="edCanvas"></canvas>
-              <div class="ed-spacer" id="edSpacer"></div>
-            </div>
-
-            <div class="group ed-range">
-              <div class="row">
-                <span class="row-label">Del segundo</span>
-                <div class="ed-range-fields">
-                  <input class="text-input small" type="text" id="edFrom" placeholder="0:00" autocomplete="off" aria-label="Del segundo">
-                  <span>al</span>
-                  <input class="text-input small" type="text" id="edTo" placeholder="1:30" autocomplete="off" aria-label="al segundo">
-                  <button class="btn" id="edKeep" type="button">Quedarme con esto</button>
-                  <button class="btn" id="edRemove" type="button">Quitar esto</button>
-                </div>
+            <div class="ed-tracks">
+              <div class="ed-track-labels" aria-hidden="true">
+                <span class="ed-lbl-ruler"></span>
+                <span class="ed-lbl ed-lbl-v" id="edLblV">V1</span>
+                <span class="ed-lbl ed-lbl-a">A1</span>
+              </div>
+              <div class="ed-timeline" id="edTimeline" tabindex="0" aria-label="Línea de tiempo: clic para mover el cabezal, arrastra las líneas de corte, doble clic para quitar o recuperar un tramo">
+                <canvas id="edCanvas"></canvas>
+                <div class="ed-spacer" id="edSpacer"></div>
               </div>
             </div>
+
             <p class="hint ed-summary" id="edSummary"></p>
             <ol class="ed-clips" id="edClips" aria-label="Tramos"></ol>
             <p class="footnote">Atajos: Espacio reproducir · J / L ±5 s · ← / → fotograma (Mayús: 1 s) · ↑ / ↓ corte anterior o siguiente · I / O entrada y salida · B cortar · Supr quitar tramo · Ctrl+Z deshacer · Ctrl + rueda zoom</p>
-          </div>
-
-          <div class="group">
-            <label class="row"><span class="row-label">Formato</span>
-              <select id="edFormat">
-                <option value="original" selected>Igual que el original</option>
-                <option value="mp4">MP4</option>
-                <option value="mkv">MKV</option>
-                <option value="mov">MOV</option>
-                <option value="webm">WEBM</option>
-                <option value="mp3">MP3 (solo audio)</option>
-                <option value="m4a">M4A (solo audio)</option>
-                <option value="wav">WAV (solo audio)</option>
-                <option value="flac">FLAC (solo audio)</option>
-              </select>
-            </label>
-            <label class="row" id="edQualityRow"><span class="row-label">Calidad</span>
-              <select id="edQuality">
-                <option value="alta" selected>Alta</option>
-                <option value="media">Media</option>
-                <option value="baja">Baja (pesa menos)</option>
-              </select>
-            </label>
-            <div class="row"><span class="row-label">Cortes</span>
-              <div class="segmented segmented-small" id="edMode">
-                <button class="kind-btn active" data-mode="exact" type="button">Exactos</button>
-                <button class="kind-btn" data-mode="fast" type="button">Rápidos</button>
-              </div>
-            </div>
-          </div>
-          <div class="section-header ed-fx-head"><h2>Ajustes del resultado</h2></div>
-          <div class="group" id="edFx">
-            <label class="row"><span class="row-label">Formato de pantalla <small>recorta al centro</small></span>
-              <select id="edAspect">
-                <option value="" selected>Original</option>
-                <option value="9:16">9:16 vertical (TikTok, Reels, Shorts)</option>
-                <option value="1:1">1:1 cuadrado</option>
-                <option value="4:5">4:5 (Instagram)</option>
-                <option value="16:9">16:9 horizontal (YouTube)</option>
-              </select>
-            </label>
-            <label class="row"><span class="row-label">Fundido al empezar y al acabar</span>
-              <select id="edFade">
-                <option value="" selected>No</option>
-                <option value="0.5">0,5 s</option>
-                <option value="1">1 s</option>
-                <option value="2">2 s</option>
-              </select>
-            </label>
-            <label class="row"><span class="row-label">Volumen</span>
-              <select id="edVolume">
-                <option value="" selected>Igual</option>
-                <option value="mute">Sin sonido</option>
-                <option value="0.5">50 %</option>
-                <option value="0.75">75 %</option>
-                <option value="1.5">150 %</option>
-                <option value="2">200 %</option>
-              </select>
-            </label>
-            <label class="row"><span class="row-label">Girar</span>
-              <select id="edRotate">
-                <option value="" selected>No</option>
-                <option value="90">90° a la derecha</option>
-                <option value="270">90° a la izquierda</option>
-                <option value="180">180°</option>
-                <option value="hflip">Espejo</option>
-              </select>
-            </label>
-            <label class="row switch"><span class="row-label">Cada tramo en un archivo aparte <small>en vez de unirlos</small></span><input type="checkbox" id="edSeparate"><span class="switch-ui"></span></label>
-          </div>
-          <p class="hint" id="edModeHint">Exactos: corta en el fotograma justo (vuelve a codificar el vídeo).</p>
-          <div class="form-footer">
-            <div class="status-message" id="editStatus" role="status"></div>
-            <button class="btn btn-primary btn-download" id="btnEdit" type="button">Exportar</button>
           </div>
         </section>
 

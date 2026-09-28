@@ -1511,9 +1511,10 @@ const editor = (() => {
   thumbVideo.muted = true;
   thumbVideo.preload = 'auto';
 
-  const RULER = 22;
-  const VTRACK = 52;
-  const ATRACK = 40;
+  // Same heights as the track labels next to the timeline (style.css).
+  const RULER = 26;
+  const VTRACK = 70;
+  const ATRACK = 52;
   const FRAME = 1 / 30;
   const MAX_PPS = 400;           // most zoomed in: pixels per second
   const EDGE_PX = 6;             // how close to a cut line grabs it
@@ -1584,6 +1585,7 @@ const editor = (() => {
     colors = {
       accent: v('--accent', '#0a84ff'), text: v('--text', '#fff'), text2: v('--text-2', '#999'),
       hair: v('--hairline', 'rgba(128,128,128,.3)'), red: v('--red', '#ff453a'), inset: v('--inset', 'rgba(128,128,128,.12)'),
+      font: getComputedStyle(document.body).fontFamily || 'system-ui, sans-serif',
     };
   }
 
@@ -1731,7 +1733,7 @@ const editor = (() => {
     const t1 = t0 + W / p;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    ctx.font = '10px system-ui, sans-serif';
+    ctx.font = `500 11px ${colors.font}`;
     ctx.textBaseline = 'middle';
 
     // Ruler
@@ -1741,9 +1743,9 @@ const editor = (() => {
     ctx.beginPath();
     for (let s = Math.floor(t0 / step) * step; s <= t1; s += step) {
       const x = Math.round(s * p - timeline.scrollLeft) + 0.5;
-      ctx.moveTo(x, RULER - 8); ctx.lineTo(x, RULER);
+      ctx.moveTo(x, RULER - 9); ctx.lineTo(x, RULER);
       const label = step < 1 ? tc(s).replace(/^0:/, '') : formatDuration(Math.round(s)) || '0:00';
-      ctx.fillText(label, x + 3, 8);
+      ctx.fillText(label, x + 4, 9);
       const minor = step / 5;
       for (let k = 1; k < 5; k++) { const mx = Math.round((s + k * minor) * p - timeline.scrollLeft) + 0.5; ctx.moveTo(mx, RULER - 3); ctx.lineTo(mx, RULER); }
     }
@@ -1889,9 +1891,13 @@ const editor = (() => {
   function load(f) {
     stop();
     file = f || null;
-    $('editDropText').textContent = file ? `${file.name} (${formatBytes(file.size)})` : t('Arrastra un vídeo o un audio para editarlo');
+    $('editDropText').textContent = file
+      ? `${file.name} (${formatBytes(file.size)}) · ${t('Cambiar archivo')}`
+      : t('Arrastra un vídeo o un audio para editarlo');
+    $('editDrop').classList.toggle('loaded', Boolean(file));
     $('editor').classList.add('hidden');
     setStatusEl($('editStatus'), '', '');
+    setStatusEl($('editLoadStatus'), '', '');
     if (!file) return;
     url = URL.createObjectURL(file);
     video.src = url;
@@ -1921,6 +1927,7 @@ const editor = (() => {
     if (hasVideo) thumbAspect = clamp(video.videoWidth / video.videoHeight, 0.5, 2.5);
     video.classList.toggle('hidden', !hasVideo);
     $('edAudioOnly').classList.toggle('hidden', hasVideo);
+    $('edLblV').classList.toggle('hidden', !hasVideo);
     segs = [{ s: 0, e: duration, off: false }];
     sel = 0;
     zoom = 1;
@@ -1938,7 +1945,7 @@ const editor = (() => {
   video.addEventListener('error', () => {
     if (!file) return;
     $('editor').classList.add('hidden');
-    setStatusEl($('editStatus'), t('Este formato no se puede previsualizar aquí. Conviértelo antes a MP4 en Convertir → Formato.'), 'error');
+    setStatusEl($('editLoadStatus'), t('Este formato no se puede previsualizar aquí. Conviértelo antes a MP4 en Convertir → Formato.'), 'error');
   });
 
   function changed() {

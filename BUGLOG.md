@@ -307,3 +307,12 @@ Nuevo en el Editor: **quitar silencios** (se calcula en el navegador con la form
 ### Revisión de seguridad
 - Los ajustes nuevos solo aceptan valores de listas fijas (`parseEditEffects`: fundidos 0,5/1/2 s, volúmenes, cuatro proporciones y la tabla `ROTATIONS` ya existente); cualquier otro valor se ignora. Al grafo de filtros solo llegan números calculados en el servidor. Pedir ajustes con cortes rápidos se rechaza (400).
 - "Cada tramo aparte" usa nombres generados por el servidor (`<nombre> (tramo N)`), sin nada del cliente salvo el nombre del archivo ya saneado. Pruebas nuevas: 9:16 + fundidos + silencio, cuadrado girado, archivos por separado (exacto y rápido) y valores maliciosos.
+
+---
+
+## 2026-09-29 — v2.8.0: Editor a pantalla completa
+
+- El Editor ocupa todo el ancho de la ventana: visor grande con un panel de ajustes a la derecha (Recortar · Ajustes del resultado · Exportar) y, debajo, herramientas y una línea de tiempo más alta con etiquetas de pista (V1/A1). La altura del visor se adapta a la de la ventana; por debajo de ~900 px de ancho todo pasa a una columna (container queries).
+- El resto de páginas ya no se quedan en 680/820 px: crecen con la ventana hasta 1200/1280 px.
+- Tiempos en tipografía monoespaciada y más grandes (regla, contador, lista de tramos) para que se lean bien en pantallas con escalado.
+- Sin cambios en el servidor ni en lo que se exporta.

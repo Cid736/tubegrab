@@ -256,7 +256,7 @@
     'Corte anterior (↑)': 'Previous cut (↑)', 'Corte siguiente (↓)': 'Next cut (↓)',
     'Busca los silencios de más de un segundo y los quita (puedes deshacerlo)': 'Finds silences longer than a second and removes them (you can undo it)',
     'Quitar silencios': 'Remove silences', 'Imán': 'Snap', 'Imán: el cabezal y los cortes se pegan a los cortes cercanos': 'Snap: the playhead and cuts stick to nearby cuts',
-    'Tramos': 'Clips', 'Recuperar': 'Restore',
+    'Tramos': 'Clips', 'Recuperar': 'Restore', 'Cambiar archivo': 'Change file', 'Recortar': 'Trim',
     'Ajustes del resultado': 'Output adjustments', 'Formato de pantalla': 'Screen shape', 'recorta al centro': 'crops at the centre',
     '9:16 vertical (TikTok, Reels, Shorts)': '9:16 vertical (TikTok, Reels, Shorts)', '1:1 cuadrado': '1:1 square', '4:5 (Instagram)': '4:5 (Instagram)',
     '16:9 horizontal (YouTube)': '16:9 landscape (YouTube)', 'Fundido al empezar y al acabar': 'Fade in and out',
