@@ -278,3 +278,11 @@ Nuevas funciones: playlist a elegir, tramo antes de descargar, dividir por capí
 - **Página:** CSP añade solo `media-src 'self' blob:` (vista previa local del recorte). Las preferencias nuevas (idioma, límite de velocidad) se validan contra listas cerradas; los ajustes de servidor (concurrencia, GPU) solo se pueden cambiar desde la app de escritorio y se acotan (1–6 descargas, 1–4 conversiones).
 - **Portapapeles:** desactivado por defecto; solo se lee mientras la app está abierta y nada sale del equipo.
 - `npm audit` → 0 vulnerabilidades; Electron, express, multer, helmet, express-rate-limit, yt-dlp y ffmpeg en su última versión. 93 pruebas automáticas (incluidas las nuevas de seguridad). **Límite conocido:** el `.exe` aún no está firmado; la construcción ya firma sola si se aporta un certificado (ver README).
+
+---
+
+## 2026-09-28 — v2.5.1: instancia web privada
+
+### [MEDIUM] Una instancia desplegada (Render/Docker) era pública para cualquiera con el enlace
+- **Riesgo:** desconocidos podían usar el servidor para descargar contenido, y la responsabilidad legal y el consumo recaían en quien lo despliega.
+- **Fix:** nueva variable `TUBEGRAB_USERS="usuario:contraseña,…"` → autenticación HTTP Basic en todas las peticiones (página y API), comparación de tiempo constante (hash SHA-256 + `timingSafeEqual`, también para usuarios inexistentes) y límite de 30 intentos fallidos por IP cada 15 minutos. Sin la variable, todo sigue igual; la app de escritorio la ignora. Al arrancar sin ella y fuera de localhost, el servidor avisa en el registro. `render.yaml` la declara con `sync: false` (se rellena en el panel, nunca en git). Pruebas nuevas en `test/server.test.js`.

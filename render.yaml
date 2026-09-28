@@ -6,3 +6,6 @@ services:
     envVars:
       - key: TRUST_PROXY
         value: "true"
+      # Private instance: "user:password,user2:password2" (set it in the dashboard, never in git).
+      - key: TUBEGRAB_USERS
+        sync: false

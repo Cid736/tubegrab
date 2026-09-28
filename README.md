@@ -83,6 +83,8 @@ docker compose up
 
 The repo includes a `Dockerfile` and `render.yaml`. On Render: create a Web Service from this repo (Docker runtime is auto-detected), pick the Free plan, and add an environment variable `TRUST_PROXY=true`. Subscriptions, tray and clipboard features are desktop-only.
 
+**Make it private:** add `TUBEGRAB_USERS` with one or more `user:password` pairs separated by commas (e.g. `ana:long-password,luis:another-one`). The browser then asks for a user and password before showing anything; failed attempts are limited to 30 per 15 minutes per IP. Without it, anyone with the link can use your instance — and you are responsible for what they download through it. To remove someone, delete their pair and save (Render redeploys).
+
 ## Code signing
 
 The build signs the `.exe` files automatically when a certificate is provided through electron-builder's environment variables — nothing to change in the code:
@@ -102,6 +104,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 │   ├── download.js        # yt-dlp: site allowlist, options (parts, chapters, music mode, subtitles, speed), search, playlists
 │   ├── convert.js         # ffmpeg: formats, trim, compress to size, image, merge, GPU encoders
 │   ├── subscriptions.js   # Channel/playlist subscriptions (desktop)
+│   ├── auth.js            # Optional login for a private self-hosted instance (TUBEGRAB_USERS)
 │   ├── filenames.js       # Safe names for files and folders saved to the user's folder
 │   └── ffmpeg-release.js  # Pinned ffmpeg build (version, URL, SHA-256)
 ├── electron-main.js       # Desktop app: window, updater (3 kinds), components, tray, clipboard, save-to-folder
@@ -235,6 +238,8 @@ docker compose up
 ### 4. Desplegar tu propia instancia (ej. Render)
 
 El repo incluye un `Dockerfile` y `render.yaml`. En Render: crea un Web Service desde este repo (detecta Docker automáticamente), elige el plan Free, y añade la variable de entorno `TRUST_PROXY=true`. Las suscripciones, la bandeja y el portapapeles solo están en la app de escritorio.
+
+**Hacerla privada:** añade `TUBEGRAB_USERS` con uno o varios pares `usuario:contraseña` separados por comas (ej. `ana:contraseña-larga,luis:otra-distinta`). El navegador pedirá usuario y contraseña antes de mostrar nada; los intentos fallidos se limitan a 30 cada 15 minutos por IP. Sin ella, cualquiera con el enlace puede usar tu instancia, y lo que descarguen a través de ella es responsabilidad tuya. Para quitar a alguien, borra su par y guarda (Render vuelve a desplegar).
 
 ## Firma de código
 

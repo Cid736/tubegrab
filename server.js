@@ -11,6 +11,7 @@ const { JobManager } = require('./lib/jobs');
 const download = require('./lib/download');
 const convert = require('./lib/convert');
 const { Subscriptions, INTERVALS_H } = require('./lib/subscriptions');
+const { parseUsers, basicAuth } = require('./lib/auth');
 const { EventEmitter } = require('events');
 
 // App-wide notifications for open event streams (e.g. subscriptions changed).
@@ -95,6 +96,22 @@ if (HOST === '127.0.0.1') {
     }
     next();
   });
+}
+
+// Private instance: TUBEGRAB_USERS="user:password,…" asks for a login on every
+// request (page included). Failed attempts are rate-limited per IP.
+const authUsers = IS_DESKTOP ? new Map() : parseUsers(process.env.TUBEGRAB_USERS);
+if (authUsers.size) {
+  app.use(rateLimit({
+    windowMs: 15 * 60_000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    requestWasSuccessful: (req, res) => res.statusCode !== 401,
+    skipSuccessfulRequests: true,
+    message: 'Demasiados intentos fallidos, espera 15 minutos.',
+  }));
+  app.use(basicAuth(authUsers));
 }
 
 // Cross-site request guard: any web page the user visits can fire requests at
@@ -684,6 +701,8 @@ function onListening() {
   console.log(HOST === '0.0.0.0'
     ? '🔒 Modo despliegue: accesible externamente (contenedor/proxy).\n'
     : '🔒 Máxima seguridad: Ejecución local, solo accesible desde esta máquina.\n');
+  if (authUsers.size) console.log(`🔑 Acceso privado: ${authUsers.size} usuario(s) en TUBEGRAB_USERS.\n`);
+  else if (HOST !== '127.0.0.1') console.log('⚠️  Sin TUBEGRAB_USERS: cualquiera con el enlace puede usar esta instancia.\n');
 
   // Only auto-open the system browser for the standalone console build.
   // The Electron desktop app forks this file itself and already shows its

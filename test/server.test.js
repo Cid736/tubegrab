@@ -344,3 +344,29 @@ test('answers on the IPv6 loopback too (same app, Host guard allows [::1])', asy
   res.resume();
   assert.equal(res.statusCode, 200);
 });
+
+test('TUBEGRAB_USERS makes the instance private (Basic auth)', async () => {
+  const port = await freePort();
+  const { child, first } = startServer(port, { TUBEGRAB_USERS: 'ana:s3creta, luis:otra:con:dos-puntos' });
+  try {
+    await first;
+    const get = (headers = {}) => fetch(`http://localhost:${port}/`, { headers });
+    const basic = (u, p) => ({ authorization: `Basic ${Buffer.from(`${u}:${p}`).toString('base64')}` });
+    const none = await get();
+    assert.equal(none.status, 401);
+    assert.match(none.headers.get('www-authenticate'), /^Basic realm="TubeGrab"/);
+    assert.equal((await get(basic('ana', 'mala'))).status, 401);
+    assert.equal((await get(basic('nadie', 's3creta'))).status, 401);
+    assert.equal((await get(basic('ana', 's3creta'))).status, 200);
+    assert.equal((await get(basic('luis', 'otra:con:dos-puntos'))).status, 200);
+    // The API is behind the login too.
+    const apiRes = await fetch(`http://localhost:${port}/api/jobs`, { headers: { 'x-client-id': CLIENT } });
+    assert.equal(apiRes.status, 401);
+  } finally {
+    child.kill();
+  }
+});
+
+test('without TUBEGRAB_USERS the page stays open', async () => {
+  assert.equal((await fetch(`${BASE}/`)).status, 200);
+});
