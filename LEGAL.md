@@ -29,6 +29,7 @@ Conexiones a terceros (necesarias para funcionar; cada servicio aplica su propia
 
 - **El sitio del enlace** (YouTube, Vimeo, SoundCloud…): yt-dlp lo contacta para buscar, previsualizar y descargar. Las miniaturas de la vista previa se cargan directamente desde ese sitio.
 - **SponsorBlock** (`sponsor.ajay.app`), solo si activas "Quitar patrocinios": recibe el identificador del vídeo.
+- **LRCLIB** (`lrclib.net`), solo si activas "Letras" al descargar o "Buscar letras" en Etiquetas: recibe el artista, el título, el álbum y la duración de la canción (nada más).
 - **GitHub** (`api.github.com`, `github.com`): comprobar y descargar actualizaciones de la app, de yt-dlp y, en la versión ligera, de ffmpeg.
 
 **Cookies:** TubeGrab no usa cookies de seguimiento ni de terceros. Solo usa almacenamiento local estrictamente necesario para el funcionamiento, que está exento de consentimiento (art. 22.2 LSSI / art. 5.3 Directiva ePrivacy). Por eso no hay banner de cookies. El `cookies.txt` opcional son *tus* cookies de otro sitio, que tú decides aportar.
@@ -73,6 +74,7 @@ Third-party connections (needed for the app to work; each service has its own pr
 
 - **The linked site** (YouTube, Vimeo, SoundCloud…): yt-dlp contacts it to search, preview and download. Preview thumbnails load straight from that site.
 - **SponsorBlock** (`sponsor.ajay.app`), only if you turn on "Remove sponsors": receives the video ID.
+- **LRCLIB** (`lrclib.net`), only if you turn on "Lyrics" when downloading or "Find lyrics" in Tags: receives the song's artist, title, album and length (nothing else).
 - **GitHub** (`api.github.com`, `github.com`): checking for and downloading updates of the app, yt-dlp and, in the light build, ffmpeg.
 
 **Cookies:** TubeGrab uses no tracking or third-party cookies. It only uses local storage that is strictly necessary to work, which is exempt from consent under the EU ePrivacy Directive (art. 5(3)). That's why there's no cookie banner. The optional `cookies.txt` holds *your* cookies from another site, which you choose to provide.

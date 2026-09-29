@@ -40,8 +40,11 @@ test('parseDownloadOptions falls back to safe defaults for unknown values', () =
   assert.deepEqual(o, {
     mode: 'audio', audioFormat: 'mp3', audioBitrate: '192', quality: '1080', container: 'mp4',
     metadata: true, subtitles: false, subLangs: 'es,en', subMode: 'embed', sponsorblock: false, playlist: false,
-    music: false, chapters: false, sectionStart: null, sectionEnd: null, rateLimit: null,
+    music: false, lyrics: false, chapters: false, sectionStart: null, sectionEnd: null, rateLimit: null,
   });
+  assert.equal(download.parseDownloadOptions({ mode: 'audio', lyrics: 'true' }).lyrics, false, 'only a real true');
+  assert.equal(download.parseDownloadOptions({ mode: 'video', lyrics: true }).lyrics, false, 'audio only');
+  assert.equal(download.parseDownloadOptions({ mode: 'audio', lyrics: true }).lyrics, true);
   assert.equal(download.parseDownloadOptions({ mode: 'video', subtitles: true }).subtitles, true);
   assert.equal(download.parseDownloadOptions({ mode: 'audio', subtitles: true }).subtitles, false);
 });

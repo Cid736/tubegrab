@@ -12,6 +12,7 @@ const download = require('./lib/download');
 const convert = require('./lib/convert');
 const { Subscriptions, INTERVALS_H } = require('./lib/subscriptions');
 const { parseUsers, basicAuth } = require('./lib/auth');
+const tags = require('./lib/tags');
 const { EventEmitter } = require('events');
 
 // App-wide notifications for open event streams (e.g. subscriptions changed).
@@ -306,10 +307,13 @@ app.get('/api/jobs/events', requireClient, (req, res) => {
   });
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   send('snapshot', jobs.listFor(req.clientId));
+  if (IS_DESKTOP) send('schedule', { until: jobs.holdUntil });
 
   const onUpdate = (clientId, job) => { if (clientId === req.clientId) send('job', job); };
   const onRemoved = (clientId, id) => { if (clientId === req.clientId) send('removed', { id }); };
   const onSubs = (clientId) => { if (clientId === req.clientId) send('subscriptions', {}); };
+  const onHold = (until) => send('schedule', { until });
+  if (IS_DESKTOP) jobs.on('hold', onHold);
   jobs.on('update', onUpdate);
   jobs.on('removed', onRemoved);
   events.on('subscriptions', onSubs);
@@ -319,6 +323,7 @@ app.get('/api/jobs/events', requireClient, (req, res) => {
     jobs.off('update', onUpdate);
     jobs.off('removed', onRemoved);
     events.off('subscriptions', onSubs);
+    jobs.off('hold', onHold);
     const left = (sseConnections.get(req.clientId) || 1) - 1;
     if (left > 0) sseConnections.set(req.clientId, left); else sseConnections.delete(req.clientId);
     sseTotal -= 1;
@@ -427,6 +432,10 @@ const uploader = (files, { imageFields = [] } = {}) => multer({
 });
 const upload = uploader(1);
 const uploadEdit = uploader(2, { imageFields: ['logo'] }).fields([{ name: 'file', maxCount: 1 }, { name: 'logo', maxCount: 1 }]);
+const MAX_TAG_FILES = IS_DESKTOP ? tags.MAX_FILES : 10;
+const uploadTagsRead = uploader(MAX_TAG_FILES).array('files', MAX_TAG_FILES);
+const uploadTags = uploader(MAX_TAG_FILES + 1, { imageFields: ['cover'] }).fields([{ name: 'files', maxCount: MAX_TAG_FILES }, { name: 'cover', maxCount: 1 }]);
+const tagExt = (f) => (String(f.originalname).split('.').pop() || '').toLowerCase();
 const MAX_MERGE_FILES = IS_DESKTOP ? convert.MAX_MERGE : 10;
 const uploadMany = uploader(MAX_MERGE_FILES);
 
@@ -543,6 +552,71 @@ app.post('/api/jobs/edit', createLimiter, requireClient, uploadEdit, (req, res) 
       logoPath: fx.logo && logo ? logo.path : null,
     }),
   });
+});
+
+// === Tag editor ===
+// Reads the tags of the chosen songs (nothing is kept: the files are deleted right away).
+app.post('/api/tags/read', infoLimiter, requireClient, uploadTagsRead, async (req, res) => {
+  const files = req.files || [];
+  const discard = () => files.forEach((f) => fs.unlink(f.path, () => {}));
+  try {
+    if (!files.length) return res.status(400).json({ error: 'No se recibió ningún archivo.' });
+    if (files.some((f) => !tags.TAG_FORMATS.has(tagExt(f)))) return res.status(400).json({ error: 'Las etiquetas solo se pueden editar en MP3, M4A, FLAC, OGG y OPUS.' });
+    const list = [];
+    for (const f of files) list.push(await tags.readTags(currentFfmpegPath(), f.path, nameOf(f)));
+    return res.json({ files: list });
+  } catch {
+    return res.status(500).json({ error: 'No se pudieron leer las etiquetas.' });
+  } finally {
+    discard();
+  }
+});
+
+app.post('/api/jobs/tags', createLimiter, requireClient, uploadTags, (req, res) => {
+  const files = (req.files && req.files.files) || [];
+  const cover = (req.files && req.files.cover && req.files.cover[0]) || null;
+  const discard = () => [...files, cover].forEach((f) => { if (f) fs.unlink(f.path, () => {}); });
+  const body = req.body || {};
+  const fail = (status, error) => { discard(); return res.status(status).json({ error }); };
+  if (!files.length) return fail(400, 'No se recibió ningún archivo.');
+  if (files.some((f) => !tags.TAG_FORMATS.has(tagExt(f)))) return fail(400, 'Las etiquetas solo se pueden editar en MP3, M4A, FLAC, OGG y OPUS.');
+  const tagList = tags.parseTagList(body.tags, files.length);
+  if (!tagList) return fail(400, 'Etiquetas no válidas.');
+  if (cover && cover.size > MAX_IMAGE_SIZE) return fail(400, 'La carátula es demasiado grande (máx. 5 MB).');
+  if (!jobs.canCreate(req.clientId)) return fail(429, TOO_MANY_JOBS.error);
+  const inputs = files.map((f) => ({ path: f.path, name: nameOf(f) }));
+  const albums = [...new Set(tagList.map((t) => t.album).filter(Boolean))];
+  const extras = [cover ? 'carátula' : '', body.lyrics === 'true' ? 'letras' : '', body.rename === 'true' ? 'renombrar' : ''].filter(Boolean);
+  const job = jobs.create({
+    clientId: req.clientId,
+    type: 'convert',
+    title: albums.length === 1 ? albums[0] : inputs.length === 1 ? inputs[0].name : `${inputs[0].name} + ${inputs.length - 1} más`,
+    detail: [`Etiquetas · ${inputs.length} ${inputs.length === 1 ? 'archivo' : 'archivos'}`, ...extras].join(' · '),
+    run: tags.runTags({
+      inputs, tagList, coverPath: cover ? cover.path : null, rename: body.rename === 'true', lyrics: body.lyrics === 'true', ffmpegPath: currentFfmpegPath(),
+    }),
+    cleanupInput: discard,
+  });
+  return res.json({ id: job.id });
+});
+
+// === Scheduled downloads (desktop only: in a shared web instance one visitor
+// must not be able to hold everybody's queue) ===
+app.get('/api/schedule', (req, res) => {
+  if (!IS_DESKTOP) return res.status(404).json({ error: 'Solo en la app de escritorio.' });
+  res.json({ until: jobs.holdUntil });
+});
+app.post('/api/schedule', (req, res) => {
+  if (!IS_DESKTOP) return res.status(404).json({ error: 'Solo en la app de escritorio.' });
+  const at = (req.body || {}).at;
+  if (at === null || at === '') return res.json({ until: jobs.setHold(null) });
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(at));
+  if (!m) return res.status(400).json({ error: 'Hora no válida (hh:mm).' });
+  // The next time the clock shows hh:mm: today, or tomorrow if it has passed.
+  const when = new Date();
+  when.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  if (when.getTime() <= Date.now()) when.setDate(when.getDate() + 1);
+  res.json({ until: jobs.setHold(when.getTime()) });
 });
 
 app.post('/api/jobs/merge', createLimiter, requireClient, uploadMany.array('files', MAX_MERGE_FILES), (req, res) => {

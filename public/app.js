@@ -17,6 +17,7 @@ const optPlaylist = $('optPlaylist');
 const optSubtitles = $('optSubtitles');
 const optSponsorblock = $('optSponsorblock');
 const optMusic = $('optMusic');
+const optLyrics = $('optLyrics');
 const optChapters = $('optChapters');
 const subLangs = $('subLangs');
 const subMode = $('subMode');
@@ -249,6 +250,7 @@ if (desktopApi) {
     cookiesLabel.classList.toggle('ok', Boolean(s.hasCookies));
     $('optCloseToTray').checked = s.closeToTray;
     $('optClipboard').checked = s.clipboardWatch;
+    $('optOrganize').value = s.organize || 'none';
     $('flavorLabel').textContent = t(FLAVORS[s.flavor] || '');
   };
   desktopApi.getSettings().then(showSettings);
@@ -259,6 +261,7 @@ if (desktopApi) {
   $('btnOpenDataFolder').addEventListener('click', () => desktopApi.openDataFolder());
   $('optCloseToTray').addEventListener('change', (e) => desktopApi.setOptions({ closeToTray: e.target.checked }));
   $('optClipboard').addEventListener('change', (e) => desktopApi.setOptions({ clipboardWatch: e.target.checked }));
+  $('optOrganize').addEventListener('change', (e) => desktopApi.setOptions({ organize: e.target.value }));
 
   // A link copied elsewhere and accepted from the notification.
   desktopApi.onPasteUrl(({ url }) => {
@@ -377,7 +380,7 @@ function playDoneSound() {
 
 // Remember the last download options (restored on next launch).
 const REMEMBERED_SELECTS = { audioFormat, audioBitrate, videoQuality, videoContainer, subLangs, subMode };
-const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic };
+const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, lyrics: optLyrics };
 
 function saveLastOptions() {
   if (!prefsApi.get().remember) return;
@@ -436,6 +439,7 @@ const VIEWS = {
   'dl-subs': { group: 'download', title: 'Suscripciones', sub: 'Lo nuevo de tus canales, descargado solo', tab: 'Suscripciones', desktop: true },
   'cv-format': { group: 'convert', title: 'Convertir', sub: '23 formatos de audio y vídeo', tab: 'Formato' },
   'cv-edit': { group: 'convert', title: 'Editor', sub: 'Recorta del segundo que quieras al que quieras, corta y quita partes', tab: 'Editor' },
+  'cv-tags': { group: 'convert', title: 'Etiquetas', sub: 'Artista, álbum, carátula y letras de tus canciones', tab: 'Etiquetas' },
   'cv-merge': { group: 'convert', title: 'Unir archivos', sub: 'Varios audios o vídeos en uno solo', tab: 'Unir' },
   'cv-compress': { group: 'convert', title: 'Comprimir', sub: 'Que pese lo que tú digas', tab: 'Comprimir' },
   'cv-image': { group: 'convert', title: 'Imagen', sub: 'Un fotograma o la carátula como imagen', tab: 'Imagen' },
@@ -534,6 +538,7 @@ function applyMode() {
   $('downloadExtras').classList.toggle('hidden', isConvert);
   $('dlMoreOptions').classList.toggle('hidden', isConvert);
   $('optMusicWrap').classList.toggle('hidden', currentMode !== 'audio');
+  $('optLyricsWrap').classList.toggle('hidden', currentMode !== 'audio');
   $('optSubtitlesWrap').classList.toggle('hidden', currentMode !== 'video');
   refreshSubtitleRows();
   $('convertOptions').classList.toggle('hidden', !isConvert);
@@ -590,6 +595,7 @@ function downloadOptions() {
     subMode: subMode.value,
     sponsorblock: optSponsorblock.checked,
     music: optMusic.checked,
+    lyrics: optLyrics.checked,
     rateLimit: prefsApi.get().rateLimit,
   };
 }
@@ -1090,6 +1096,7 @@ document.addEventListener('drop', (e) => {
     if (currentView === 'cv-compress') return setCompressFiles(files);
     if (currentView === 'cv-image') return setImageFiles(files);
     if (currentView === 'cv-edit') return editor.load(files[0]);
+    if (currentView === 'cv-tags') return tagEditor.load(files);
     setView('cv-format');
     setFiles(files);
     return;
@@ -2448,6 +2455,180 @@ const editor = (() => {
   return { load };
 })();
 
+// === Scheduled downloads (desktop): the queue waits until a time ===
+const scheduleBar = (() => {
+  const bar = $('scheduleBar');
+  let until = null;
+  let editing = false;
+  const clock = (ms) => new Date(ms).toLocaleTimeString(prefsApi.get().lang === 'en' ? 'en-GB' : 'es-ES', { hour: '2-digit', minute: '2-digit' });
+  function render() {
+    bar.classList.toggle('hidden', !until && !editing);
+    bar.classList.toggle('active', Boolean(until) && !editing);
+    if (until && !editing) {
+      const tomorrow = new Date(until).toDateString() !== new Date().toDateString();
+      $('scheduleText').textContent = t(tomorrow ? 'Las descargas empezarán mañana a las {h}' : 'Las descargas empezarán hoy a las {h}', { h: clock(until) });
+    } else {
+      $('scheduleText').textContent = t('Empezar las descargas a las');
+    }
+    $('scheduleTime').classList.toggle('hidden', Boolean(until) && !editing);
+    $('btnScheduleSet').textContent = until && !editing ? t('Cambiar') : t('Programar');
+    $('btnScheduleNow').classList.toggle('hidden', !until);
+    $('btnScheduleClose').classList.toggle('hidden', Boolean(until) && !editing);
+  }
+  async function send(at) {
+    try {
+      const res = await postJson('/api/schedule', { at });
+      editing = false;
+      show(res.until);
+    } catch (err) { showToast(err.message); }
+  }
+  function show(value) {
+    until = Number.isFinite(value) ? value : null;
+    render();
+  }
+  if (desktopApi) {
+    $('btnSchedule').addEventListener('click', () => { editing = true; render(); $('scheduleTime').focus(); });
+    $('btnScheduleSet').addEventListener('click', () => {
+      if (until && !editing) { editing = true; render(); return; }
+      if (!$('scheduleTime').value) return;
+      send($('scheduleTime').value);
+    });
+    $('btnScheduleNow').addEventListener('click', () => send(null));
+    $('btnScheduleClose').addEventListener('click', () => { editing = false; render(); });
+    $('scheduleTime').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnScheduleSet').click(); });
+  }
+  return { show };
+})();
+
+// === Convertir → Etiquetas (tag editor for many songs) ===
+const tagEditor = (() => {
+  const TAG_EXT = /\.(mp3|m4a|flac|ogg|opus)$/i;
+  let files = [];
+  let rows = [];           // [{ name, tags: {…}, hasCover, coverOk }]
+  let cover = null;
+  let coverUrl = null;
+  const COLS = ['track', 'title', 'artist', 'album'];
+
+  function render() {
+    $('tagsEditor').classList.toggle('hidden', !rows.length);
+    $('tagsCount').textContent = rows.length ? `(${rows.length})` : '';
+    const body = $('tagsTable').querySelector('tbody');
+    body.innerHTML = '';
+    rows.forEach((row) => {
+      const tr = document.createElement('tr');
+      for (const key of COLS) {
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.className = `text-input tags-cell tags-${key}`;
+        input.value = row.tags[key] || '';
+        input.maxLength = key === 'track' ? 7 : 300;
+        input.setAttribute('aria-label', `${t({ track: 'Nº', title: 'Título', artist: 'Artista', album: 'Álbum' }[key])} · ${row.name}`);
+        input.addEventListener('input', () => { row.tags[key] = input.value; });
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      const name = document.createElement('td');
+      name.className = 'tags-file';
+      name.textContent = row.name;
+      name.title = row.name;
+      tr.appendChild(name);
+      body.appendChild(tr);
+    });
+  }
+
+  async function load(list) {
+    const picked = [...list].filter((f) => TAG_EXT.test(f.name)).slice(0, 50);
+    setStatusEl($('tagsStatus'), '', '');
+    if (!picked.length) {
+      setStatusEl($('tagsLoadStatus'), t('Elige canciones MP3, M4A, FLAC, OGG u OPUS.'), 'error');
+      return;
+    }
+    files = picked;
+    rows = [];
+    render();
+    $('tagsDropText').textContent = t('Leyendo etiquetas…');
+    setStatusEl($('tagsLoadStatus'), '', '');
+    try {
+      const data = await uploadTo('/api/tags/read', 'files', files, {}, (pct) => { $('tagsDropText').textContent = `${t('Leyendo etiquetas…')} ${pct}%`; });
+      rows = data.files.map((f) => ({ name: f.name, tags: { ...f.tags }, hasCover: f.hasCover, coverOk: f.coverOk }));
+    } catch (err) {
+      files = [];
+      setStatusEl($('tagsLoadStatus'), err.message, 'error');
+    }
+    $('tagsDropText').textContent = files.length
+      ? t('{n} canciones · haz clic para cambiar', { n: files.length })
+      : t('Arrastra tus canciones (MP3, M4A, FLAC, OGG, OPUS)');
+    render();
+  }
+
+  function setCover(f) {
+    if (coverUrl) URL.revokeObjectURL(coverUrl);
+    cover = null;
+    coverUrl = null;
+    if (f) {
+      if (!/\.(png|jpe?g|webp)$/i.test(f.name) || !/^image\/(png|jpeg|webp)$/.test(f.type)) setStatusEl($('tagsStatus'), t('La carátula tiene que ser PNG, JPG o WEBP.'), 'error');
+      else if (f.size > 5 * 1024 * 1024) setStatusEl($('tagsStatus'), t('La carátula es demasiado grande (máx. 5 MB).'), 'error');
+      else { cover = f; coverUrl = URL.createObjectURL(f); }
+    }
+    $('tgCoverPreview').classList.toggle('hidden', !coverUrl);
+    if (coverUrl) $('tgCoverPreview').src = coverUrl;
+    $('tgCoverName').textContent = cover ? cover.name : t('MP3, M4A y FLAC · PNG, JPG o WEBP');
+    $('tgCoverRemove').classList.toggle('hidden', !cover);
+  }
+
+  fileZone($('tagsDrop'), $('tagsInput'), load);
+  $('tgCoverPick').addEventListener('click', () => $('tgCoverInput').click());
+  $('tgCoverInput').addEventListener('change', (e) => { setCover(e.target.files[0] || null); e.target.value = ''; });
+  $('tgCoverRemove').addEventListener('click', () => setCover(null));
+  $('tgApplyAll').addEventListener('click', () => {
+    const all = { artist: 'tgAllArtist', album: 'tgAllAlbum', album_artist: 'tgAllAlbumArtist', date: 'tgAllDate', genre: 'tgAllGenre' };
+    let changed = 0;
+    for (const [key, id] of Object.entries(all)) {
+      const v = $(id).value.trim();
+      if (!v) continue;
+      rows.forEach((r) => { r.tags[key] = v; });
+      changed += 1;
+    }
+    render();
+    setStatusEl($('tagsStatus'), changed ? t('Aplicado a las {n} canciones.', { n: rows.length }) : t('Escribe arriba lo que quieras poner a todas.'), changed ? 'success' : 'error');
+  });
+  $('tgNumber').addEventListener('click', () => {
+    rows.forEach((r, i) => { r.tags.track = `${i + 1}/${rows.length}`; });
+    render();
+  });
+  $('tgFromName').addEventListener('click', () => {
+    rows.forEach((r) => {
+      const base = r.name.replace(/\.[^.]+$/, '').replace(/^\d{1,3}[\s.\-_]+/, '').trim();
+      const m = /^(.+?)\s+[-–—]\s+(.+)$/.exec(base);
+      if (m) { r.tags.artist = m[1].trim(); r.tags.title = m[2].trim(); } else { r.tags.title = base; }
+    });
+    render();
+  });
+  $('btnTags').addEventListener('click', async () => {
+    const status = $('tagsStatus');
+    if (!files.length || !rows.length) { setStatusEl(status, t('Elige uno o varios archivos primero'), 'error'); return; }
+    const bad = rows.find((r) => (r.tags.track && !/^\d{1,3}(\/\d{1,3})?$/.test(r.tags.track.trim())) || (r.tags.date && !/^\d{4}(-\d{2}(-\d{2})?)?$/.test(r.tags.date.trim())));
+    if (bad) { setStatusEl(status, t('Revisa «{name}»: el número va como 3 o 3/12 y el año como 2024.', { name: bad.name }), 'error'); return; }
+    const btn = $('btnTags');
+    btn.disabled = true;
+    try {
+      await uploadTo('/api/jobs/tags', 'files', files, {
+        tags: JSON.stringify(rows.map((r) => Object.fromEntries(Object.entries(r.tags).map(([k, v]) => [k, String(v || '').trim()])))),
+        rename: String($('tgRename').checked),
+        lyrics: String($('tgLyrics').checked),
+        ...(cover ? { cover } : {}),
+      }, (pct) => { btn.textContent = `${t('Subiendo')} ${pct}%`; });
+      setStatusEl(status, t('Añadido a la cola'), 'success');
+    } catch (err) {
+      setStatusEl(status, err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = t('Guardar etiquetas');
+    }
+  });
+  return { load };
+})();
+
 // === Queue ===
 const jobs = new Map();          // id -> job (from the server)
 const liveJobs = new Set();      // ids we saw while still active (eligible for auto-save)
@@ -2467,6 +2648,7 @@ function connectEvents() {
   es.addEventListener('job', (e) => { onJob(JSON.parse(e.data), true); renderQueueMeta(); });
   es.addEventListener('removed', (e) => { removeRow(JSON.parse(e.data).id); renderQueueMeta(); });
   es.addEventListener('subscriptions', () => { if (currentView === 'dl-subs') loadSubscriptions(); });
+  es.addEventListener('schedule', (e) => scheduleBar.show(JSON.parse(e.data).until));
 }
 
 function onJob(job, live) {
@@ -2493,7 +2675,10 @@ function autoSave(job) {
   const count = (job.files || []).length || 1;
   if (desktopApi) {
     saved.set(job.id, 'saving');
-    desktopApi.saveJob(job.id, CLIENT_ID, count, job.title);
+    // Lyrics (.lrc) belong next to their song, not in a subfolder of their own.
+    const media = (job.files || []).filter((f) => !/\.lrc$/i.test(f.name)).length;
+    const meta = job.type === 'download' && job.meta ? job.meta : {};
+    desktopApi.saveJob(job.id, CLIENT_ID, count, media > 1 ? job.title : '', meta.artist || meta.uploader || '', meta.album || '');
   } else {
     for (let n = 0; n < count; n++) {
       const a = document.createElement('a');

@@ -253,6 +253,29 @@
     'Igual que el original': 'Same as the original', 'MP3 (solo audio)': 'MP3 (audio only)', 'M4A (solo audio)': 'M4A (audio only)',
     'WAV (solo audio)': 'WAV (audio only)', 'FLAC (solo audio)': 'FLAC (audio only)', 'Baja (pesa menos)': 'Low (smaller file)',
     'Cortes': 'Cuts', 'Exactos': 'Exact', 'Rápidos': 'Fast', 'Exportar': 'Export',
+    // --- Music (v2.10) ---
+    'Letras': 'Lyrics', 'las busca en LRCLIB y las añade a la canción': 'finds them on LRCLIB and adds them to the song',
+    'Organizar en carpetas': 'Organise into folders', 'las descargas, por artista o canal': 'downloads, by artist or channel',
+    'Por artista': 'By artist', 'Por artista y álbum': 'By artist and album',
+    'Programar…': 'Schedule…', 'Empezar las descargas a las': 'Start the downloads at', 'Programar': 'Schedule', 'Empezar ya': 'Start now',
+    'Las descargas empezarán mañana a las {h}': 'Downloads will start tomorrow at {h}', 'Las descargas empezarán hoy a las {h}': 'Downloads will start today at {h}',
+    'Cambiar': 'Change', 'Etiquetas': 'Tags', 'Artista, álbum, carátula y letras de tus canciones': 'Artist, album, cover art and lyrics of your songs',
+    'Arrastra tus canciones (MP3, M4A, FLAC, OGG, OPUS)': 'Drop your songs (MP3, M4A, FLAC, OGG, OPUS)',
+    'cambia artista, álbum, carátula y número de pista a muchas a la vez': 'change artist, album, cover art and track number of many at once',
+    'Para todas': 'For all', 'Artista': 'Artist', 'Álbum': 'Album', 'Artista del álbum': 'Album artist', 'Año': 'Year', 'Género': 'Genre',
+    'sin cambios': 'unchanged', 'MP3, M4A y FLAC · PNG, JPG o WEBP': 'MP3, M4A and FLAC · PNG, JPG or WEBP',
+    'Aplicar a todas': 'Apply to all', 'Numerar en orden': 'Number in order', 'Título desde el nombre del archivo': 'Title from the file name',
+    'Canciones': 'Songs', 'Nº': 'No.', 'Título': 'Title', 'Archivo': 'File', 'Renombrar como «Artista - Título»': 'Rename as "Artist - Title"',
+    'Buscar letras': 'Find lyrics', 'en LRCLIB, para las que no tengan': 'on LRCLIB, for those without',
+    'Se guardan copias con las etiquetas nuevas en tu carpeta de descargas; los archivos originales no se tocan.': 'Copies with the new tags are saved to your downloads folder; the originals are left untouched.',
+    'Guardar etiquetas': 'Save tags', 'Elige canciones MP3, M4A, FLAC, OGG u OPUS.': 'Choose MP3, M4A, FLAC, OGG or OPUS songs.',
+    'Leyendo etiquetas…': 'Reading tags…', '{n} canciones · haz clic para cambiar': '{n} songs · click to change',
+    'La carátula tiene que ser PNG, JPG o WEBP.': 'The cover art must be PNG, JPG or WEBP.', 'La carátula es demasiado grande (máx. 5 MB).': 'The cover art is too big (max. 5 MB).',
+    'Aplicado a las {n} canciones.': 'Applied to the {n} songs.', 'Escribe arriba lo que quieras poner a todas.': 'Type above what you want on all of them.',
+    'Revisa «{name}»: el número va como 3 o 3/12 y el año como 2024.': 'Check "{name}": the number goes like 3 or 3/12 and the year like 2024.',
+    'Las etiquetas solo se pueden editar en MP3, M4A, FLAC, OGG y OPUS.': 'Tags can only be edited in MP3, M4A, FLAC, OGG and OPUS.',
+    'No se pudieron leer las etiquetas.': "Couldn't read the tags.", 'Etiquetas no válidas.': 'Invalid tags.', 'No se pudieron escribir las etiquetas.': "Couldn't write the tags.",
+    'Hora no válida (hh:mm).': 'Invalid time (hh:mm).', 'Buscando letra…': 'Finding lyrics…',
     // --- Editor v2.9 ---
     'Quitar ruido de fondo': 'Remove background noise', 'viento, zumbidos, ventilador': 'wind, hum, fans', 'Suave': 'Light', 'Fuerte': 'Strong',
     'Texto': 'Text', '+ Añadir texto': '+ Add text', 'Logo': 'Logo', 'PNG, JPG o WEBP (máx. 5 MB)': 'PNG, JPG or WEBP (max. 5 MB)', 'Elegir…': 'Choose…',
@@ -310,6 +333,8 @@
   var PATTERNS = [
     [/^Uniendo (\d+) archivos$/, 'Merging $1 files'],
     [/^Cortando tramo (\d+)\/(\d+)$/, 'Cutting clip $1/$2'],
+    [/^Etiquetando (\d+)\/(\d+)$/, 'Tagging $1/$2'],
+    [/^Buscando letra (\d+)\/(\d+)$/, 'Finding lyrics $1/$2'],
     [/^Editando( \(GPU\))? (\d+)\/(\d+)$/, 'Editing$1 $2/$3'],
     [/^El archivo es demasiado grande \(máx\. (\d+) MB\)\.$/, 'The file is too big (max. $1 MB).'],
     [/^No se pudo iniciar (yt-dlp|ffmpeg): (.*)$/, "Couldn't start $1: $2"],
@@ -324,7 +349,7 @@
   // Pieces of job descriptions ("MP4 Mejor calidad · por capítulos", "Unir 3 archivos · MP4"…).
   var PIECES = [
     ['Mejor calidad', 'Best quality'], ['por capítulos', 'by chapters'], ['–fin', '–end'], ['Comprimir a', 'Compress to'],
-    ['carátula', 'cover art'], ['fotograma', 'frame'], ['Unir ', 'Merge '], ['Editar', 'Edit'], [' tramos', ' clips'], [' tramo', ' clip'], ['rápido', 'fast'], ['velocidad', 'speed'], ['· texto', '· text'], ['sin ruido', 'denoised'], ['por separado', 'separately'], ['fundidos', 'fades'], ['sin sonido', 'no sound'], ['volumen', 'volume'], ['girado', 'rotated'], [' archivos', ' files'], [' más', ' more'],
+    ['carátula', 'cover art'], ['fotograma', 'frame'], ['Unir ', 'Merge '], ['Editar', 'Edit'], [' tramos', ' clips'], [' tramo', ' clip'], ['rápido', 'fast'], ['velocidad', 'speed'], ['· texto', '· text'], ['sin ruido', 'denoised'], ['Etiquetas · ', 'Tags · '], [' archivo', ' file'], ['letras', 'lyrics'], ['renombrar', 'renamed'], ['por separado', 'separately'], ['fundidos', 'fades'], ['sin sonido', 'no sound'], ['volumen', 'volume'], ['girado', 'rotated'], [' archivos', ' files'], [' más', ' more'],
   ];
 
   function fill(s, vars) {

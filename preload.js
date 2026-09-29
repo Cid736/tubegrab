@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld('desktop', {
   getSettings: () => ipcRenderer.invoke('desktop:getSettings'),
   chooseFolder: () => ipcRenderer.invoke('desktop:chooseFolder'),
   openFolder: () => ipcRenderer.send('desktop:openFolder'),
-  saveJob: (jobId, clientId, count, folder) => ipcRenderer.send('desktop:saveJob', { jobId, clientId, count, folder }),
+  saveJob: (jobId, clientId, count, folder, artist, album) => ipcRenderer.send('desktop:saveJob', { jobId, clientId, count, folder, artist, album }),
   showInFolder: (jobId) => ipcRenderer.send('desktop:showInFolder', jobId),
   openSaved: (jobId) => ipcRenderer.send('desktop:openSaved', jobId),
   savedExists: (ids) => ipcRenderer.invoke('desktop:savedExists', ids),

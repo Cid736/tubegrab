@@ -580,15 +580,20 @@ ipcMain.handle('desktop:getSettings', (event) => {
     hasCookies: fs.existsSync(cookiesFile()),
     closeToTray: s.closeToTray === true,
     clipboardWatch: s.clipboardWatch === true,
+    organize: ORGANIZE.includes(s.organize) ? s.organize : 'none',
     flavor: !IS_PORTABLE && app.isPackaged ? 'installed' : IS_LITE ? 'lite' : 'portable',
   };
 });
 
-// Booleans only; anything else is ignored.
+// Downloads into folders by artist (and album), or straight into the folder.
+const ORGANIZE = ['none', 'artist', 'artist-album'];
+
+// Booleans, and `organize` from its list; anything else is ignored.
 ipcMain.on('desktop:setOptions', (event, patch) => {
   if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return;
   const next = {};
   for (const key of ['closeToTray', 'clipboardWatch']) if (typeof patch[key] === 'boolean') next[key] = patch[key];
+  if (ORGANIZE.includes(patch.organize)) next.organize = patch.organize;
   saveSettings(next);
   applyClipboardWatch();
 });
@@ -709,11 +714,21 @@ ipcMain.on('desktop:saveJob', (event, payload) => {
   const { jobId, clientId } = payload;
   if (!/^[a-f0-9]{32}$/.test(String(jobId)) || !/^[a-f0-9]{32}$/.test(String(clientId)) || pendingSaves.has(jobId)) return;
   const count = Math.min(MAX_FILES_PER_JOB, Math.max(1, Math.floor(Number(payload.count) || 1)));
+  // Downloads can go into Artist / Album folders (setting). Every name is
+  // sanitised here into a single folder name, never used as a path.
+  let base = getSettings().downloadDir;
+  const organize = getSettings().organize;
+  const artist = typeof payload.artist === 'string' ? payload.artist.trim() : '';
+  const album = typeof payload.album === 'string' ? payload.album.trim() : '';
+  if ((organize === 'artist' || organize === 'artist-album') && artist) {
+    base = path.join(base, safeFolderName(artist));
+    if (organize === 'artist-album' && album) base = path.join(base, safeFolderName(album));
+  }
   // Several files (chapters, video + subtitles) go together in a subfolder
-  // named after the job; the name is sanitised here, never used as a path.
-  const dir = count > 1
-    ? uniquePath(getSettings().downloadDir, safeFolderName(payload.folder))
-    : getSettings().downloadDir;
+  // named after the job, unless the page says they belong side by side
+  // (a song and its .lrc lyrics).
+  const folder = typeof payload.folder === 'string' ? payload.folder : '';
+  const dir = count > 1 && folder ? uniquePath(base, safeFolderName(folder)) : base;
   pendingSaves.set(jobId, { dir, total: count, paths: [], failed: false });
   for (let n = 0; n < count; n++) {
     mainWindow.webContents.downloadURL(`${APP_ORIGIN}/api/jobs/${jobId}/file?client=${clientId}&n=${n}`);

@@ -22,6 +22,9 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - Audio: MP3, M4A, OPUS, OGG, FLAC, WAV or the original stream (96–320 kbps). Video: up to 4K/8K as MP4, MKV or WEBM
 - **Download only a part** (e.g. 1:20–3:45, with a slider), or **split by chapters** into one file per chapter (tagged with title and track number)
 - **Music mode**: clean "Artist - Title" (without "(Official Video)"…), artist tag and **square cover art**
+- **Lyrics** (optional): found on LRCLIB (free, no account), embedded in the song, plus a synced **.lrc** file next to it when available
+- **Folders by artist / album** (desktop): downloads can go into `Artist/Album` automatically
+- **Scheduled downloads** (desktop): the queue waits until a time you choose (e.g. at night); conversions still run
 - Cover art, metadata and chapters; subtitles in 9 languages, embedded or as a separate **.srt**; SponsorBlock
 
 **Convert**
@@ -35,6 +38,7 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - **Merge** several audio or video files into one (clips of other sizes are letterboxed)
 - **Compress to a size** (e.g. 8 MB for Discord, 16 MB for WhatsApp): TubeGrab works out the quality, two-pass
 - **Image**: a frame at any moment (with a slider) or the embedded cover art, as JPG/PNG/WEBP
+- **Tags**: edit title, artist, album, album artist, track, year, genre and **cover art** of many songs at once (MP3, M4A, FLAC, OGG, OPUS), number tracks in order, take titles from file names, rename to "Artist - Title" and add lyrics — audio is copied, never re-encoded
 - **Graphics card acceleration** (NVIDIA NVENC, Intel Quick Sync, AMD AMF) for H.264/H.265, with automatic CPU fallback
 
 **Queue, history and desktop app**
@@ -185,6 +189,9 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - Audio: MP3, M4A, OPUS, OGG, FLAC, WAV o el original (96–320 kbps). Vídeo: hasta 4K/8K en MP4, MKV o WEBM
 - **Descargar solo un tramo** (p. ej. 1:20–3:45, con deslizador), o **dividir por capítulos** en un archivo por capítulo (con título y número de pista)
 - **Modo música**: "Artista - Título" limpio (sin "(Official Video)"…), etiqueta de artista y **portada cuadrada**
+- **Letras** (opcional): las busca en LRCLIB (gratis, sin cuenta), las incrusta en la canción y, si están sincronizadas, guarda también un **.lrc** al lado
+- **Carpetas por artista / álbum** (escritorio): las descargas pueden ir solas a `Artista/Álbum`
+- **Descargas programadas** (escritorio): la cola espera hasta la hora que elijas (por ejemplo, de noche); las conversiones siguen
 - Portada, metadatos y capítulos; subtítulos en 9 idiomas, dentro del vídeo o como **.srt** aparte; SponsorBlock
 
 **Convertir**
@@ -198,6 +205,7 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - **Unir** varios audios o vídeos en uno (los clips de otro tamaño se encajan con bandas negras)
 - **Comprimir a un tamaño** (p. ej. 8 MB para Discord, 16 MB para WhatsApp): TubeGrab calcula la calidad, en dos pasadas
 - **Imagen**: un fotograma en cualquier momento (con deslizador) o la carátula incrustada, en JPG/PNG/WEBP
+- **Etiquetas**: cambia título, artista, álbum, artista del álbum, pista, año, género y **carátula** de muchas canciones a la vez (MP3, M4A, FLAC, OGG, OPUS), numera las pistas en orden, saca títulos del nombre del archivo, renombra a "Artista - Título" y añade letras; el audio se copia, nunca se recodifica
 - **Aceleración por tarjeta gráfica** (NVIDIA NVENC, Intel Quick Sync, AMD AMF) para H.264/H.265, con vuelta automática al procesador
 
 **Cola, historial y app de escritorio**

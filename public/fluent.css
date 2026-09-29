@@ -353,3 +353,6 @@ body.window-maximized .cap-restore { display: block; }
 [data-ui="windows"] { --ed-view-h: clamp(200px, calc(100vh - 540px), 74vh); }
 [data-ui="windows"] .ed-text-item { border-radius: 4px; }
 [data-ui="windows"] .ed-text-item textarea, [data-ui="windows"] .ed-text-row select, [data-ui="windows"] .ed-clip-speed, [data-ui="windows"] .ed-mini { border-radius: 4px; }
+[data-ui="windows"] .schedule-bar, [data-ui="windows"] .tags-table-wrap { background: var(--w-card); border: 1px solid var(--w-stroke); border-radius: 6px; box-shadow: none; }
+[data-ui="windows"] .schedule-bar.active { background: color-mix(in srgb, var(--accent) 14%, var(--w-card)); }
+[data-ui="windows"] .tags-cover { border-radius: 4px; }

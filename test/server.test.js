@@ -447,3 +447,55 @@ test('editor API: logo must be a small picture; texts and speeds are validated',
   assert.equal(job.status, 'done', job.error);
   assert.match(job.detail, /velocidad · texto · logo/);
 });
+
+test('tag editor API: reads, validates and writes tags; scheduling is desktop-only', { skip: !ffmpeg && 'ffmpeg not found', timeout: 120_000 }, async () => {
+  const mp3 = path.join(os.tmpdir(), `tg-tags-${process.pid}.mp3`);
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=d=2', '-metadata', 'title=Viejo', '-metadata', 'artist=Alguien', mp3]);
+  const song = new Blob([fs.readFileSync(mp3)], { type: 'audio/mpeg' });
+  fs.rmSync(mp3, { force: true });
+  const form = (fields, files) => {
+    const fd = new FormData();
+    Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
+    files.forEach(([field, blob, name]) => fd.append(field, blob, name));
+    return fd;
+  };
+  const read = await api('/api/tags/read', { method: 'POST', body: form({}, [['files', song, 'a.mp3'], ['files', song, 'b.mp3']]) });
+  assert.equal(read.status, 200);
+  const data = await read.json();
+  assert.deepEqual(data.files.map((f) => [f.name, f.tags.title, f.tags.artist, f.coverOk]), [['a.mp3', 'Viejo', 'Alguien', true], ['b.mp3', 'Viejo', 'Alguien', true]]);
+  assert.equal((await api('/api/tags/read', { method: 'POST', body: form({}, [['files', song, 'a.wav']]) })).status, 400, 'not a tag format');
+
+  const send = (fields, files = [['files', song, 'a.mp3']]) => api('/api/jobs/tags', { method: 'POST', body: form(fields, files) });
+  assert.equal((await send({ tags: '[{"title":"x"},{"title":"y"}]' })).status, 400, 'one entry per file');
+  assert.equal((await send({ tags: '[{"track":"tres"}]' })).status, 400, 'bad track');
+  assert.equal((await send({ tags: '[{"title":"x"}]' }, [['files', song, 'a.mp3'], ['cover', new Blob(['<svg/>'], { type: 'image/svg+xml' }), 'c.svg']])).status, 400, 'SVG cover');
+  const ok = await send({ tags: JSON.stringify([{ title: 'Nuevo', artist: 'Yo', album: 'Disco' }]), rename: 'true' });
+  assert.equal(ok.status, 200);
+  const { id } = await ok.json();
+  const jobs = await waitForJobs((m) => m.get(id) && ['done', 'error'].includes(m.get(id).status));
+  assert.equal(jobs.get(id).status, 'done', jobs.get(id).error);
+  assert.equal(jobs.get(id).fileName, 'Yo - Nuevo.mp3');
+  assert.equal(jobs.get(id).title, 'Disco');
+
+  // The shared web instance can't hold everybody's queue.
+  assert.equal((await api('/api/schedule')).status, 404);
+  assert.equal((await api('/api/schedule', json({ at: '02:00' }))).status, 404);
+});
+
+test('scheduling in the desktop app', async () => {
+  const port = await freePort();
+  const { child, first } = startServer(port, { TUBEGRAB_ELECTRON: '1' });
+  try {
+    await first;
+    const post = (at) => fetch(`http://localhost:${port}/api/schedule`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ at }) });
+    for (const bad of ['25:00', '2:00', '02:60', 'mañana', '02:00; rm']) assert.equal((await post(bad)).status, 400, bad);
+    const set = await (await post('03:30')).json();
+    const when = new Date(set.until);
+    assert.deepEqual([when.getHours(), when.getMinutes()], [3, 30]);
+    assert.ok(set.until > Date.now() && set.until - Date.now() <= 24 * 3600 * 1000);
+    assert.equal((await (await fetch(`http://localhost:${port}/api/schedule`)).json()).until, set.until);
+    assert.equal((await (await post(null)).json()).until, null);
+  } finally {
+    child.kill();
+  }
+});

@@ -79,6 +79,10 @@
           <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg>
           <span>Imagen</span>
         </button>
+        <button class="nav-item" data-view="cv-tags" type="button" title="Etiquetas">
+          <svg viewBox="0 0 24 24"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.6"/></svg>
+          <span>Etiquetas</span>
+        </button>
         <button class="nav-item" data-view="queue" type="button" title="Cola (Ctrl+3)">
           <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
           <span>Cola</span>
@@ -290,6 +294,7 @@
             <div class="more-body">
               <div class="group">
                 <label class="row switch" id="optMusicWrap"><span class="row-label">Modo música <small>artista y título limpios, portada cuadrada</small></span><input type="checkbox" id="optMusic"><span class="switch-ui"></span></label>
+                <label class="row switch" id="optLyricsWrap"><span class="row-label">Letras <small>las busca en LRCLIB y las añade a la canción</small></span><input type="checkbox" id="optLyrics"><span class="switch-ui"></span></label>
                 <label class="row switch"><span class="row-label">Dividir por capítulos <small>un archivo por capítulo</small></span><input type="checkbox" id="optChapters"><span class="switch-ui"></span></label>
                 <label class="row switch" id="optSubtitlesWrap"><span class="row-label">Subtítulos</span><input type="checkbox" id="optSubtitles"><span class="switch-ui"></span></label>
                 <label class="row hidden" id="subLangsRow"><span class="row-label">Idioma de los subtítulos</span>
@@ -834,15 +839,78 @@
           </div>
         </section>
 
+        <!-- ===== Convertir → Etiquetas ===== -->
+        <section class="view hidden" data-views="cv-tags" id="tagsSection">
+          <label class="dropzone" id="tagsDrop" for="tagsInput">
+            <input type="file" id="tagsInput" multiple accept=".mp3,.m4a,.flac,.ogg,.opus,audio/mpeg,audio/mp4,audio/flac,audio/ogg,audio/opus" hidden>
+            <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.6" stroke="currentColor" stroke-width="1.8"/></svg>
+            <span class="dropzone-title" id="tagsDropText">Arrastra tus canciones (MP3, M4A, FLAC, OGG, OPUS)</span>
+            <span class="dropzone-hint">cambia artista, álbum, carátula y número de pista a muchas a la vez</span>
+          </label>
+          <div class="status-message" id="tagsLoadStatus" role="status"></div>
+
+          <div class="hidden" id="tagsEditor">
+            <div class="section-header"><h2>Para todas</h2></div>
+            <div class="group tags-all">
+              <label class="row"><span class="row-label">Artista</span><input class="text-input" id="tgAllArtist" maxlength="300" autocomplete="off" placeholder="sin cambios"></label>
+              <label class="row"><span class="row-label">Álbum</span><input class="text-input" id="tgAllAlbum" maxlength="300" autocomplete="off" placeholder="sin cambios"></label>
+              <label class="row"><span class="row-label">Artista del álbum</span><input class="text-input" id="tgAllAlbumArtist" maxlength="300" autocomplete="off" placeholder="sin cambios"></label>
+              <label class="row"><span class="row-label">Año</span><input class="text-input" id="tgAllDate" maxlength="10" autocomplete="off" placeholder="sin cambios" inputmode="numeric"></label>
+              <label class="row"><span class="row-label">Género</span><input class="text-input" id="tgAllGenre" maxlength="300" autocomplete="off" placeholder="sin cambios"></label>
+              <div class="row">
+                <span class="row-label">Carátula <small id="tgCoverName">MP3, M4A y FLAC · PNG, JPG o WEBP</small></span>
+                <div class="row-actions">
+                  <img class="tags-cover hidden" id="tgCoverPreview" alt="">
+                  <button class="btn" id="tgCoverPick" type="button">Elegir…</button>
+                  <button class="link-btn hidden" id="tgCoverRemove" type="button">Quitar</button>
+                </div>
+                <input type="file" id="tgCoverInput" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden>
+              </div>
+              <div class="row tags-actions">
+                <button class="btn" id="tgApplyAll" type="button">Aplicar a todas</button>
+                <button class="btn" id="tgNumber" type="button">Numerar en orden</button>
+                <button class="btn" id="tgFromName" type="button">Título desde el nombre del archivo</button>
+              </div>
+            </div>
+
+            <div class="section-header"><h2>Canciones <span class="count" id="tagsCount"></span></h2></div>
+            <div class="tags-table-wrap">
+              <table class="tags-table" id="tagsTable">
+                <thead><tr><th>Nº</th><th>Título</th><th>Artista</th><th>Álbum</th><th>Archivo</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <div class="group">
+              <label class="row switch"><span class="row-label">Renombrar como «Artista - Título»</span><input type="checkbox" id="tgRename"><span class="switch-ui"></span></label>
+              <label class="row switch"><span class="row-label">Buscar letras <small>en LRCLIB, para las que no tengan</small></span><input type="checkbox" id="tgLyrics"><span class="switch-ui"></span></label>
+            </div>
+            <p class="hint">Se guardan copias con las etiquetas nuevas en tu carpeta de descargas; los archivos originales no se tocan.</p>
+            <div class="form-footer">
+              <div class="status-message" id="tagsStatus" role="status"></div>
+              <button class="btn btn-primary btn-download" id="btnTags" type="button">Guardar etiquetas</button>
+            </div>
+          </div>
+        </section>
+
         <!-- ===== Cola (also shown under the forms) ===== -->
-        <section class="view" data-views="dl-link dl-search cv-format cv-edit cv-merge cv-compress cv-image queue" id="queueSection">
+        <section class="view" data-views="dl-link dl-search cv-format cv-edit cv-merge cv-compress cv-image cv-tags queue" id="queueSection">
           <div class="section-header">
             <h2>Actividad <span class="count" id="queueCount"></span></h2>
             <div class="row-actions">
+              <button class="link-btn desktop-only" id="btnSchedule" type="button">Programar…</button>
               <button class="link-btn queue-only" id="btnPauseAll" type="button">Pausar todo</button>
               <button class="link-btn queue-only" id="btnResumeAll" type="button">Reanudar todo</button>
               <button class="link-btn" id="btnClearFinished" type="button">Borrar terminadas</button>
             </div>
+          </div>
+          <div class="schedule-bar hidden" id="scheduleBar" role="status">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3.2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span id="scheduleText">Empezar las descargas a las</span>
+            <input class="text-input small" type="time" id="scheduleTime" value="02:00" aria-label="Hora">
+            <button class="btn" id="btnScheduleSet" type="button">Programar</button>
+            <button class="link-btn" id="btnScheduleNow" type="button">Empezar ya</button>
+            <button class="link-btn" id="btnScheduleClose" type="button">Cerrar</button>
           </div>
           <div class="group list-group">
             <div class="empty" id="queueEmpty">
@@ -950,6 +1018,13 @@
                 <button class="btn" id="btnChooseFolder" type="button">Cambiar…</button>
               </div>
             </div>
+            <label class="row"><span class="row-label">Organizar en carpetas <small>las descargas, por artista o canal</small></span>
+              <select id="optOrganize">
+                <option value="none">No</option>
+                <option value="artist">Por artista</option>
+                <option value="artist-album">Por artista y álbum</option>
+              </select>
+            </label>
           </div>
           <div class="section-header"><h2>Descargas</h2></div>
           <div class="group">

@@ -175,3 +175,28 @@ test('each process has its own folder; stale folders of dead processes are swept
   assert.equal(path.basename(jm.dir), String(process.pid));
   return until(() => !fs.existsSync(stale) && !fs.existsSync(old), 2000);
 });
+
+test('scheduled start: downloads wait, conversions don\'t; start now or at the time', async () => {
+  const jm = new JobManager({ root });
+  const holds = [];
+  jm.on('hold', (u) => holds.push(u));
+  const until1 = jm.setHold(Date.now() + 60_000);
+  assert.ok(until1 > Date.now());
+  const dl = jm.create({ clientId: A, type: 'download', title: 'd', detail: '', run: fakeRun() });
+  const cv = jm.create({ clientId: A, type: 'convert', title: 'c', detail: '', run: fakeRun() });
+  await until(() => cv.status === 'done');
+  await new Promise((r) => setTimeout(r, 80));
+  assert.equal(dl.status, 'queued', 'held');
+  jm.setHold(null);
+  await until(() => dl.status === 'done');
+
+  // And by itself when the time comes.
+  jm.setHold(Date.now() + 150);
+  const dl2 = jm.create({ clientId: A, type: 'download', title: 'd2', detail: '', run: fakeRun() });
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(dl2.status, 'queued');
+  await until(() => dl2.status === 'done', 3000);
+  assert.equal(jm.holdUntil, null);
+  assert.ok(holds.includes(null));
+  for (const bad of [NaN, Date.now() - 1000, 'mañana']) assert.equal(jm.setHold(bad), null, String(bad));
+});
