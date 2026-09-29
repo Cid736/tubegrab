@@ -342,3 +342,18 @@ Alcance: todo lo añadido desde la revisión 10 — `lib/auth.js` (acceso con co
 - **Página:** los 18 `innerHTML` de `app.js` usan plantillas fijas o `escapeHtml`; títulos y nombres de archivo que vienen del servidor van por `textContent`.
 - **Dependencias:** `npm audit` → 0 vulnerabilidades.
 - Pruebas nuevas: `test/auth.test.js` (5), y en `test/server.test.js` y `test/convert.test.js` (arranque con variable rota, límite de intentos, valores maliciosos, 200 tramos, nombres hostiles).
+
+---
+
+## 2026-09-30 — v2.9.0: Editor — texto, logo, ruido, velocidad, GIF y stickers
+
+Nuevo: textos sobre el vídeo (hasta 5; posición, tamaño y desde/hasta sobre el vídeo original, que el servidor traslada a la línea de tiempo del resultado teniendo en cuenta cortes y velocidad), logo o marca de agua (esquina, tamaño, opacidad), quitar ruido de fondo (`highpass` + `afftdn`), velocidad por tramo (0,25×–4×, con `setpts`/`atempo`; la vista previa usa `playbackRate`) y exportar como GIF (paleta propia), sticker de WhatsApp (WebP animado 512×512) o de Telegram (VP9 WebM, 512 px, ≤ 3 s). Todo se previsualiza en el visor.
+
+### Revisión de seguridad
+- **Texto del usuario:** nunca entra en el grafo de filtros. Cada texto se escribe en su propio archivo (`textN.txt`) y `drawtext` lo lee con `textfile=` y `expansion=none`, así que ni `%{…}` ni comillas, `:`, `;`, `,` o `[x]` se interpretan. Se eliminan caracteres de control; máx. 5 textos de 200 caracteres y 3 líneas; posición y tamaño de listas fijas. Probado con `50% %{pts} ' : \ , ; [x] drawtext=textfile=/etc/passwd` → se dibuja tal cual.
+- **Logo:** campo de subida aparte que solo acepta `image/png|jpeg|webp` con extensión `.png/.jpg/.jpeg/.webp` (SVG, vídeos disfrazados o `.exe` → 400), máx. 5 MB, y ffmpeg lo abre solo con los demuxers `png_pipe,jpeg_pipe,webp_pipe` y el protocolo `file`. Un logo corrupto hace fallar el trabajo sin más. Posición, tamaño y opacidad de listas fijas.
+- **Archivos auxiliares** (grafo, textos y una copia de la fuente): se crean dentro de la carpeta del trabajo con nombres fijos, ffmpeg se ejecuta con esa carpeta como directorio de trabajo (así las rutas del grafo no llevan `C:` ni nada del usuario) y se borran al terminar, también si falla.
+- **Velocidad:** solo valores de la lista; dos tramos solapados con velocidades distintas → 400. Velocidad, texto, logo y ruido con cortes rápidos → 400.
+- **CSP:** `img-src` añade `blob:` para la vista previa del logo (URLs creadas por la propia página a partir del archivo elegido); `script-src`/`default-src` siguen sin `blob:` (probado).
+- **Docker:** se añade `fonts-dejavu-core` para dibujar texto; en Windows se usa Arial Negrita del sistema.
+- Pruebas nuevas: `test/editor.test.js` (validación, texto hostil, texto visible solo en su tramo, logo en su esquina, velocidad 2×/0,25×/mixta, ruido, GIF y stickers), API del editor en `test/server.test.js` (SVG, vídeo como PNG, extensión falsa, logo > 5 MB, textos inválidos, ajustes con cortes rápidos) y `test/i18n.test.js` (sin claves repetidas y el Editor traducido entero; encontró una clave repetida antigua, `Formato`, ya quitada).

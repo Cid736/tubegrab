@@ -1564,7 +1564,8 @@ const editor = (() => {
     return i === -1 ? Math.max(0, segs.length - 1) : i;
   };
   const kept = () => segs.filter((g) => !g.off);
-  const keptLength = () => kept().reduce((acc, g) => acc + (g.e - g.s), 0);
+  const keptLength = () => kept().reduce((acc, g) => acc + (g.e - g.s) / (g.speed || 1), 0);
+  const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4];
   const now = () => video.currentTime || 0;
   const cutTimes = () => segs.slice(0, -1).map((g) => g.e);
   /** With the magnet on, `sec` sticks to a cut, the start or the end when close on screen. */
@@ -1606,7 +1607,7 @@ const editor = (() => {
     const i = segs.findIndex((g) => sec > g.s + 0.02 && sec < g.e - 0.02);
     if (i === -1) return false;
     const g = segs[i];
-    segs.splice(i, 1, { s: g.s, e: sec, off: g.off }, { s: sec, e: g.e, off: g.off });
+    segs.splice(i, 1, { s: g.s, e: sec, off: g.off, speed: g.speed || 1 }, { s: sec, e: g.e, off: g.off, speed: g.speed || 1 });
     return true;
   }
   function cut() {
@@ -1652,7 +1653,7 @@ const editor = (() => {
   }
   function reset() {
     commit();
-    segs = [{ s: 0, e: duration, off: false }];
+    segs = [{ s: 0, e: duration, off: false, speed: 1 }];
     sel = 0;
     changed();
   }
@@ -1679,6 +1680,9 @@ const editor = (() => {
   }
   function tick() {
     raf = 0;
+    const cur = segs[segAt(now())];
+    const rate = cur && cur.speed ? cur.speed : 1;
+    if (video.playbackRate !== rate) video.playbackRate = rate;
     if (!video.paused && $('edSkip').checked) {
       const at = now();
       const g = segs[segAt(at)];
@@ -1702,6 +1706,7 @@ const editor = (() => {
 
   function updateTime() {
     $('edTime').textContent = tc(now());
+    if (texts.length) updateOverlay();
     const g = segs[sel];
     $('edToggleLabel').textContent = g && g.off ? t('Recuperar tramo') : t('Quitar tramo');
   }
@@ -1808,6 +1813,16 @@ const editor = (() => {
         for (let sx = x0 - H; sx < x1; sx += 16) { ctx.moveTo(sx, H); ctx.lineTo(sx + H, RULER); }
         ctx.stroke();
         ctx.restore();
+      }
+      if ((g.speed || 1) !== 1 && x1 - x0 > 26) {
+        const label = `${String(g.speed).replace('.', ',')}×`;
+        ctx.font = `600 11px ${colors.font}`;
+        const tw = ctx.measureText(label).width + 10;
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(Math.max(x0, 0) + 4, RULER + 4, tw, 16);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, Math.max(x0, 0) + 9, RULER + 12);
+        ctx.font = `500 11px ${colors.font}`;
       }
       if (i === sel) {
         ctx.strokeStyle = g.off ? colors.text2 : colors.accent;
@@ -1928,7 +1943,7 @@ const editor = (() => {
     video.classList.toggle('hidden', !hasVideo);
     $('edAudioOnly').classList.toggle('hidden', hasVideo);
     $('edLblV').classList.toggle('hidden', !hasVideo);
-    segs = [{ s: 0, e: duration, off: false }];
+    segs = [{ s: 0, e: duration, off: false, speed: 1 }];
     sel = 0;
     zoom = 1;
     $('edZoom').value = '0';
@@ -2088,16 +2103,25 @@ const editor = (() => {
   function renderClips() {
     const list = $('edClips');
     list.innerHTML = '';
-    list.classList.toggle('hidden', segs.length < 2);
-    if (segs.length < 2) return;
+    list.classList.toggle('hidden', !segs.length);
     segs.forEach((g, i) => {
       const li = document.createElement('li');
       li.className = `ed-clip${g.off ? ' off' : ''}${i === sel ? ' selected' : ''}`;
       li.innerHTML = `<button type="button" class="ed-clip-main"><span class="ed-clip-n">${i + 1}</span>`
         + `<span class="ed-clip-t">${escapeHtml(tc(g.s))} → ${escapeHtml(tc(g.e))}</span>`
-        + `<span class="ed-clip-d">${escapeHtml(formatTime(g.e - g.s, true))}</span></button>`
+        + `<span class="ed-clip-d">${escapeHtml(formatTime((g.e - g.s) / (g.speed || 1), true))}</span></button>`
+        + `<select class="ed-clip-speed" aria-label="${escapeHtml(t('Velocidad'))}" title="${escapeHtml(t('Velocidad'))}">`
+        + SPEEDS.map((v) => `<option value="${v}"${v === (g.speed || 1) ? ' selected' : ''}>${String(v).replace('.', ',')}×</option>`).join('')
+        + '</select>'
         + `<button type="button" class="link-btn ed-clip-toggle">${escapeHtml(g.off ? t('Recuperar') : t('Quitar'))}</button>`;
       li.querySelector('.ed-clip-main').addEventListener('click', () => { sel = i; seek(g.s); changed(); });
+      li.querySelector('.ed-clip-speed').addEventListener('change', (ev) => {
+        commit();
+        g.speed = Number(ev.target.value);
+        sel = i;
+        changed();
+        refreshExportUI();
+      });
       li.querySelector('.ed-clip-toggle').addEventListener('click', () => { sel = i; toggleSel(); });
       list.appendChild(li);
     });
@@ -2111,7 +2135,7 @@ const editor = (() => {
     const vol = $('edVolume').value;
     video.muted = vol === 'mute';
     video.volume = vol && vol !== 'mute' ? Math.min(1, Number(vol)) : 1;
-    if (!hasVideo || !video.videoWidth) { frame.classList.add('hidden'); video.style.transform = ''; return; }
+    if (!hasVideo || !video.videoWidth) { frame.classList.add('hidden'); video.style.transform = ''; frameRect = null; updateOverlay(); return; }
     const box = video.getBoundingClientRect();
     const fit = Math.min(box.width / video.videoWidth, box.height / video.videoHeight);
     let cw = video.videoWidth * fit;
@@ -2121,11 +2145,20 @@ const editor = (() => {
     if (quarter) { k = Math.min(box.width / ch, box.height / cw); [cw, ch] = [ch * k, cw * k]; }
     const transforms = { 90: `rotate(90deg) scale(${k})`, 270: `rotate(-90deg) scale(${k})`, 180: 'rotate(180deg)', hflip: 'scaleX(-1)' };
     video.style.transform = transforms[rotate] || '';
-    if (!aspect) { frame.classList.add('hidden'); return; }
+    const cx = video.offsetLeft + video.offsetWidth / 2;
+    const cy = video.offsetTop + video.offsetHeight / 2;
+    if (!aspect) {
+      frame.classList.add('hidden');
+      frameRect = { left: cx - cw / 2, top: cy - ch / 2, w: cw, h: ch };
+      updateOverlay();
+      return;
+    }
     const [rw, rh] = aspect.split(':').map(Number);
     const r = rw / rh;
     const w = cw / ch > r ? ch * r : cw;
     const h = cw / ch > r ? ch : cw / r;
+    frameRect = { left: cx - w / 2, top: cy - h / 2, w, h };
+    updateOverlay();
     // Centred in the viewer (the video element is centred and not moved by the transform).
     frame.style.width = `${w}px`;
     frame.style.height = `${h}px`;
@@ -2135,7 +2168,130 @@ const editor = (() => {
     frame.classList.remove('hidden');
   }
   new ResizeObserver(() => updatePreview()).observe($('edViewer'));
-  ['edAspect', 'edRotate', 'edVolume', 'edFade', 'edSeparate'].forEach((id) => $(id).addEventListener('change', () => { updatePreview(); refreshExportUI(); }));
+  ['edAspect', 'edRotate', 'edVolume', 'edFade', 'edSeparate', 'edDenoise'].forEach((id) => $(id).addEventListener('change', () => { updatePreview(); refreshExportUI(); }));
+
+  // ---- titles and logo: edited in the inspector, previewed on the viewer ----
+  // Same proportions as the server: text height = picture height / n.
+  const TEXT_SIZES = { s: 24, m: 15, l: 10 };
+  const LOGO_SIZES = { s: 0.1, m: 0.16, l: 0.24 };
+  let frameRect = null;          // the picture as it will be exported, in viewer pixels
+  let texts = [];                // [{ text, pos, size, from, to }] (source seconds or null)
+  let logoFile = null;
+  let logoUrl = null;
+
+  function updateOverlay() {
+    const layer = $('edOverlay');
+    if (!frameRect || !hasVideo) { layer.classList.add('hidden'); return; }
+    layer.classList.remove('hidden');
+    Object.assign(layer.style, { left: `${frameRect.left}px`, top: `${frameRect.top}px`, width: `${frameRect.w}px`, height: `${frameRect.h}px` });
+    const at = now();
+    layer.querySelectorAll('.ed-title').forEach((el) => el.remove());
+    texts.forEach((tx) => {
+      if (!tx.text.trim()) return;
+      if ((tx.from !== null && at < tx.from) || (tx.to !== null && at > tx.to)) return;
+      const el = document.createElement('div');
+      el.className = `ed-title ed-title-${tx.pos}`;
+      el.textContent = tx.text;
+      el.style.fontSize = `${Math.max(6, frameRect.h / TEXT_SIZES[tx.size])}px`;
+      layer.appendChild(el);
+    });
+    const img = $('edLogoPreview');
+    img.classList.toggle('hidden', !logoUrl);
+    if (logoUrl) {
+      const m = frameRect.w * 0.03;
+      const pos = $('edLogoPos').value;
+      Object.assign(img.style, {
+        width: `${frameRect.w * LOGO_SIZES[$('edLogoSize').value]}px`,
+        opacity: $('edLogoOpacity').value,
+        left: pos.endsWith('l') ? `${m}px` : 'auto', right: pos.endsWith('r') ? `${m}px` : 'auto',
+        top: pos.startsWith('t') ? `${m}px` : 'auto', bottom: pos.startsWith('b') ? `${m}px` : 'auto',
+      });
+    }
+  }
+
+  function renderTexts() {
+    const box = $('edTexts');
+    box.innerHTML = '';
+    texts.forEach((tx, i) => {
+      const item = document.createElement('div');
+      item.className = 'ed-text-item';
+      item.innerHTML = `
+        <textarea rows="2" maxlength="200" placeholder="${escapeHtml(t('Escribe el texto'))}" aria-label="${escapeHtml(t('Texto'))} ${i + 1}"></textarea>
+        <div class="ed-text-row">
+          <select data-k="pos" aria-label="${escapeHtml(t('Posición'))}">
+            <option value="top">${escapeHtml(t('Arriba'))}</option><option value="center">${escapeHtml(t('Centro'))}</option><option value="bottom">${escapeHtml(t('Abajo'))}</option>
+          </select>
+          <select data-k="size" aria-label="${escapeHtml(t('Tamaño'))}">
+            <option value="s">${escapeHtml(t('Pequeño'))}</option><option value="m">${escapeHtml(t('Mediano'))}</option><option value="l">${escapeHtml(t('Grande'))}</option>
+          </select>
+          <button type="button" class="link-btn ed-text-del">${escapeHtml(t('Quitar'))}</button>
+        </div>
+        <div class="ed-text-row">
+          <input class="text-input small" data-k="from" placeholder="${escapeHtml(t('desde el inicio'))}" aria-label="${escapeHtml(t('Desde'))}">
+          <button type="button" class="ed-mini" data-set="from" title="${escapeHtml(t('Poner el momento del cabezal'))}">⤓</button>
+          <input class="text-input small" data-k="to" placeholder="${escapeHtml(t('hasta el final'))}" aria-label="${escapeHtml(t('Hasta'))}">
+          <button type="button" class="ed-mini" data-set="to" title="${escapeHtml(t('Poner el momento del cabezal'))}">⤓</button>
+        </div>`;
+      const area = item.querySelector('textarea');
+      area.value = tx.text;
+      item.querySelector('[data-k="pos"]').value = tx.pos;
+      item.querySelector('[data-k="size"]').value = tx.size;
+      const fromEl = item.querySelector('[data-k="from"]');
+      const toEl = item.querySelector('[data-k="to"]');
+      fromEl.value = tx.from === null ? '' : formatTime(tx.from, true);
+      toEl.value = tx.to === null ? '' : formatTime(tx.to, true);
+      area.addEventListener('input', () => { tx.text = area.value.split('\n').slice(0, 3).join('\n'); updateOverlay(); refreshExportUI(); });
+      item.querySelectorAll('select').forEach((sel) => sel.addEventListener('change', () => { tx[sel.dataset.k] = sel.value; updateOverlay(); }));
+      const readTime = (el, key) => {
+        const v = el.value.trim() ? parseTime(el.value) : null;
+        el.classList.toggle('invalid', v !== null && !Number.isFinite(v));
+        tx[key] = v !== null && Number.isFinite(v) ? Math.min(v, duration) : null;
+        updateOverlay();
+      };
+      fromEl.addEventListener('input', () => readTime(fromEl, 'from'));
+      toEl.addEventListener('input', () => readTime(toEl, 'to'));
+      item.querySelectorAll('[data-set]').forEach((b) => b.addEventListener('click', () => {
+        const el = b.dataset.set === 'from' ? fromEl : toEl;
+        el.value = formatTime(now(), true);
+        readTime(el, b.dataset.set);
+      }));
+      item.querySelector('.ed-text-del').addEventListener('click', () => { texts.splice(i, 1); renderTexts(); updateOverlay(); refreshExportUI(); });
+      box.appendChild(item);
+    });
+    $('edAddText').disabled = texts.length >= 5;
+  }
+  $('edAddText').addEventListener('click', () => {
+    if (texts.length >= 5) return;
+    texts.push({ text: '', pos: 'bottom', size: 'm', from: null, to: null });
+    renderTexts();
+    $('edTexts').lastElementChild.querySelector('textarea').focus();
+  });
+
+  function setLogo(f) {
+    if (logoUrl) URL.revokeObjectURL(logoUrl);
+    logoFile = null;
+    logoUrl = null;
+    if (f) {
+      if (!/\.(png|jpe?g|webp)$/i.test(f.name) || !/^image\/(png|jpeg|webp)$/.test(f.type)) {
+        setStatusEl($('editStatus'), t('El logo tiene que ser una imagen PNG, JPG o WEBP.'), 'error');
+      } else if (f.size > 5 * 1024 * 1024) {
+        setStatusEl($('editStatus'), t('El logo es demasiado grande (máx. 5 MB).'), 'error');
+      } else {
+        logoFile = f;
+        logoUrl = URL.createObjectURL(f);
+        $('edLogoPreview').src = logoUrl;
+      }
+    }
+    $('edLogoName').textContent = logoFile ? logoFile.name : t('PNG, JPG o WEBP (máx. 5 MB)');
+    $('edLogoRemove').classList.toggle('hidden', !logoFile);
+    document.querySelectorAll('.ed-logo-opt').forEach((el) => el.classList.toggle('hidden', !logoFile));
+    updateOverlay();
+    refreshExportUI();
+  }
+  $('edLogoPick').addEventListener('click', () => $('edLogoInput').click());
+  $('edLogoInput').addEventListener('change', (e) => { setLogo(e.target.files[0] || null); e.target.value = ''; });
+  $('edLogoRemove').addEventListener('click', () => setLogo(null));
+  ['edLogoPos', 'edLogoSize', 'edLogoOpacity'].forEach((id) => $(id).addEventListener('change', updateOverlay));
 
   // ---- buttons ----
   $('edPrevCut').addEventListener('click', () => jumpCut(-1));
@@ -2212,7 +2368,9 @@ const editor = (() => {
   });
 
   // ---- export ----
-  const hasEffects = () => Boolean($('edAspect').value || $('edFade').value || $('edVolume').value || $('edRotate').value);
+  const ANIMATED = ['gif', 'sticker', 'tgsticker'];
+  const hasEffects = () => Boolean($('edAspect').value || $('edFade').value || $('edVolume').value || $('edRotate').value
+    || $('edDenoise').value || logoFile || texts.some((tx) => tx.text.trim()) || segs.some((g) => !g.off && (g.speed || 1) !== 1));
   function refreshExportUI() {
     const format = $('edFormat').value;
     const fastOk = format === 'original' && !hasEffects();
@@ -2225,10 +2383,16 @@ const editor = (() => {
       }
     });
     const audioOnly = ['mp3', 'm4a', 'wav', 'flac'].includes(format) || (file && duration && !hasVideo);
-    $('edQualityRow').classList.toggle('hidden', mode === 'fast' || audioOnly);
-    $('edModeHint').textContent = mode === 'fast'
+    const animated = ANIMATED.includes(format);
+    $('edQualityRow').classList.toggle('hidden', mode === 'fast' || audioOnly || animated);
+    const hints = {
+      gif: t('GIF: sin sonido, 15 imágenes por segundo y hasta 480 px de ancho.'),
+      sticker: t('Sticker de WhatsApp: 512 × 512, sin sonido. WhatsApp pide que pese menos de 500 KB: mejor tramos cortos (2–5 s).'),
+      tgsticker: t('Sticker de Telegram: vídeo WebM de 512 px, sin sonido y como máximo 3 segundos (se corta ahí).'),
+    };
+    $('edModeHint').textContent = hints[format] || (mode === 'fast'
       ? t('Rápidos: sin volver a codificar, al instante y sin perder calidad, pero cada tramo empieza en el fotograma clave anterior (puede adelantarse un poco).')
-      : t('Exactos: corta en el fotograma justo (vuelve a codificar el vídeo).');
+      : t('Exactos: corta en el fotograma justo (vuelve a codificar el vídeo).'));
   }
   $('edFormat').addEventListener('change', refreshExportUI);
   $('edMode').addEventListener('click', (e) => {
@@ -2243,15 +2407,23 @@ const editor = (() => {
     if (!duration) { setStatusEl(status, t('Espera a que se cargue el archivo.'), 'error'); return; }
     const k = kept();
     if (!k.length) { setStatusEl(status, t('Has quitado todo: recupera algún tramo para exportar.'), 'error'); return; }
+    const badText = texts.find((tx) => tx.text.trim() && tx.from !== null && tx.to !== null && tx.to - tx.from < 0.1);
+    if (badText) { setStatusEl(status, t('En un texto, "hasta" tiene que ser después de "desde".'), 'error'); return; }
     video.pause();
     const btn = $('btnEdit');
     btn.disabled = true;
     try {
       await uploadTo('/api/jobs/edit', 'file', [file], {
-        segments: JSON.stringify(k.map((g) => [Number(g.s.toFixed(3)), Number(g.e.toFixed(3))])),
+        segments: JSON.stringify(k.map((g) => [Number(g.s.toFixed(3)), Number(g.e.toFixed(3)), g.speed || 1])),
         targetFormat: $('edFormat').value, mode, quality: $('edQuality').value,
         aspect: $('edAspect').value, fade: $('edFade').value, volume: $('edVolume').value, rotate: $('edRotate').value,
         separate: String($('edSeparate').checked),
+        denoise: $('edDenoise').value,
+        texts: JSON.stringify(texts.filter((tx) => tx.text.trim()).map((tx) => ({
+          text: tx.text.trim(), pos: tx.pos, size: tx.size,
+          from: tx.from === null ? null : Number(tx.from.toFixed(3)), to: tx.to === null ? null : Number(tx.to.toFixed(3)),
+        }))),
+        ...(logoFile ? { logo: logoFile, logoPos: $('edLogoPos').value, logoSize: $('edLogoSize').value, logoOpacity: $('edLogoOpacity').value } : {}),
       }, (pct) => { btn.textContent = `${t('Subiendo')} ${pct}%`; });
       setStatusEl(status, t('Añadido a la cola'), 'success');
     } catch (err) {

@@ -534,6 +534,7 @@
                 <div class="ed-viewer" id="edViewer">
                   <video id="edVideo" playsinline preload="auto"></video>
                   <div class="ed-crop hidden" id="edCrop" aria-hidden="true"><span id="edCropLabel"></span></div>
+                  <div class="ed-overlay hidden" id="edOverlay" aria-hidden="true"><img class="ed-logo-preview hidden" id="edLogoPreview" alt=""></div>
                   <div class="ed-audio-only hidden" id="edAudioOnly">
                     <svg viewBox="0 0 24 24" fill="none"><path d="M9 18V5l11-2v13" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="16" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
                     <span id="edAudioName"></span>
@@ -598,6 +599,13 @@
                       <option value="2">200 %</option>
                     </select>
                   </label>
+                  <label class="row"><span class="row-label">Quitar ruido de fondo <small>viento, zumbidos, ventilador</small></span>
+                    <select id="edDenoise">
+                      <option value="" selected>No</option>
+                      <option value="light">Suave</option>
+                      <option value="strong">Fuerte</option>
+                    </select>
+                  </label>
                   <label class="row"><span class="row-label">Girar</span>
                     <select id="edRotate">
                       <option value="" selected>No</option>
@@ -608,6 +616,44 @@
                     </select>
                   </label>
                   <label class="row switch"><span class="row-label">Cada tramo en un archivo aparte <small>en vez de unirlos</small></span><input type="checkbox" id="edSeparate"><span class="switch-ui"></span></label>
+                </div>
+
+                <h3 class="ed-panel-title">Texto</h3>
+                <div class="ed-texts" id="edTexts"></div>
+                <button class="btn ed-add" id="edAddText" type="button">+ Añadir texto</button>
+
+                <h3 class="ed-panel-title">Logo</h3>
+                <div class="group" id="edLogoGroup">
+                  <div class="row">
+                    <span class="row-label">Imagen <small id="edLogoName">PNG, JPG o WEBP (máx. 5 MB)</small></span>
+                    <div class="row-actions">
+                      <button class="btn" id="edLogoPick" type="button">Elegir…</button>
+                      <button class="link-btn hidden" id="edLogoRemove" type="button">Quitar</button>
+                    </div>
+                    <input type="file" id="edLogoInput" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden>
+                  </div>
+                  <label class="row ed-logo-opt hidden"><span class="row-label">Posición</span>
+                    <select id="edLogoPos">
+                      <option value="tl">Arriba a la izquierda</option>
+                      <option value="tr">Arriba a la derecha</option>
+                      <option value="bl">Abajo a la izquierda</option>
+                      <option value="br" selected>Abajo a la derecha</option>
+                    </select>
+                  </label>
+                  <label class="row ed-logo-opt hidden"><span class="row-label">Tamaño</span>
+                    <select id="edLogoSize">
+                      <option value="s">Pequeño</option>
+                      <option value="m" selected>Mediano</option>
+                      <option value="l">Grande</option>
+                    </select>
+                  </label>
+                  <label class="row ed-logo-opt hidden"><span class="row-label">Opacidad</span>
+                    <select id="edLogoOpacity">
+                      <option value="1" selected>100 %</option>
+                      <option value="0.8">80 %</option>
+                      <option value="0.5">50 %</option>
+                    </select>
+                  </label>
                 </div>
 
                 <h3 class="ed-panel-title">Exportar</h3>
@@ -623,6 +669,9 @@
                       <option value="m4a">M4A (solo audio)</option>
                       <option value="wav">WAV (solo audio)</option>
                       <option value="flac">FLAC (solo audio)</option>
+                      <option value="gif">GIF animado</option>
+                      <option value="sticker">Sticker de WhatsApp (WebP)</option>
+                      <option value="tgsticker">Sticker de Telegram (máx. 3 s)</option>
                     </select>
                   </label>
                   <label class="row" id="edQualityRow"><span class="row-label">Calidad</span>

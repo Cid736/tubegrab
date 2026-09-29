@@ -351,3 +351,5 @@ body.window-maximized .cap-restore { display: block; }
 [data-ui="windows"] .ed-drop.loaded { border-radius: 6px; }
 /* The Windows header is taller: leave room for the tools and timeline below the viewer. */
 [data-ui="windows"] { --ed-view-h: clamp(200px, calc(100vh - 540px), 74vh); }
+[data-ui="windows"] .ed-text-item { border-radius: 4px; }
+[data-ui="windows"] .ed-text-item textarea, [data-ui="windows"] .ed-text-row select, [data-ui="windows"] .ed-clip-speed, [data-ui="windows"] .ed-mini { border-radius: 4px; }

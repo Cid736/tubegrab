@@ -195,7 +195,7 @@ test('uploads posing as media cannot make ffmpeg read other files or URLs', { sk
 });
 
 test('parseSegments sorts, joins and refuses nonsense', () => {
-  assert.deepEqual(convert.parseSegments('[[30,41],[0,12.5],[12,14]]'), [[0, 14], [30, 41]]);
+  assert.deepEqual(convert.parseSegments('[[30,41],[0,12.5],[12,14]]'), [[0, 14, 1], [30, 41, 1]]);
   for (const bad of ['', '[]', '{}', '[[1]]', '[[5,2]]', '[[-1,3]]', '[["0","3"]]', '[[0,1e9]]', '[[0,0.01]]', 'x',
     JSON.stringify(Array.from({ length: 201 }, (_, i) => [i, i + 0.5]))]) {
     assert.equal(convert.parseSegments(bad), null, bad);
@@ -240,9 +240,9 @@ test('editor keeps only the chosen parts', { skip: !ffmpeg && 'ffmpeg not found'
 
 test('editor adjustments: only fixed values, and they need exact cuts', () => {
   const fx = convert.parseEditEffects({ fade: '1', volume: 'mute', aspect: '9:16', rotate: '90', separate: 'true' });
-  assert.deepEqual(fx, { fade: 1, volume: 0, aspect: '9:16', rotate: '90', separate: true });
+  assert.deepEqual(fx, { fade: 1, volume: 0, aspect: '9:16', rotate: '90', denoise: null, logo: null, texts: [], separate: true });
   const evil = convert.parseEditEffects({ fade: '1;x', volume: '99', aspect: '__proto__', rotate: 'toString', separate: 'yes' });
-  assert.deepEqual(evil, { fade: 0, volume: null, aspect: null, rotate: null, separate: false });
+  assert.deepEqual(evil, { fade: 0, volume: null, aspect: null, rotate: null, denoise: null, logo: null, texts: [], separate: false });
   assert.equal(convert.needsEncoding(evil), false);
   assert.equal(convert.needsEncoding({ ...evil, separate: true }), false, 'separate files work with fast cuts');
   assert.equal(convert.needsEncoding(fx), true);

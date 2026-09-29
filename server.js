@@ -80,8 +80,9 @@ app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
     // Video thumbnails come from the source site's CDN; the trim preview
-    // plays the chosen local file through a blob: URL.
-    directives: { 'img-src': ["'self'", 'data:', 'https:'], 'media-src': ["'self'", 'blob:'] },
+    // plays the chosen local file, and the editor shows the chosen logo,
+    // through blob: URLs (only ever created by the page from the user's files).
+    directives: { 'img-src': ["'self'", 'data:', 'https:', 'blob:'], 'media-src': ["'self'", 'blob:'] },
   },
 }));
 
@@ -396,7 +397,12 @@ const ALLOWED_UPLOAD_EXTENSIONS = new Set([
 ]);
 const GENERIC_MIMETYPES = new Set(['application/octet-stream', 'application/x-matroska', '']);
 
-const uploader = (files) => multer({
+// Still pictures a form may carry next to the media (the editor's logo).
+const IMAGE_MIMETYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+const uploader = (files, { imageFields = [] } = {}) => multer({
   // Browsers send the file name as UTF-8; multer's default (latin1) turned
   // "Canción.wav" into "CanciÃ³n.mp3".
   defParamCharset: 'utf8',
@@ -405,6 +411,10 @@ const uploader = (files) => multer({
   dest: path.join(jobs.dir, 'uploads'),
   limits: { fileSize: MAX_UPLOAD_SIZE, files, fields: 30 },
   fileFilter: (req, file, cb) => {
+    if (imageFields.includes(file.fieldname)) {
+      const ext = (file.originalname.split('.').pop() || '').toLowerCase();
+      return IMAGE_MIMETYPES.has(file.mimetype) && IMAGE_EXTENSIONS.has(ext) ? cb(null, true) : cb(new Error('INVALID_IMAGE_TYPE'));
+    }
     // Animated GIFs are accepted as a video source (e.g. GIF -> MP4).
     const isMediaMime = /^(audio|video)\//.test(file.mimetype) || file.mimetype === 'image/gif';
     const ext = (file.originalname.split('.').pop() || '').toLowerCase();
@@ -416,14 +426,15 @@ const uploader = (files) => multer({
   },
 });
 const upload = uploader(1);
+const uploadEdit = uploader(2, { imageFields: ['logo'] }).fields([{ name: 'file', maxCount: 1 }, { name: 'logo', maxCount: 1 }]);
 const MAX_MERGE_FILES = IS_DESKTOP ? convert.MAX_MERGE : 10;
 const uploadMany = uploader(MAX_MERGE_FILES);
 
 const nameOf = (file) => String(file.originalname || 'archivo').slice(0, 255);
 
 /** Shared by the single-file endpoints: validates, then queues `makeRun(file)`. */
-function singleUpload(req, res, { check, detail, makeRun }) {
-  const discard = () => { if (req.file) fs.unlink(req.file.path, () => {}); };
+function singleUpload(req, res, { check, detail, makeRun, extraFiles = [] }) {
+  const discard = () => { for (const f of [req.file, ...extraFiles]) if (f) fs.unlink(f.path, () => {}); };
   const problem = check(req.body || {});
   if (problem) {
     discard();
@@ -488,25 +499,37 @@ app.post('/api/jobs/image', createLimiter, requireClient, upload.single('file'),
   });
 });
 
-app.post('/api/jobs/edit', createLimiter, requireClient, upload.single('file'), (req, res) => {
-  const targetFormat = String((req.body || {}).targetFormat || '').toLowerCase();
-  const mode = (req.body || {}).mode === 'fast' ? 'fast' : 'exact';
-  const segments = convert.parseSegments((req.body || {}).segments);
-  const fx = convert.parseEditEffects(req.body || {});
+app.post('/api/jobs/edit', createLimiter, requireClient, uploadEdit, (req, res) => {
+  req.file = (req.files && req.files.file && req.files.file[0]) || null;
+  const logo = (req.files && req.files.logo && req.files.logo[0]) || null;
+  const body = req.body || {};
+  const targetFormat = String(body.targetFormat || '').toLowerCase();
+  const mode = body.mode === 'fast' ? 'fast' : 'exact';
+  const segments = convert.parseSegments(body.segments);
+  const fx = convert.parseEditEffects(body);
+  const animated = Object.prototype.hasOwnProperty.call(convert.EDIT_ANIMATED, targetFormat) ? convert.EDIT_ANIMATED[targetFormat] : null;
   singleUpload(req, res, {
+    extraFiles: [logo],
     check: () => {
       if (!segments) return 'Tramos no válidos.';
-      if (targetFormat !== 'original' && (!convert.formatFor(targetFormat) || targetFormat === 'gif')) return 'Formato de destino no soportado.';
+      if (targetFormat !== 'original' && !animated && (!convert.formatFor(targetFormat) || targetFormat === 'gif')) return 'Formato de destino no soportado.';
       if (mode === 'fast' && targetFormat !== 'original') return 'El modo rápido solo funciona con el formato original.';
-      if (mode === 'fast' && convert.needsEncoding(fx)) return 'Fundidos, volumen, formato de pantalla y girar necesitan cortes exactos.';
+      if (!fx.texts) return 'Textos no válidos: hasta 5, de hasta 200 caracteres y 3 líneas.';
+      if (fx.logo && !logo) return 'Falta la imagen del logo.';
+      if (logo && logo.size > MAX_IMAGE_SIZE) return 'El logo es demasiado grande (máx. 5 MB).';
+      if (mode === 'fast' && convert.needsEncoding(fx, segments)) return 'Velocidad, texto, logo, ruido, fundidos, volumen, formato de pantalla y girar necesitan cortes exactos.';
       return null;
     },
     detail: () => {
-      const kept = Math.round(segments.reduce((acc, [s, e]) => acc + (e - s), 0));
-      const label = targetFormat === 'original' ? 'original' : convert.formatFor(targetFormat).config.label;
+      const kept = Math.round(segments.reduce((acc, [s, e, speed]) => acc + (e - s) / speed, 0));
+      const label = targetFormat === 'original' ? 'original' : animated ? animated.label : convert.formatFor(targetFormat).config.label;
       const clock = `${Math.floor(kept / 60)}:${String(kept % 60).padStart(2, '0')}`;
       const extras = [
         fx.separate && segments.length > 1 ? 'por separado' : '',
+        segments.some((sg) => sg[2] !== 1) ? 'velocidad' : '',
+        fx.texts && fx.texts.length ? 'texto' : '',
+        fx.logo ? 'logo' : '',
+        fx.denoise ? 'sin ruido' : '',
         fx.fade ? 'fundidos' : '',
         fx.volume === 0 ? 'sin sonido' : fx.volume !== null ? `volumen ${Math.round(fx.volume * 100)} %` : '',
         fx.aspect || '',
@@ -515,8 +538,9 @@ app.post('/api/jobs/edit', createLimiter, requireClient, upload.single('file'), 
       ].filter(Boolean);
       return [`Editar · ${segments.length} ${segments.length === 1 ? 'tramo' : 'tramos'} · ${clock} · ${label}`, ...extras].join(' · ');
     },
-    makeRun: (file, body) => convert.runEdit({
-      inputPath: file.path, originalName: nameOf(file), segments, targetFormat, mode, body, ffmpegPath: currentFfmpegPath(), hw: hwFor(),
+    makeRun: (file, b) => convert.runEdit({
+      inputPath: file.path, originalName: nameOf(file), segments, targetFormat, mode, body: b, ffmpegPath: currentFfmpegPath(), hw: hwFor(),
+      logoPath: fx.logo && logo ? logo.path : null,
     }),
   });
 });
@@ -681,6 +705,9 @@ app.get('/api/engine', (req, res) => {
 app.use((err, req, res, next) => {
   if (err.message === 'INVALID_FILE_TYPE') {
     return res.status(400).json({ error: 'Solo se admiten archivos de audio o vídeo.' });
+  }
+  if (err.message === 'INVALID_IMAGE_TYPE') {
+    return res.status(400).json({ error: 'El logo tiene que ser una imagen PNG, JPG o WEBP.' });
   }
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {

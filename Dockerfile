@@ -2,10 +2,12 @@
 # permisos) como motor JavaScript aislado para resolver los retos de YouTube.
 FROM node:24-trixie-slim
 
-# Instalar dependencias del sistema: python3 (para yt-dlp) y ffmpeg
+# Instalar dependencias del sistema: python3 (para yt-dlp), ffmpeg y una
+# fuente para los textos del Editor (DejaVu Sans Bold)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     ffmpeg \
+    fonts-dejavu-core \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*

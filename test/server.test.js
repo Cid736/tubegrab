@@ -101,6 +101,9 @@ test('security headers and CSP on the page', async () => {
   assert.match(csp, /default-src 'self'/);
   assert.match(csp, /script-src 'self'/);
   assert.doesNotMatch(csp, /unsafe-inline'[^;]*script|script-src[^;]*unsafe/);
+  // blob: only for pictures and media the page makes from the user's own files; never for scripts.
+  assert.match(csp, /img-src 'self' data: https: blob:/);
+  assert.doesNotMatch(csp, /(script-src|default-src)[^;]*blob:/);
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
   assert.ok(res.headers.get('x-frame-options') || /frame-ancestors/.test(csp));
 });
@@ -256,7 +259,7 @@ test('compress, image and merge through the API', { skip: !ffmpeg && 'ffmpeg not
   for (const bad of [
     { segments: '[[5,2]]', targetFormat: 'original' },
     { segments: 'x', targetFormat: 'original' },
-    { segments: '[[0,2]]', targetFormat: 'gif' },
+    { segments: '[[0,2]]', targetFormat: 'bmp' },
     { segments: '[[0,2]]', targetFormat: 'mp4', mode: 'fast' },
   ]) assert.equal((await send('/api/jobs/edit', bad, [['file', 'a.mp4']])).status, 400, JSON.stringify(bad));
 
@@ -406,4 +409,41 @@ test('failed logins are limited per IP (then even the right password waits)', as
   } finally {
     child.kill();
   }
+});
+
+test('editor API: logo must be a small picture; texts and speeds are validated', { skip: !ffmpeg && 'ffmpeg not found', timeout: 120_000 }, async () => {
+  const clip = path.join(os.tmpdir(), `tg-edit-api-${process.pid}.mp4`);
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=25:duration=4', '-f', 'lavfi', '-i', 'sine=d=4',
+    '-shortest', '-c:v', 'libx264', '-c:a', 'aac', clip]);
+  const video = new Blob([fs.readFileSync(clip)], { type: 'video/mp4' });
+  fs.rmSync(clip, { force: true });
+  const pngPath = path.join(os.tmpdir(), `tg-logo-${process.pid}.png`);
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=64x32:d=1', '-frames:v', '1', pngPath]);
+  const png = fs.readFileSync(pngPath);
+  fs.rmSync(pngPath, { force: true });
+  const send = async (fields, logo) => {
+    const fd = new FormData();
+    Object.entries({ segments: '[[0,2]]', targetFormat: 'original', mode: 'exact', ...fields }).forEach(([k, v]) => fd.append(k, v));
+    fd.append('file', video, 'clip.mp4');
+    if (logo) fd.append('logo', logo.blob, logo.name);
+    const res = await api('/api/jobs/edit', { method: 'POST', body: fd });
+    return { status: res.status, body: await res.json() };
+  };
+  const logoPos = { logoPos: 'br' };
+  assert.equal((await send(logoPos, { blob: new Blob(['<svg onload=alert(1)>'], { type: 'image/svg+xml' }), name: 'x.svg' })).status, 400, 'SVG');
+  assert.equal((await send(logoPos, { blob: video, name: 'x.png' })).status, 400, 'a video posing as a PNG (wrong type)');
+  assert.equal((await send(logoPos, { blob: new Blob([png], { type: 'image/png' }), name: 'x.exe' })).status, 400, 'wrong extension');
+  assert.equal((await send(logoPos, { blob: new Blob([Buffer.alloc(5 * 1024 * 1024 + 1)], { type: 'image/png' }), name: 'big.png' })).status, 400, 'over 5 MB');
+  assert.equal((await send(logoPos)).status, 400, 'logo options without the picture');
+  assert.equal((await send({ texts: '[{"text":"x","pos":"left","size":"m"}]' })).status, 400, 'bad text');
+  assert.equal((await send({ mode: 'fast', segments: '[[0,2,2]]' })).status, 400, 'speed with fast cuts');
+  assert.equal((await send({ mode: 'fast', texts: '[{"text":"x","pos":"top","size":"m"}]' })).status, 400, 'text with fast cuts');
+  assert.equal((await send({ targetFormat: 'sticker', mode: 'fast' })).status, 400, 'animated with fast cuts');
+
+  const ok = await send({ ...logoPos, texts: '[{"text":"Hola","pos":"top","size":"m"}]', segments: '[[0,2,2]]' }, { blob: new Blob([png], { type: 'image/png' }), name: 'logo.png' });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const jobs = await waitForJobs((m) => m.get(ok.body.id) && ['done', 'error'].includes(m.get(ok.body.id).status));
+  const job = jobs.get(ok.body.id);
+  assert.equal(job.status, 'done', job.error);
+  assert.match(job.detail, /velocidad · texto · logo/);
 });

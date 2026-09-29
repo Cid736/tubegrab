@@ -52,7 +52,7 @@
     '{n} vídeos': '{n} videos', 'Desmarca lo que no quieras.': "Untick what you don't want.", 'No se pudo leer la playlist': "Couldn't read the playlist",
     '{n} capítulos': '{n} chapters', '{n} enlaces — se descargarán todos.': '{n} links — all will be downloaded.',
     'Enlace detectado en el portapapeles ✨': 'Link found in the clipboard ✨',
-    'Formato': 'Format', 'Calidad': 'Quality', 'FLAC (sin pérdida)': 'FLAC (lossless)', 'WAV': 'WAV', 'Original': 'Original',
+    'Calidad': 'Quality', 'FLAC (sin pérdida)': 'FLAC (lossless)', 'WAV': 'WAV', 'Original': 'Original',
     'La mejor disponible': 'Best available', 'Portada y metadatos': 'Cover art and metadata', 'Playlist completa': 'Whole playlist',
     'Quitar patrocinios': 'Remove sponsors', 'Más opciones': 'More options', 'Modo música': 'Music mode',
     'artista y título limpios, portada cuadrada': 'clean artist and title, square cover', 'Dividir por capítulos': 'Split by chapters',
@@ -253,6 +253,26 @@
     'Igual que el original': 'Same as the original', 'MP3 (solo audio)': 'MP3 (audio only)', 'M4A (solo audio)': 'M4A (audio only)',
     'WAV (solo audio)': 'WAV (audio only)', 'FLAC (solo audio)': 'FLAC (audio only)', 'Baja (pesa menos)': 'Low (smaller file)',
     'Cortes': 'Cuts', 'Exactos': 'Exact', 'Rápidos': 'Fast', 'Exportar': 'Export',
+    // --- Editor v2.9 ---
+    'Quitar ruido de fondo': 'Remove background noise', 'viento, zumbidos, ventilador': 'wind, hum, fans', 'Suave': 'Light', 'Fuerte': 'Strong',
+    'Texto': 'Text', '+ Añadir texto': '+ Add text', 'Logo': 'Logo', 'PNG, JPG o WEBP (máx. 5 MB)': 'PNG, JPG or WEBP (max. 5 MB)', 'Elegir…': 'Choose…',
+    'Posición': 'Position', 'Arriba a la izquierda': 'Top left', 'Arriba a la derecha': 'Top right', 'Abajo a la izquierda': 'Bottom left',
+    'Abajo a la derecha': 'Bottom right', 'Tamaño': 'Size', 'Mediano': 'Medium', 'Opacidad': 'Opacity',
+    'GIF animado': 'Animated GIF', 'Sticker de WhatsApp (WebP)': 'WhatsApp sticker (WebP)', 'Sticker de Telegram (máx. 3 s)': 'Telegram sticker (max. 3 s)',
+    'Escribe el texto': 'Type the text', 'Arriba': 'Top', 'Centro': 'Centre', 'Abajo': 'Bottom', 'desde el inicio': 'from the start',
+    'hasta el final': 'to the end', 'Poner el momento del cabezal': 'Use the playhead position',
+    'El logo tiene que ser una imagen PNG, JPG o WEBP.': 'The logo must be a PNG, JPG or WEBP image.',
+    'El logo es demasiado grande (máx. 5 MB).': 'The logo is too big (max. 5 MB).',
+    'GIF: sin sonido, 15 imágenes por segundo y hasta 480 px de ancho.': 'GIF: no sound, 15 frames per second and up to 480 px wide.',
+    'Sticker de WhatsApp: 512 × 512, sin sonido. WhatsApp pide que pese menos de 500 KB: mejor tramos cortos (2–5 s).': 'WhatsApp sticker: 512 × 512, no sound. WhatsApp wants it under 500 KB: short clips (2–5 s) work best.',
+    'Sticker de Telegram: vídeo WebM de 512 px, sin sonido y como máximo 3 segundos (se corta ahí).': 'Telegram sticker: 512 px WebM video, no sound and at most 3 seconds (cut there).',
+    'En un texto, "hasta" tiene que ser después de "desde".': 'In a text, "to" must come after "from".',
+    'Textos no válidos: hasta 5, de hasta 200 caracteres y 3 líneas.': 'Invalid texts: up to 5, each up to 200 characters and 3 lines.',
+    'Falta la imagen del logo.': 'The logo image is missing.',
+    'Velocidad, texto, logo, ruido, fundidos, volumen, formato de pantalla y girar necesitan cortes exactos.': 'Speed, text, logo, noise, fades, volume, screen shape and rotation need exact cuts.',
+    'Este archivo no tiene vídeo; los GIF y stickers necesitan imagen.': 'This file has no video; GIFs and stickers need a picture.',
+    'No hay ninguna fuente en este equipo para escribir el texto.': 'There is no font on this computer to draw the text.',
+    'Sticker WebP': 'WebP sticker', 'Sticker Telegram': 'Telegram sticker',
     'Corte anterior (↑)': 'Previous cut (↑)', 'Corte siguiente (↓)': 'Next cut (↓)',
     'Busca los silencios de más de un segundo y los quita (puedes deshacerlo)': 'Finds silences longer than a second and removes them (you can undo it)',
     'Quitar silencios': 'Remove silences', 'Imán': 'Snap', 'Imán: el cabezal y los cortes se pegan a los cortes cercanos': 'Snap: the playhead and cuts stick to nearby cuts',
@@ -304,7 +324,7 @@
   // Pieces of job descriptions ("MP4 Mejor calidad · por capítulos", "Unir 3 archivos · MP4"…).
   var PIECES = [
     ['Mejor calidad', 'Best quality'], ['por capítulos', 'by chapters'], ['–fin', '–end'], ['Comprimir a', 'Compress to'],
-    ['carátula', 'cover art'], ['fotograma', 'frame'], ['Unir ', 'Merge '], ['Editar', 'Edit'], [' tramos', ' clips'], [' tramo', ' clip'], ['rápido', 'fast'], ['por separado', 'separately'], ['fundidos', 'fades'], ['sin sonido', 'no sound'], ['volumen', 'volume'], ['girado', 'rotated'], [' archivos', ' files'], [' más', ' more'],
+    ['carátula', 'cover art'], ['fotograma', 'frame'], ['Unir ', 'Merge '], ['Editar', 'Edit'], [' tramos', ' clips'], [' tramo', ' clip'], ['rápido', 'fast'], ['velocidad', 'speed'], ['· texto', '· text'], ['sin ruido', 'denoised'], ['por separado', 'separately'], ['fundidos', 'fades'], ['sin sonido', 'no sound'], ['volumen', 'volume'], ['girado', 'rotated'], [' archivos', ' files'], [' más', ' more'],
   ];
 
   function fill(s, vars) {

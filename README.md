@@ -30,6 +30,8 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - **Editor** that fills the window (viewer, settings panel and a timeline with thumbnails, waveform and zoom): keep from any second to any other, cut with the blade (B), mark in/out (I/O), remove or restore clips, undo/redo, frame stepping and NLE-style shortcuts (Space, J/L, arrows). Export with exact cuts (re-encoded, GPU if available) or fast cuts (stream copy, lossless, keyframe-aligned)
   - **Remove silences** in one click, a **clip list** (jump, remove, restore), **snapping** and ↑/↓ to jump between cuts
   - Output adjustments: **vertical 9:16 / square / 4:5** centre crop (with a live frame on the viewer), **fade in/out**, **volume** or mute, **rotate/mirror**, and **each clip as its own file**
+  - **Titles** (up to 5, with position, size and when they show), a **logo/watermark** in any corner, **background-noise removal**, **slow motion / fast forward per clip** (0.25×–4×), all previewed live on the viewer
+  - Export as **animated GIF**, **WhatsApp sticker** (animated WebP 512×512) or **Telegram sticker** (WebM, up to 3 s)
 - **Merge** several audio or video files into one (clips of other sizes are letterboxed)
 - **Compress to a size** (e.g. 8 MB for Discord, 16 MB for WhatsApp): TubeGrab works out the quality, two-pass
 - **Image**: a frame at any moment (with a slider) or the embedded cover art, as JPG/PNG/WEBP
@@ -191,6 +193,8 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - **Editor** que ocupa toda la ventana (visor, panel de ajustes y línea de tiempo con miniaturas, forma de onda y zoom): quédate del segundo que quieras al que quieras, corta con la cuchilla (B), marca entrada/salida (I/O), quita o recupera tramos, deshaz/rehaz, avanza fotograma a fotograma y usa atajos de editor (Espacio, J/L, flechas). Exporta con cortes exactos (recodifica, con GPU si hay) o rápidos (copia sin pérdida, ajustados a fotogramas clave)
   - **Quitar silencios** con un clic, **lista de tramos** (saltar, quitar, recuperar), **imán** y ↑/↓ para saltar entre cortes
   - Ajustes del resultado: recorte **vertical 9:16 / cuadrado / 4:5** al centro (con el marco en el visor), **fundidos**, **volumen** o sin sonido, **girar/espejo** y **cada tramo en un archivo aparte**
+  - **Textos** (hasta 5, con posición, tamaño y cuándo salen), **logo o marca de agua** en cualquier esquina, **quitar ruido de fondo**, **cámara lenta o rápida por tramo** (0,25×–4×), todo con vista previa en el visor
+  - Exporta como **GIF animado**, **sticker de WhatsApp** (WebP animado 512×512) o **sticker de Telegram** (WebM, hasta 3 s)
 - **Unir** varios audios o vídeos en uno (los clips de otro tamaño se encajan con bandas negras)
 - **Comprimir a un tamaño** (p. ej. 8 MB para Discord, 16 MB para WhatsApp): TubeGrab calcula la calidad, en dos pasadas
 - **Imagen**: un fotograma en cualquier momento (con deslizador) o la carátula incrustada, en JPG/PNG/WEBP
