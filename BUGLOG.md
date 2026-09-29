@@ -333,6 +333,7 @@ Alcance: todo lo añadido desde la revisión 10 — `lib/auth.js` (acceso con co
 - **Archivo:** `lib/convert.js` (`editArgs`/`runEdit`)
 - **Reproducción:** 200 tramos + 9:16 + fundidos + volumen + girar con una ruta larga → orden de 32 236 caracteres (límite de Windows: 32 767); con algo más fallaba al lanzar ffmpeg.
 - **Fix:** el grafo de filtros se escribe en `graph.txt` dentro de la carpeta del trabajo y se pasa con `-/filter_complex` (ffmpeg ≥ 7; la app usa 9.0.2 y la imagen Docker 7.1); se borra al terminar. La orden queda en ~2 000 caracteres con cualquier número de tramos.
+- **Verificado en la imagen Docker (2026-09-30, ffmpeg 7.1.5, configurada como en Render con `TRUST_PROXY` y `TUBEGRAB_USERS`):** sin contraseña → 401, con contraseña → 200; tres exportaciones reales por la API — 3 tramos 9:16 con fundidos y volumen (404×720, 8,00 s), 200 tramos 1:1 girado y sin sonido en MKV (720×720, 19,97 s) y cortes rápidos en archivos separados (2 archivos); y con `TUBEGRAB_USERS=solousuario` el contenedor no arranca y explica el error.
 
 ### Comprobado sin hallazgos (con pruebas nuevas)
 - **Login:** solo pasa el par exacto usuario/contraseña (mayúsculas, espacios, base64 roto, sin `:`, 100 KB de basura, `__proto__`/`constructor` como usuario → rechazados); comparación en tiempo constante; tras 30 fallos por IP en 15 min, `429` incluso con la contraseña buena; la API y el flujo de eventos también piden login.
