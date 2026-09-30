@@ -445,6 +445,7 @@ const VIEWS = {
   'cv-image': { group: 'convert', title: 'Imagen', sub: 'Un fotograma o la carátula como imagen', tab: 'Imagen' },
   queue: { group: null, title: 'Cola', sub: 'Descargas y conversiones en curso' },
   history: { group: null, title: 'Historial', sub: 'Lo que has terminado en este equipo' },
+  library: { group: null, title: 'Biblioteca', sub: 'Escucha y mira lo que has descargado', desktop: true },
   'set-appearance': { group: 'settings', title: 'Apariencia', sub: 'Idioma, interfaz, colores y tamaño', tab: 'Apariencia' },
   'set-downloads': { group: 'settings', title: 'Descargas', sub: 'Carpeta, velocidad y cookies', tab: 'Descargas' },
   'set-convert': { group: 'settings', title: 'Conversión', sub: 'Tarjeta gráfica y conversiones a la vez', tab: 'Conversión' },
@@ -1111,7 +1112,7 @@ document.addEventListener('drop', (e) => {
 });
 
 // Ctrl+1 Descargar · Ctrl+2 Convertir · Ctrl+3 Cola · Ctrl+4 Historial · Ctrl+, Ajustes.
-const SHORTCUT_VIEWS = { 1: 'dl-link', 2: 'cv-format', 3: 'queue', 4: 'history', ',': 'set-appearance' };
+const SHORTCUT_VIEWS = { 1: 'dl-link', 2: 'cv-format', 3: 'queue', 4: 'history', 5: 'library', ',': 'set-appearance' };
 document.addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
   const view = SHORTCUT_VIEWS[e.key];
@@ -2891,6 +2892,210 @@ $('btnClearFinished').addEventListener('click', () => {
 $('btnPauseAll').addEventListener('click', () => postJson('/api/jobs/pause-all', {}).catch((e) => showToast(e.message)));
 $('btnResumeAll').addEventListener('click', () => postJson('/api/jobs/pause-all', { resume: true }).catch((e) => showToast(e.message)));
 
+// === Biblioteca (desktop): what's in the download folder, a player and "send to phone" ===
+ICONS.phone = svg('<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>');
+ICONS.music = svg('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>');
+ICONS.video = svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/>');
+
+const library = (() => {
+  const MAX_ROWS = 400;
+  let files = [];
+  let kind = '';
+  let loaded = false;
+  const libUrl = (f) => `/api/library/file?client=${CLIENT_ID}&id=${f.id}`;
+
+  function visible() {
+    const q = $('libSearch').value.trim().toLowerCase();
+    return files.filter((f) => (!kind || f.kind === kind) && (!q || `${f.folder} ${f.name}`.toLowerCase().includes(q)));
+  }
+
+  function render() {
+    const list = $('libList');
+    const shown = visible();
+    list.innerHTML = '';
+    $('libEmpty').classList.toggle('hidden', shown.length > 0 || !loaded);
+    $('libEmptyText').textContent = files.length ? t('Nada coincide con la búsqueda.') : t('Aún no hay nada en tu carpeta de descargas.');
+    list.parentElement.classList.toggle('hidden', !shown.length);
+    $('libCount').textContent = !loaded ? t('Cargando…')
+      : shown.length > MAX_ROWS ? t('{n} archivos · se muestran {m}; busca para encontrar el resto', { n: shown.length, m: MAX_ROWS })
+        : t('{n} archivos', { n: shown.length });
+    for (const f of shown.slice(0, MAX_ROWS)) {
+      const li = document.createElement('li');
+      li.className = `lib-item${player.current() && player.current().id === f.id ? ' playing' : ''}`;
+      const main = document.createElement('button');
+      main.type = 'button';
+      main.className = 'lib-main';
+      main.innerHTML = `<span class="lib-icon">${ICONS[f.kind === 'video' ? 'video' : 'music']}</span><span class="lib-text"><span class="lib-name"></span><span class="lib-sub"></span></span>`;
+      main.querySelector('.lib-name').textContent = f.name.replace(/\.[^.]+$/, '');
+      main.querySelector('.lib-sub').textContent = [f.folder, formatBytes(f.size), formatDate(f.mtime)].filter(Boolean).join(' · ');
+      main.title = f.folder ? `${f.folder}/${f.name}` : f.name;
+      main.addEventListener('click', () => player.play(shown, shown.indexOf(f)));
+      const actions = document.createElement('div');
+      actions.className = 'queue-actions';
+      actions.append(
+        iconButton('phone', t('Enviar al móvil'), () => shareToPhone(f)),
+        iconButton('reveal', t('Mostrar en la carpeta'), () => desktopApi.showLibraryFile(f.folder ? `${f.folder}/${f.name}` : f.name)),
+      );
+      li.append(main, actions);
+      list.appendChild(li);
+    }
+  }
+
+  async function load() {
+    loaded = false;
+    render();
+    try {
+      const res = await api('/api/library');
+      files = res.files || [];
+    } catch (err) {
+      files = [];
+      showToast(err.message);
+    }
+    loaded = true;
+    render();
+  }
+
+  $('libSearch').addEventListener('input', render);
+  $('libRefresh').addEventListener('click', load);
+  $('libFilter').addEventListener('click', (e) => {
+    const b = e.target.closest('.kind-btn');
+    if (!b) return;
+    kind = b.dataset.kind;
+    $('libFilter').querySelectorAll('.kind-btn').forEach((x) => x.classList.toggle('active', x === b));
+    render();
+  });
+  document.addEventListener('tg:view', (e) => { if (e.detail === 'library') load(); });
+  return { render, url: libUrl };
+})();
+
+// A player bar at the bottom: plays a list, keeps going across pages.
+const player = (() => {
+  const media = $('plMedia');
+  let list = [];
+  let index = -1;
+  let shuffle = false;
+  let repeat = false;
+  let seeking = false;
+  const cur = () => list[index] || null;
+
+  function show(f) {
+    $('player').classList.remove('hidden');
+    document.body.classList.add('has-player');
+    $('plTitle').textContent = f.name.replace(/\.[^.]+$/, '');
+    $('plSub').textContent = f.folder || '';
+    $('plIcon').innerHTML = ICONS[f.kind === 'video' ? 'video' : 'music'];
+    const isVideo = f.kind === 'video';
+    $('plExpand').classList.toggle('hidden', !isVideo);
+    $('plFull').classList.toggle('hidden', !isVideo);
+    $('playerVideoWrap').classList.toggle('hidden', !isVideo);
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: $('plTitle').textContent, artist: f.folder || 'TubeGrab' });
+    }
+    library.render();
+  }
+  function play(items, i) {
+    list = items.slice();
+    index = i;
+    start();
+  }
+  function start() {
+    const f = cur();
+    if (!f) return;
+    media.src = library.url(f);
+    media.play().catch(() => {});
+    show(f);
+  }
+  function step(dir) {
+    if (!list.length) return;
+    if (dir > 0 && media.currentTime > 0 && shuffle && list.length > 1) {
+      let next = index;
+      while (next === index) next = Math.floor(Math.random() * list.length);
+      index = next;
+    } else if (dir < 0 && media.currentTime > 3) {
+      media.currentTime = 0;
+      return;
+    } else {
+      index = (index + dir + list.length) % list.length;
+    }
+    start();
+  }
+  function close() {
+    media.pause();
+    media.removeAttribute('src');
+    media.load();
+    list = [];
+    index = -1;
+    $('player').classList.add('hidden');
+    document.body.classList.remove('has-player');
+    library.render();
+  }
+  media.addEventListener('play', () => $('plPlay').classList.add('playing'));
+  media.addEventListener('pause', () => $('plPlay').classList.remove('playing'));
+  media.addEventListener('loadedmetadata', () => {
+    $('plSeek').max = String(media.duration || 1);
+    $('plDur').textContent = formatDuration(Math.round(media.duration)) || '0:00';
+  });
+  media.addEventListener('timeupdate', () => {
+    if (!seeking) $('plSeek').value = String(media.currentTime);
+    $('plTime').textContent = formatDuration(Math.floor(media.currentTime)) || '0:00';
+  });
+  media.addEventListener('ended', () => {
+    if (repeat) { media.currentTime = 0; media.play().catch(() => {}); return; }
+    if (index < list.length - 1 || shuffle) step(1);
+  });
+  media.addEventListener('error', () => { if (cur()) showToast(t('No se puede reproducir este archivo aquí.')); });
+  $('plPlay').addEventListener('click', () => (media.paused ? media.play().catch(() => {}) : media.pause()));
+  $('plNext').addEventListener('click', () => step(1));
+  $('plPrev').addEventListener('click', () => step(-1));
+  $('plClose').addEventListener('click', close);
+  $('plSeek').addEventListener('input', () => { seeking = true; $('plTime').textContent = formatDuration(Math.floor(Number($('plSeek').value))) || '0:00'; });
+  $('plSeek').addEventListener('change', () => { media.currentTime = Number($('plSeek').value); seeking = false; });
+  $('plVolume').addEventListener('input', () => { media.volume = Number($('plVolume').value); });
+  $('plShuffle').addEventListener('click', () => { shuffle = !shuffle; $('plShuffle').classList.toggle('on', shuffle); $('plShuffle').setAttribute('aria-pressed', String(shuffle)); });
+  $('plRepeat').addEventListener('click', () => { repeat = !repeat; $('plRepeat').classList.toggle('on', repeat); $('plRepeat').setAttribute('aria-pressed', String(repeat)); });
+  $('plExpand').addEventListener('click', () => $('playerVideoWrap').classList.toggle('hidden'));
+  $('plFull').addEventListener('click', () => { if (media.requestFullscreen) media.requestFullscreen().catch(() => {}); });
+  if ('mediaSession' in navigator) {
+    // The keyboard's media keys and Windows' media overlay.
+    navigator.mediaSession.setActionHandler('play', () => media.play().catch(() => {}));
+    navigator.mediaSession.setActionHandler('pause', () => media.pause());
+    navigator.mediaSession.setActionHandler('previoustrack', () => step(-1));
+    navigator.mediaSession.setActionHandler('nexttrack', () => step(1));
+  }
+  return { play, current: cur };
+})();
+
+// "Send to phone": a QR with a link on the local network that expires.
+let currentShare = null;
+async function shareToPhone(f) {
+  try {
+    const res = await postJson('/api/library/share', { id: f.id });
+    currentShare = res;
+    $('shareName').textContent = f.name;
+    $('shareQr').src = res.qr;
+    $('shareUrl').textContent = res.url;
+    $('shareExpires').textContent = t('El enlace caduca a las {h}.', {
+      h: new Date(res.expires).toLocaleTimeString(prefsApi.get().lang === 'en' ? 'en-GB' : 'es-ES', { hour: '2-digit', minute: '2-digit' }),
+    });
+    $('shareModal').classList.remove('hidden');
+    $('shareClose').focus();
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+function closeShare() { $('shareModal').classList.add('hidden'); }
+$('shareClose').addEventListener('click', closeShare);
+$('shareStop').addEventListener('click', async () => {
+  if (currentShare) {
+    try { await api(`/api/library/share/${currentShare.token}`, { method: 'DELETE' }); } catch { /* it expires anyway */ }
+    currentShare = null;
+  }
+  closeShare();
+  showToast(t('Ya no se comparte.'));
+});
+$('shareModal').addEventListener('click', (e) => { if (e.target === $('shareModal')) closeShare(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('shareModal').classList.contains('hidden')) closeShare(); });
+
 // === History (stored locally in this browser/app only) ===
 const HISTORY_KEY = 'tubegrab_history';
 const HISTORY_MAX = 300;
@@ -3077,6 +3282,133 @@ renderMerge();
 refreshCompressButton();
 refreshImageUI();
 renderPrefs();
+// === Browser extension (desktop): copy it somewhere stable and show the steps ===
+if (desktopApi) {
+  $('btnExtension').addEventListener('click', async () => {
+    const res = await desktopApi.installExtension();
+    if (res && res.path) $('extSteps').classList.remove('hidden');
+    else showToast(t('No se pudo preparar la extensión.'));
+  });
+}
+
+// === Backup: settings, history and subscriptions to a file and back ===
+const backup = (() => {
+  const FORMAT = 'tubegrab-backup';
+  const MAX_BYTES = 5 * 1024 * 1024;
+  const status = (msg, type) => setStatusEl($('backupStatus'), msg, type);
+  const str = (v, max = 300) => (typeof v === 'string' ? v.slice(0, max) : '');
+
+  async function build() {
+    const data = { format: FORMAT, version: 1, exportedAt: new Date().toISOString(), prefs: prefsApi.get(), history: getHistory() };
+    if (desktopApi) {
+      try {
+        const res = await api('/api/subscriptions');
+        data.subscriptions = (res.subscriptions || []).map((s) => ({ url: s.url, title: s.title, options: s.options, interval: s.interval }));
+      } catch { data.subscriptions = []; }
+      const s = await desktopApi.getSettings();
+      data.settings = { downloadDir: s.downloadDir, organize: s.organize, closeToTray: s.closeToTray, clipboardWatch: s.clipboardWatch };
+    }
+    return data;
+  }
+
+  async function exportIt() {
+    const text = JSON.stringify(await build(), null, 2);
+    if (desktopApi) {
+      const res = await desktopApi.exportBackup(text);
+      if (res && res.ok) status(t('Copia guardada.'), 'success');
+      else if (!res || !res.canceled) status(t('No se pudo guardar la copia.'), 'error');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    a.download = `TubeGrab-copia-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    status(t('Copia guardada.'), 'success');
+  }
+
+  // Only what we recognise, checked field by field; the rest is ignored.
+  function cleanHistoryItem(h) {
+    if (!h || typeof h !== 'object' || !/^[a-f0-9]{32}$/.test(String(h.id))) return null;
+    const date = Number(h.date);
+    return {
+      id: h.id,
+      name: str(h.name),
+      badge: str(h.badge),
+      date: Number.isFinite(date) && date > 0 ? date : Date.now(),
+      type: h.type === 'convert' ? 'convert' : 'download',
+      files: Math.max(0, Math.min(300, Math.floor(Number(h.files) || 0))),
+      source: typeof h.source === 'string' && /^https?:\/\//i.test(h.source) ? h.source.slice(0, 2048) : null,
+      request: h.request && typeof h.request === 'object' && !Array.isArray(h.request) ? h.request : null,
+    };
+  }
+  function cleanLast(last) {
+    const out = {};
+    if (!last || typeof last !== 'object' || Array.isArray(last)) return out;
+    for (const [k, v] of Object.entries(last).slice(0, 40)) {
+      if (/^[a-zA-Z]{1,30}$/.test(k) && (typeof v === 'boolean' || (typeof v === 'string' && v.length <= 40))) out[k] = v;
+    }
+    return out;
+  }
+
+  async function apply(text) {
+    let data;
+    try { data = JSON.parse(text); } catch { data = null; }
+    if (!data || data.format !== FORMAT || typeof data !== 'object') { status(t('Ese archivo no es una copia de TubeGrab.'), 'error'); return; }
+    if (!window.confirm(t('¿Importar esta copia? Se mezclará con lo que ya tienes: el historial se une, las suscripciones que falten se añaden y los ajustes se sustituyen.'))) return;
+    let historyAdded = 0;
+    let subsAdded = 0;
+    // Preferences go through the same checks as always (theme-init.js).
+    if (data.prefs && typeof data.prefs === 'object' && !Array.isArray(data.prefs)) {
+      prefsApi.set({ ...data.prefs, last: cleanLast(data.prefs.last) });
+    }
+    if (Array.isArray(data.history)) {
+      const mine = getHistory();
+      const known = new Set(mine.map((h) => h.id));
+      const incoming = data.history.slice(0, HISTORY_MAX).map(cleanHistoryItem).filter((h) => h && !known.has(h.id));
+      historyAdded = incoming.length;
+      const merged = [...mine, ...incoming].sort((a, b) => b.date - a.date).slice(0, HISTORY_MAX);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(merged)); } catch { /* storage unavailable */ }
+      renderHistory();
+    }
+    if (desktopApi && Array.isArray(data.subscriptions)) {
+      // Each one is re-validated by the server like a new subscription.
+      for (const s of data.subscriptions.slice(0, 100)) {
+        if (!s || typeof s.url !== 'string') continue;
+        try {
+          await postJson('/api/subscriptions', { url: s.url, options: s.options && typeof s.options === 'object' ? s.options : {}, interval: s.interval, backfill: 0 });
+          subsAdded += 1;
+        } catch { /* already subscribed, or no longer valid */ }
+      }
+    }
+    if (desktopApi && data.settings && typeof data.settings === 'object') {
+      const s = data.settings;
+      desktopApi.setOptions({ closeToTray: s.closeToTray, clipboardWatch: s.clipboardWatch, organize: s.organize });
+      if (typeof s.downloadDir === 'string') await desktopApi.setDownloadDir(s.downloadDir);
+      desktopApi.getSettings().then(() => window.dispatchEvent(new Event('focus')));
+    }
+    status(t('Copia importada: {h} del historial y {s} suscripciones nuevas.', { h: historyAdded, s: subsAdded }), 'success');
+  }
+
+  $('btnBackupExport').addEventListener('click', () => exportIt().catch((err) => status(err.message, 'error')));
+  $('btnBackupImport').addEventListener('click', async () => {
+    if (!desktopApi) { $('backupInput').click(); return; }
+    const res = await desktopApi.importBackup();
+    if (res && res.text) apply(res.text);
+    else if (res && res.error) status(t(res.error), 'error');
+  });
+  $('backupInput').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.size > MAX_BYTES) { status(t('Ese archivo no es una copia de TubeGrab.'), 'error'); return; }
+    apply(await f.text());
+  });
+  return { build, apply, cleanHistoryItem };
+})();
+
 restoreLastOptions();
 setView('dl-link');
 renderHistory();

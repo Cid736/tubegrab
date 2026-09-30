@@ -19,17 +19,19 @@ test('no duplicated keys in the English table', () => {
 });
 
 // Every visible piece of Spanish in these parts of the page has an English version.
-const SECTIONS = ['id="editSection"', 'id="tagsSection"', 'id="queueSection"', 'data-views="set-downloads"', 'id="mainCard"'];
+const SECTIONS = ['id="editSection"', 'id="tagsSection"', 'id="queueSection"', 'data-views="set-downloads"', 'id="mainCard"',
+  'id="librarySection"', 'data-views="set-system"', ['id="player"', '<!-- '], ['id="shareModal"', '<script']];
 test('the editor, tags, queue, download settings and download form are fully translated', () => {
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
   const known = new Set(keys);
   const same = new Set(['MP4', 'MKV', 'MOV', 'WEBM', 'MP3', 'M4A', 'V1', 'A1', 'Original', 'Logo', 'Editor', 'SponsorBlock', 'cookies.txt',
     '4:5 (Instagram)', '9:16 vertical (TikTok, Reels, Shorts)', '1', '2', '3', '4', '5', '6', 'M4A (AAC)', 'OPUS', 'OGG', '48 kHz', '44,1 kHz']);
   const missing = [];
-  for (const marker of SECTIONS) {
+  for (const entry of SECTIONS) {
+    const [marker, end] = Array.isArray(entry) ? entry : [entry, '</section>'];
     const a = html.indexOf(marker);
     assert.ok(a > 0, marker);
-    const section = html.slice(a, html.indexOf('</section>', a));
+    const section = html.slice(a, html.indexOf(end, a + marker.length));
     const texts = new Set();
     for (const m of section.matchAll(/>([^<>]+)</g)) {
       const text = m[1].trim();

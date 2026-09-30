@@ -499,3 +499,41 @@ test('scheduling in the desktop app', async () => {
     child.kill();
   }
 });
+
+test('library API (desktop): list, play with Range, share with a QR; absent on the web', async () => {
+  assert.equal((await api('/api/library')).status, 404, 'web instance');
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-libapi-'));
+  const dl = path.join(data, 'Descargas');
+  fs.mkdirSync(path.join(dl, 'Artista'), { recursive: true });
+  fs.writeFileSync(path.join(dl, 'Artista', 'tema.mp3'), Buffer.alloc(1000, 7));
+  fs.writeFileSync(path.join(dl, 'no.txt'), 'x');
+  fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({ downloadDir: dl }));
+  const port = await freePort();
+  const { child, first } = startServer(port, { TUBEGRAB_ELECTRON: '1', TUBEGRAB_DATA_DIR: data });
+  const base = `http://localhost:${port}`;
+  const h = { 'x-client-id': CLIENT };
+  try {
+    await first;
+    assert.equal((await fetch(`${base}/api/library`)).status, 400, 'needs the client id');
+    const list = await (await fetch(`${base}/api/library`, { headers: h })).json();
+    assert.deepEqual(list.files.map((f) => `${f.folder}/${f.name}`), ['Artista/tema.mp3']);
+    const { id } = list.files[0];
+    const part = await fetch(`${base}/api/library/file?client=${CLIENT}&id=${id}`, { headers: { Range: 'bytes=100-199' } });
+    assert.equal(part.status, 206);
+    assert.equal((await part.arrayBuffer()).byteLength, 100);
+    assert.equal((await fetch(`${base}/api/library/file?client=${CLIENT}&id=${'0'.repeat(32)}`)).status, 404);
+    assert.equal((await fetch(`${base}/api/library/file?client=${CLIENT}&id=../no.txt`)).status, 404);
+    const share = await fetch(`${base}/api/library/share`, { method: 'POST', headers: { ...h, 'content-type': 'application/json' }, body: JSON.stringify({ id }) });
+    const body = await share.json();
+    if (share.status === 200) {
+      assert.match(body.url, /^http:\/\/(10|172|192)\.[\d.]+:\d+\/s\/[a-f0-9]{32}$/);
+      assert.match(body.qr, /^data:image\/svg\+xml;base64,/);
+      assert.equal((await fetch(`${base}/api/library/share/${body.token}`, { method: 'DELETE', headers: h })).status, 200);
+    } else {
+      assert.match(body.error, /red WiFi o local/, 'only acceptable failure: no LAN here');
+    }
+  } finally {
+    child.kill();
+    fs.rmSync(data, { recursive: true, force: true });
+  }
+});

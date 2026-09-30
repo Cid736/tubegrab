@@ -36,6 +36,11 @@ const GITHUB_REPO = 'Cid736/tubegrab';
 //    running the new installer silently.
 const IS_PORTABLE = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
 const IS_LITE = !fs.existsSync(path.join(__dirname, 'bin', 'ffmpeg.exe'));
+// A separate data folder (settings, history, engine, single-instance lock), for
+// running a test copy next to the user's own TubeGrab without touching it.
+if (process.env.TUBEGRAB_USER_DATA && path.isAbsolute(process.env.TUBEGRAB_USER_DATA)) {
+  app.setPath('userData', process.env.TUBEGRAB_USER_DATA);
+}
 const UPDATE_ASSET_NAME = !IS_PORTABLE && app.isPackaged ? 'TubeGrab-Setup.exe' : IS_LITE ? 'TubeGrab-Lite.exe' : 'TubeGrab.exe';
 // Only ever talk to GitHub (API + its release-asset CDN), over HTTPS, even when
 // following redirects.
@@ -490,7 +495,7 @@ ipcMain.on('engine:update', (event) => { if (isTrustedSender(event)) maintainEng
 // === Saving finished jobs straight into the chosen folder ===
 const jobFileMatch = (url) => new RegExp(`^${APP_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/jobs/([a-f0-9]{32})/file\\?client=[a-f0-9]{32}&n=(\\d{1,4})$`).exec(url);
 
-const { safeSaveName, safeFolderName } = require('./lib/filenames');
+const { safeSaveName, safeFolderName, SAVE_EXTENSIONS } = require('./lib/filenames');
 
 // Files this app itself saved, per job (kept across restarts so History can
 // open them later). The renderer only ever names a job id, never a path.
@@ -570,6 +575,94 @@ function setupDownloads() {
   });
 }
 
+
+const { normalizeMediaUrl } = require('./lib/download');
+
+// === Browser extension: tubegrab://download?url=… opens the app with the link ===
+// Registered for this user only (HKCU). Any web page could open such a link
+// (the browser asks first), so all it can ever do is fill in the download
+// box with a link from a supported site: the user still presses Download.
+const PROTOCOL = 'tubegrab';
+const { protocolUrlFrom } = require('./lib/protocol');
+let pendingProtocolUrl = null;
+
+function deliverProtocolUrl(url) {
+  showWindow();
+  sendToRenderer('desktop:pasteUrl', { url });
+}
+function registerProtocol() {
+  if (!app.isPackaged) return;
+  // The portable build runs from a temp copy: point Windows at the real .exe.
+  const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+  try { app.setAsDefaultProtocolClient(PROTOCOL, exe, []); } catch (err) { console.warn('[Protocol]', err.message); }
+}
+pendingProtocolUrl = protocolUrlFrom(process.argv);
+
+// Copies the extension somewhere stable (the portable app's own folder is
+// temporary) and opens it, for "Load unpacked" in Chrome / Edge / Brave.
+ipcMain.handle('desktop:installExtension', (event) => {
+  if (!isTrustedSender(event)) return null;
+  const dest = path.join(app.getPath('userData'), 'browser-extension');
+  try {
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.cpSync(path.join(__dirname, 'extension'), dest, { recursive: true });
+    shell.openPath(dest);
+    return { path: dest };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+// === Library: show a file of the download folder in Explorer ===
+// The page sends a path relative to the folder; only a real media file that
+// is really inside it (links resolved) is shown.
+ipcMain.on('desktop:showLibraryFile', (event, rel) => {
+  if (!isTrustedSender(event) || typeof rel !== 'string' || rel.length > 2000 || rel.includes('\0')) return;
+  try {
+    const root = fs.realpathSync(getSettings().downloadDir);
+    const real = fs.realpathSync(path.resolve(root, rel));
+    const ext = path.extname(real).slice(1).toLowerCase();
+    if (real.startsWith(root + path.sep) && fs.statSync(real).isFile() && SAVE_EXTENSIONS.has(ext)) shell.showItemInFolder(real);
+  } catch { /* gone */ }
+});
+
+// === Backup: settings, history and subscriptions to a .json file and back ===
+const MAX_BACKUP_BYTES = 5 * 1024 * 1024;
+ipcMain.handle('desktop:exportBackup', async (event, text) => {
+  if (!isTrustedSender(event) || typeof text !== 'string' || Buffer.byteLength(text) > MAX_BACKUP_BYTES) return { ok: false };
+  const stamp = new Date().toISOString().slice(0, 10);
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Guardar copia de seguridad de TubeGrab',
+    defaultPath: path.join(app.getPath('documents'), `TubeGrab-copia-${stamp}.json`),
+    filters: [{ name: 'Copia de TubeGrab', extensions: ['json'] }],
+  });
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  const file = /\.json$/i.test(result.filePath) ? result.filePath : `${result.filePath}.json`;
+  fs.writeFileSync(file, text, 'utf8');
+  return { ok: true };
+});
+ipcMain.handle('desktop:importBackup', async (event) => {
+  if (!isTrustedSender(event)) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Abrir copia de seguridad de TubeGrab',
+    filters: [{ name: 'Copia de TubeGrab', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths[0]) return { canceled: true };
+  const st = fs.statSync(result.filePaths[0]);
+  if (!st.isFile() || st.size > MAX_BACKUP_BYTES) return { error: 'El archivo no es una copia de TubeGrab.' };
+  return { text: fs.readFileSync(result.filePaths[0], 'utf8') };
+});
+// From a backup: only an existing folder on this computer is accepted.
+ipcMain.handle('desktop:setDownloadDir', (event, dir) => {
+  if (!isTrustedSender(event) || typeof dir !== 'string' || !path.isAbsolute(dir) || dir.length > 1000) return { ok: false };
+  try {
+    if (!fs.statSync(dir).isDirectory()) return { ok: false };
+  } catch { return { ok: false }; }
+  saveSettings({ downloadDir: dir });
+  return { ok: true };
+});
+
 const cookiesFile = () => path.join(app.getPath('userData'), 'cookies.txt');
 
 ipcMain.handle('desktop:getSettings', (event) => {
@@ -637,7 +730,6 @@ function onWindowClose(event) {
 
 let clipboardTimer = null;
 let lastClipboard = '';
-const { normalizeMediaUrl } = require('./lib/download');
 
 // Polls the clipboard (only while enabled): a supported link copied in any
 // other app offers a one-click download. Nothing leaves the computer.
@@ -810,6 +902,8 @@ function startServer(port, enginePath, retriesLeft = 2) {
       env: {
         ...process.env, NODE_ENV: 'production', TUBEGRAB_ELECTRON: '1', PORT: String(port),
         TUBEGRAB_DATA_DIR: app.getPath('userData'),
+        // Where downloads go when the user hasn't picked a folder (the library reads it).
+        TUBEGRAB_DEFAULT_DOWNLOADS: path.join(app.getPath('downloads'), 'TubeGrab'),
         FFMPEG_BIN: ffmpegPathForServer(),
         ...(enginePath ? { TUBEGRAB_YTDLP: enginePath } : {}),
       },
@@ -928,7 +1022,12 @@ function createWindow() {
   startServer(preferredPort(), ensureEngine()).then((port) => {
     appPort = port;
     APP_ORIGIN = `http://localhost:${appPort}`;
-    if (mainWindow) mainWindow.loadURL(APP_ORIGIN);
+    if (mainWindow) {
+      mainWindow.loadURL(APP_ORIGIN);
+      // A tubegrab:// link that launched the app (browser extension): hand it
+      // over once the page is there to receive it.
+      if (pendingProtocolUrl) mainWindow.webContents.once('did-finish-load', () => { deliverProtocolUrl(pendingProtocolUrl); pendingProtocolUrl = null; });
+    }
     checkForUpdates().finally(() => { if (updateState.status !== 'error') scheduleUpdateCheck(UPDATE_PERIOD_MS); });
     // Light build: fetch ffmpeg / yt-dlp first if they're not there yet.
     ensureComponents().then(() => maintainEngine(false));
@@ -948,8 +1047,14 @@ function createWindow() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  // (It may be hidden in the tray.)
-  app.on('second-instance', showWindow);
+  // (It may be hidden in the tray.) A tubegrab:// link opened while running
+  // arrives here too.
+  app.on('second-instance', (_event, argv) => {
+    showWindow();
+    const url = protocolUrlFrom(argv);
+    if (url) deliverProtocolUrl(url);
+  });
+  app.on('ready', registerProtocol);
   app.on('ready', createWindow);
 }
 

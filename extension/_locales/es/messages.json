@@ -1,0 +1,14 @@
+{
+  "actionTitle": {
+    "message": "Descargar con TubeGrab"
+  },
+  "menuTitle": {
+    "message": "Descargar con TubeGrab"
+  },
+  "buttonLabel": {
+    "message": "TubeGrab"
+  },
+  "extDescription": {
+    "message": "Envía el vídeo o enlace a la app TubeGrab de tu PC para descargarlo."
+  }
+}

@@ -356,3 +356,9 @@ body.window-maximized .cap-restore { display: block; }
 [data-ui="windows"] .schedule-bar, [data-ui="windows"] .tags-table-wrap { background: var(--w-card); border: 1px solid var(--w-stroke); border-radius: 6px; box-shadow: none; }
 [data-ui="windows"] .schedule-bar.active { background: color-mix(in srgb, var(--accent) 14%, var(--w-card)); }
 [data-ui="windows"] .tags-cover { border-radius: 4px; }
+[data-ui="windows"] .player { background: var(--w-card); border-top: 1px solid var(--w-stroke); }
+[data-ui="windows"] .modal-card { border-radius: 8px; background: var(--w-card); border: 1px solid var(--w-stroke); }
+[data-ui="windows"] .lib-icon, [data-ui="windows"] .player-icon { border-radius: 4px; }
+[data-ui="windows"] .modal-card, [data-ui="windows"] .player { background: var(--solid); }
+:root[data-ui="windows"] { --solid: #f3f3f3; }
+:root[data-ui="windows"][data-theme="dark"] { --solid: #2b2b2b; }

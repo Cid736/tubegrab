@@ -32,4 +32,9 @@ contextBridge.exposeInMainWorld('desktop', {
   getEngine: () => ipcRenderer.invoke('engine:getState'),
   updateEngine: () => ipcRenderer.send('engine:update'),
   onEngine: (cb) => ipcRenderer.on('engine:state', (_e, state) => cb(state)),
+  showLibraryFile: (rel) => ipcRenderer.send('desktop:showLibraryFile', rel),
+  installExtension: () => ipcRenderer.invoke('desktop:installExtension'),
+  exportBackup: (text) => ipcRenderer.invoke('desktop:exportBackup', text),
+  importBackup: () => ipcRenderer.invoke('desktop:importBackup'),
+  setDownloadDir: (dir) => ipcRenderer.invoke('desktop:setDownloadDir', dir),
 });

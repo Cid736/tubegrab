@@ -13,6 +13,8 @@ const convert = require('./lib/convert');
 const { Subscriptions, INTERVALS_H } = require('./lib/subscriptions');
 const { parseUsers, basicAuth } = require('./lib/auth');
 const tags = require('./lib/tags');
+const { Library, ShareServer } = require('./lib/library');
+const qrcode = require('qrcode-generator');
 const { EventEmitter } = require('events');
 
 // App-wide notifications for open event streams (e.g. subscriptions changed).
@@ -617,6 +619,56 @@ app.post('/api/schedule', (req, res) => {
   when.setHours(Number(m[1]), Number(m[2]), 0, 0);
   if (when.getTime() <= Date.now()) when.setDate(when.getDate() + 1);
   res.json({ until: jobs.setHold(when.getTime()) });
+});
+
+// === Library & sharing to a phone (desktop app only) ===
+// The download folder is the one the desktop app saves into: read from its
+// settings every time (so a new folder applies at once), never from a request.
+function libraryRoot() {
+  try {
+    const settings = JSON.parse(fs.readFileSync(path.join(process.env.TUBEGRAB_DATA_DIR || '', 'settings.json'), 'utf8'));
+    if (typeof settings.downloadDir === 'string' && path.isAbsolute(settings.downloadDir)) return settings.downloadDir;
+  } catch { /* no settings yet: the default folder */ }
+  const fallback = process.env.TUBEGRAB_DEFAULT_DOWNLOADS;
+  return fallback && path.isAbsolute(fallback) ? fallback : null;
+}
+const library = new Library({ rootFn: libraryRoot });
+const shares = new ShareServer();
+const requireDesktop = (req, res, next) => (IS_DESKTOP ? next() : res.status(404).json({ error: 'Solo en la app de escritorio.' }));
+
+app.get('/api/library', requireDesktop, requireClient, infoLimiter, (req, res) => {
+  const { files, truncated } = library.scan();
+  res.json({ files, truncated });
+});
+
+app.get('/api/library/file', requireDesktop, requireClient, (req, res) => {
+  const file = library.resolve(req.query.id);
+  if (!file) return res.status(404).json({ error: 'No se encuentra el archivo.' });
+  // sendFile answers Range requests, so the player can seek.
+  return res.sendFile(file, { dotfiles: 'deny', headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } }, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
+
+app.post('/api/library/share', requireDesktop, requireClient, createLimiter, async (req, res) => {
+  const file = library.resolve((req.body || {}).id);
+  if (!file) return res.status(404).json({ error: 'No se encuentra el archivo.' });
+  try {
+    const share = await shares.share(file, path.basename(file));
+    const qr = qrcode(0, 'M');
+    qr.addData(share.url);
+    qr.make();
+    const svg = qr.createSvgTag({ cellSize: 6, margin: 3, scalable: true });
+    return res.json({ ...share, qr: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/library/share/:token', requireDesktop, requireClient, (req, res) => {
+  if (!/^[a-f0-9]{32}$/.test(req.params.token)) return res.status(400).json({ error: 'Enlace no válido.' });
+  shares.unshare(req.params.token);
+  return res.json({ ok: true });
 });
 
 app.post('/api/jobs/merge', createLimiter, requireClient, uploadMany.array('files', MAX_MERGE_FILES), (req, res) => {
