@@ -37,4 +37,8 @@ contextBridge.exposeInMainWorld('desktop', {
   exportBackup: (text) => ipcRenderer.invoke('desktop:exportBackup', text),
   importBackup: () => ipcRenderer.invoke('desktop:importBackup'),
   setDownloadDir: (dir) => ipcRenderer.invoke('desktop:setDownloadDir', dir),
+  getNtfy: () => ipcRenderer.invoke('desktop:getNtfy'),
+  setNtfy: (patch) => ipcRenderer.invoke('desktop:setNtfy', patch),
+  testNtfy: () => ipcRenderer.invoke('desktop:testNtfy'),
+  jobFinished: (info) => ipcRenderer.send('desktop:jobFinished', info),
 });

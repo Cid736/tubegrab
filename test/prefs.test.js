@@ -21,9 +21,10 @@ function boot({ local = {}, session = {}, dark = false } = {}) {
     matchMedia: () => ({ matches: dark, addEventListener() {} }),
     desktop: { setTheme: (t) => calls.push(['theme', t]), setUi: (u) => calls.push(['ui', u]) },
   };
-  const document = { documentElement: { setAttribute: (k, v) => { attrs[k] = v; } } };
+  const styles = {};
+  const document = { documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, style: { setProperty: (k, v) => { styles[k] = v; }, removeProperty: (k) => { delete styles[k]; } } } };
   vm.runInNewContext(SRC, { window, document, localStorage, sessionStorage, JSON, Object });
-  return { attrs, calls, prefs: window.tgPrefs, localStorage, sessionStorage };
+  return { attrs, calls, styles, prefs: window.tgPrefs, localStorage, sessionStorage };
 }
 
 test('defaults: Windows interface, automatic theme', () => {
@@ -78,4 +79,34 @@ test('language and speed limit only take listed values', () => {
 test('broken JSON in storage falls back to defaults', () => {
   const { attrs } = boot({ local: { tubegrab_prefs: '{not json' } });
   assert.equal(attrs['data-ui'], 'windows');
+});
+
+test('own colour: only #rrggbb reaches the CSS, with readable text on it', () => {
+  const b = boot({ local: { tubegrab_prefs: JSON.stringify({ accent: 'custom', accentColor: '#ffee00' }) } });
+  assert.equal(b.attrs['data-accent'], 'custom');
+  assert.equal(b.styles['--accent'], '#ffee00');
+  assert.equal(b.styles['--on-accent'], 'rgba(0, 0, 0, 0.85)', 'dark text on a light colour');
+  for (const evil of ['red; } body { display:none', 'url(javascript:alert(1))', '#12345', '#1234567', 'expression(alert(1))']) {
+    const e = boot({ local: { tubegrab_prefs: JSON.stringify({ accent: 'custom', accentColor: evil }) } });
+    assert.equal(e.prefs.get().accentColor, '#0a84ff', evil);
+  }
+  b.prefs.set({ accent: 'green' });
+  assert.equal(b.styles['--accent'], undefined, 'back to the preset colours');
+});
+
+test('own background: only a base64 JPEG the page made, else a normal background', () => {
+  const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==';
+  const ok = boot({ local: { tubegrab_prefs: JSON.stringify({ wall: 'custom' }), tubegrab_wallpaper: jpeg } });
+  assert.equal(ok.attrs['data-wall'], 'custom');
+  assert.equal(ok.styles['--wall-image'], `url("${jpeg}")`);
+  for (const evil of ['data:image/svg+xml;base64,PHN2Zz4=', 'data:image/jpeg;base64,abc") ; background: url("http://evil', 'https://evil.example/x.jpg', 'x'.repeat(10)]) {
+    const e = boot({ local: { tubegrab_prefs: JSON.stringify({ wall: 'custom' }), tubegrab_wallpaper: evil } });
+    assert.equal(e.styles['--wall-image'], undefined, evil.slice(0, 40));
+    assert.equal(e.attrs['data-wall'], 'aurora', 'custom without a valid picture falls back');
+  }
+  const b = boot();
+  assert.equal(b.prefs.setWallpaper('data:text/html;base64,PGgxPg=='), false);
+  assert.equal(b.prefs.setWallpaper('data:image/jpeg;base64,' + 'A'.repeat(4 * 1024 * 1024)), false, 'too big');
+  assert.ok(b.prefs.setWallpaper(jpeg));
+  assert.equal(b.attrs['data-wall'], 'custom');
 });

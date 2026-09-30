@@ -1003,6 +1003,7 @@
                 <button class="swatch sw-yellow" data-value="yellow" type="button" role="radio" title="Amarillo" aria-label="Amarillo"></button>
                 <button class="swatch sw-green" data-value="green" type="button" role="radio" title="Verde" aria-label="Verde"></button>
                 <button class="swatch sw-graphite" data-value="graphite" type="button" role="radio" title="Grafito" aria-label="Grafito"></button>
+                <label class="swatch sw-custom" id="accentCustom" role="radio" title="Tu color" aria-label="Tu color"><input type="color" id="accentColorInput" value="#0a84ff" aria-label="Tu color"></label>
               </div>
             </div>
             <div class="row"><span class="row-label">Fondo</span>
@@ -1013,7 +1014,12 @@
                 <button class="wall-chip wc-forest" data-value="forest" type="button" role="radio" title="Bosque" aria-label="Bosque"></button>
                 <button class="wall-chip wc-graphite" data-value="graphite" type="button" role="radio" title="Grafito" aria-label="Grafito"></button>
                 <button class="wall-chip wc-none" data-value="none" type="button" role="radio" title="Ninguno" aria-label="Ninguno"></button>
+                <button class="wall-chip wc-custom" id="wallCustom" type="button" role="radio" title="Tu imagen" aria-label="Tu imagen"></button>
+                <input type="file" id="wallInput" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden>
               </div>
+            </div>
+            <div class="row hidden" id="wallCustomRow"><span class="row-label">Tu imagen de fondo</span>
+              <div class="row-actions"><button class="btn" id="wallChange" type="button">Cambiar imagen…</button></div>
             </div>
             <div class="row"><span class="row-label">Vidrio</span>
               <div class="segmented segmented-small picker" id="glassPicker" role="radiogroup" aria-label="Vidrio">
@@ -1118,6 +1124,50 @@
             <label class="row switch desktop-only"><span class="row-label">Avisar al terminar</span><input type="checkbox" id="prefNotify"><span class="switch-ui"></span></label>
             <label class="row switch"><span class="row-label">Sonido al terminar</span><input type="checkbox" id="prefSound"><span class="switch-ui"></span></label>
           </div>
+          <div class="section-header desktop-only"><h2>Avisos en el móvil</h2></div>
+          <div class="group desktop-only">
+            <label class="row switch"><span class="row-label">Avisar al móvil al terminar <small>con la app gratuita ntfy, sin cuenta</small></span><input type="checkbox" id="ntfyEnabled"><span class="switch-ui"></span></label>
+            <div class="ntfy-body hidden" id="ntfyBody">
+              <label class="row"><span class="row-label">Cuándo</span>
+                <select id="ntfyWhen">
+                  <option value="long">Si tarda más de 1 minuto</option>
+                  <option value="all">Siempre</option>
+                </select>
+              </label>
+              <label class="row switch"><span class="row-label">Avisar también si algo falla</span><input type="checkbox" id="ntfyErrors"><span class="switch-ui"></span></label>
+              <div class="row ntfy-setup">
+                <img class="ntfy-qr" id="ntfyQr" alt="Código QR del canal de avisos">
+                <div class="row-text">
+                  <span class="row-label">En el móvil</span>
+                  <span class="row-sub row-sub-wrap">Instala la app ntfy (Android o iPhone), pulsa «+» y suscríbete a este canal:</span>
+                  <code class="share-url" id="ntfyTopic"></code>
+                  <span class="row-sub row-sub-wrap">O escanea el código. El nombre del canal es tu contraseña: no lo compartas.</span>
+                  <div class="ntfy-actions">
+                    <button class="btn" id="ntfyTest" type="button">Enviar un aviso de prueba</button>
+                    <button class="link-btn" id="ntfyNewTopic" type="button">Cambiar de canal</button>
+                  </div>
+                </div>
+              </div>
+              <label class="row"><span class="row-label">Servidor <small>si usas el tuyo propio</small></span><input class="text-input" id="ntfyServer" type="url" autocomplete="off" spellcheck="false" placeholder="https://ntfy.sh"></label>
+            </div>
+          </div>
+          <div class="status-message" id="ntfyStatus" role="status"></div>
+
+          <div class="section-header desktop-only"><h2>Control desde el móvil</h2></div>
+          <div class="group desktop-only">
+            <label class="row switch"><span class="row-label">Mandar descargas desde el móvil <small>por tu WiFi, sin instalar nada</small></span><input type="checkbox" id="remoteEnabled"><span class="switch-ui"></span></label>
+            <div class="row ntfy-setup hidden" id="remoteBody">
+              <img class="ntfy-qr" id="remoteQr" alt="Código QR para emparejar el móvil">
+              <div class="row-text">
+                <span class="row-label">Escanéalo con la cámara del móvil</span>
+                <span class="row-sub row-sub-wrap">Se abre una página para pegar enlaces: se descargan en este PC y se guardan en tu carpeta. Añádela a la pantalla de inicio del móvil para tenerla a mano. Tiene que estar en la misma WiFi.</span>
+                <code class="share-url" id="remoteUrl"></code>
+                <div class="ntfy-actions"><button class="link-btn" id="remoteReset" type="button">Desconectar los móviles (código nuevo)</button></div>
+              </div>
+            </div>
+          </div>
+          <div class="status-message" id="remoteStatus" role="status"></div>
+
           <div class="section-header desktop-only"><h2>Windows</h2></div>
           <div class="group desktop-only">
             <label class="row switch"><span class="row-label">Seguir en la bandeja al cerrar <small>las descargas y suscripciones continúan</small></span><input type="checkbox" id="optCloseToTray"><span class="switch-ui"></span></label>
@@ -1201,6 +1251,13 @@
               </div>
               <div class="row-actions"><a class="btn" href="https://github.com/Cid736/tubegrab/blob/main/LEGAL.md" target="_blank" rel="noopener">Leer</a></div>
             </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label">Presentación</span>
+                <span class="row-sub row-sub-wrap">El recorrido rápido por lo que puede hacer TubeGrab.</span>
+              </div>
+              <div class="row-actions"><button class="btn" id="btnTour" type="button">Ver otra vez</button></div>
+            </div>
           </div>
         </section>
 
@@ -1268,6 +1325,22 @@
       <div class="modal-actions">
         <button class="btn" id="shareStop" type="button">Dejar de compartir</button>
         <button class="btn btn-primary" id="shareClose" type="button">Listo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="tourModal" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+    <div class="modal-card tour-card">
+      <div class="tour-icon" id="tourIcon" aria-hidden="true"></div>
+      <h2 id="tourTitle"></h2>
+      <p class="tour-text" id="tourText"></p>
+      <div class="tour-extra" id="tourExtra"></div>
+      <div class="tour-dots" id="tourDots" aria-hidden="true"></div>
+      <div class="modal-actions tour-actions">
+        <button class="link-btn" id="tourSkip" type="button">Saltar</button>
+        <span class="ed-flex"></span>
+        <button class="btn" id="tourBack" type="button">Atrás</button>
+        <button class="btn btn-primary" id="tourNext" type="button">Siguiente</button>
       </div>
     </div>
   </div>

@@ -310,6 +310,15 @@ function renderPrefs() {
   for (const [key, id] of Object.entries(PICKERS)) {
     $(id).querySelectorAll('[data-value]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === p[key])));
   }
+  // Own colour / own picture (no data-value: they open a picker first).
+  $('accentCustom').setAttribute('aria-checked', String(p.accent === 'custom'));
+  $('accentCustom').style.setProperty('--own', p.accentColor);
+  $('accentColorInput').value = p.accentColor;
+  const picture = prefsApi.getWallpaper();
+  $('wallCustom').setAttribute('aria-checked', String(p.wall === 'custom' && Boolean(picture)));
+  $('wallCustom').style.backgroundImage = picture ? `url("${picture}")` : '';
+  $('wallCustom').classList.toggle('has-image', Boolean(picture));
+  $('wallCustomRow').classList.toggle('hidden', p.wall !== 'custom' || !picture);
   // Toolbar switch + star: the star is lit when the interface in use is the favourite.
   const ui = prefsApi.getUi();
   $('uiSwitch').querySelectorAll('[data-value]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === ui)));
@@ -356,6 +365,42 @@ $('prefSound').addEventListener('change', (e) => {
 });
 $('prefRateLimit').addEventListener('change', (e) => prefsApi.set({ rateLimit: e.target.value }));
 $('btnResetPrefs').addEventListener('click', () => { prefsApi.resetAppearance(); renderPrefs(); });
+
+// === Own accent colour and own background picture ===
+$('accentColorInput').addEventListener('input', (e) => {
+  if (/^#[0-9a-f]{6}$/i.test(e.target.value)) { prefsApi.set({ accent: 'custom', accentColor: e.target.value }); renderPrefs(); }
+});
+/** Scales the chosen picture down (max 1920×1200) into a JPEG data URL small enough to keep. */
+async function wallpaperFrom(file) {
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 40 * 1024 * 1024) throw new Error(t('Elige una imagen PNG, JPG o WEBP.'));
+  const bitmap = await createImageBitmap(file);
+  for (const [maxW, maxH, q] of [[1920, 1200, 0.85], [1600, 1000, 0.75], [1280, 800, 0.7]]) {
+    const scale = Math.min(1, maxW / bitmap.width, maxH / bitmap.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const data = canvas.toDataURL('image/jpeg', q);
+    if (data.length <= 3 * 1024 * 1024) return data;
+  }
+  throw new Error(t('La imagen es demasiado grande.'));
+}
+$('wallCustom').addEventListener('click', () => {
+  if (prefsApi.getWallpaper() && prefsApi.get().wall !== 'custom') { prefsApi.set({ wall: 'custom' }); renderPrefs(); return; }
+  $('wallInput').click();
+});
+$('wallChange').addEventListener('click', () => $('wallInput').click());
+$('wallInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    if (!prefsApi.setWallpaper(await wallpaperFrom(file))) throw new Error(t('No se pudo guardar la imagen.'));
+    renderPrefs();
+  } catch (err) {
+    showToast(err.message);
+  }
+});
 
 // Soft two-note chime, synthesised (no audio file to ship or fetch).
 let audioCtx = null;
@@ -2661,9 +2706,10 @@ function onJob(job, live) {
     autoSave(job);
     addToHistory(job);
     notify(job);
+    notifyPhone(job);
     if (prefsApi.get().sound) playDoneSound();
   }
-  if (live && prev && ACTIVE.has(prev.status) && job.status === 'error') notify(job);
+  if (live && prev && ACTIVE.has(prev.status) && job.status === 'error') { notify(job); notifyPhone(job); }
   renderRow(job);
   if (prev && prev.order !== job.order) sortRows();
 }
@@ -2712,6 +2758,18 @@ function notify(job) {
   if (!isElectronApp || !prefsApi.get().notify || document.hasFocus() || typeof Notification === 'undefined') return;
   const title = job.status === 'done' ? (job.type === 'convert' ? t('Conversión terminada') : t('Descarga terminada')) : t('Algo falló');
   try { new Notification(title, { body: job.status === 'done' ? (job.fileName || job.title) : `${job.title}: ${ts(job.error)}`, silent: false }); } catch { /* ignore */ }
+}
+
+/** Tells the desktop app a task ended; it decides whether to send it to the phone (ntfy). */
+function notifyPhone(job) {
+  if (!desktopApi || !desktopApi.jobFinished) return;
+  const ok = job.status === 'done';
+  desktopApi.jobFinished({
+    ok,
+    seconds: job.finishedAt && job.createdAt ? Math.round((job.finishedAt - job.createdAt) / 1000) : 0,
+    title: ok ? (job.type === 'convert' ? t('Conversión terminada') : t('Descarga terminada')) : t('Algo falló'),
+    message: ok ? (job.fileName || job.title) : `${job.title}: ${ts(job.error)}`,
+  });
 }
 
 function statusLine(job) {
@@ -3282,6 +3340,141 @@ renderMerge();
 refreshCompressButton();
 refreshImageUI();
 renderPrefs();
+// === Phone notifications (desktop, ntfy) ===
+if (desktopApi && desktopApi.getNtfy) {
+  const status = (msg, type) => setStatusEl($('ntfyStatus'), msg, type);
+  const showNtfy = (n) => {
+    if (!n) return;
+    if (n.error) { status(t(n.error), 'error'); return; }
+    $('ntfyEnabled').checked = n.enabled;
+    $('ntfyBody').classList.toggle('hidden', !n.enabled);
+    $('ntfyWhen').value = n.when;
+    $('ntfyErrors').checked = n.errors;
+    $('ntfyTopic').textContent = n.topic;
+    $('ntfyQr').src = n.qr;
+    if (document.activeElement !== $('ntfyServer')) $('ntfyServer').value = n.server;
+  };
+  desktopApi.getNtfy().then(showNtfy);
+  const set = async (patch) => { status('', ''); showNtfy(await desktopApi.setNtfy(patch)); };
+  $('ntfyEnabled').addEventListener('change', (e) => set({ enabled: e.target.checked }));
+  $('ntfyWhen').addEventListener('change', (e) => set({ when: e.target.value }));
+  $('ntfyErrors').addEventListener('change', (e) => set({ errors: e.target.checked }));
+  $('ntfyServer').addEventListener('change', (e) => set({ server: e.target.value.trim() || 'https://ntfy.sh' }));
+  $('ntfyNewTopic').addEventListener('click', () => {
+    if (window.confirm(t('¿Cambiar de canal? El móvil tendrá que suscribirse al nuevo.'))) set({ newTopic: true });
+  });
+  $('ntfyTest').addEventListener('click', async () => {
+    const res = await desktopApi.testNtfy();
+    status(res && res.ok ? t('Aviso enviado: mira el móvil.') : t((res && res.error) || 'No se pudo enviar.'), res && res.ok ? 'success' : 'error');
+  });
+}
+
+// === Control from the phone (desktop): pair with a QR, send links over WiFi ===
+if (desktopApi) {
+  const status = (msg, type) => setStatusEl($('remoteStatus'), msg, type);
+  const showRemote = (r) => {
+    if (!r) return;
+    $('remoteEnabled').checked = Boolean(r.enabled);
+    $('remoteBody').classList.toggle('hidden', !r.enabled || !r.qr);
+    status(r.error ? t(r.error) : '', r.error ? 'error' : '');
+    if (r.qr) { $('remoteQr').src = r.qr; $('remoteUrl').textContent = r.url; }
+  };
+  const loadRemote = () => api('/api/remote').then(showRemote, () => {});
+  document.addEventListener('tg:view', (e) => { if (e.detail === 'set-system') loadRemote(); });
+  $('remoteEnabled').addEventListener('change', async (e) => {
+    try { showRemote(await postJson('/api/remote', { enabled: e.target.checked })); } catch (err) { status(err.message, 'error'); }
+  });
+  $('remoteReset').addEventListener('click', async () => {
+    if (!window.confirm(t('¿Crear un código nuevo? Los móviles emparejados tendrán que volver a escanearlo.'))) return;
+    try { showRemote(await postJson('/api/remote/reset', {})); status(t('Código nuevo: vuelve a escanearlo en tus móviles.'), 'success'); } catch (err) { status(err.message, 'error'); }
+  });
+}
+
+// === First-run tour ===
+const tour = (() => {
+  const icon = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const steps = [
+    { icon: icon('<path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/>'), title: 'Bienvenido a TubeGrab',
+      text: 'Descarga y convierte vídeos y música de YouTube y más de 20 sitios. Todo se hace en tu equipo. Elige cómo quieres verlo:', extra: 'look' },
+    { icon: icon('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'), title: 'Descargar',
+      text: 'Pega un enlace (o varios, o una playlist) en «Descargar», elige Audio o Vídeo y listo. También puedes buscar sin enlace y suscribirte a canales.' },
+    { icon: icon('<circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.6L20 17M8.2 16.4L20 7"/>'), title: 'Convertir y editar',
+      text: 'Cambia de formato, une o comprime archivos. En el Editor recortas, quitas partes, pones textos o un logo y exportas hasta GIF o stickers. En Etiquetas arreglas artista, álbum y carátula de tus canciones.' },
+    { icon: icon('<path d="M4 4v16M9 4v16M14 4l6 16"/>'), title: 'Tu biblioteca y el móvil', desktop: true,
+      text: 'En Biblioteca escuchas y ves lo descargado. Desde ahí puedes mandarlo al móvil con un QR, y en Ajustes → Sistema puedes mandar descargas desde el móvil o recibir avisos cuando terminen.' },
+    { icon: icon('<path d="M3 7h6l2 2h10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>'), title: 'Todo listo', extra: 'folder',
+      text: 'Lo que descargues se guarda aquí. Puedes cambiarlo cuando quieras en Ajustes → Descargas.' },
+  ].filter((s) => !s.desktop || desktopApi);
+  let i = 0;
+
+  function extra(kind) {
+    const box = $('tourExtra');
+    box.innerHTML = '';
+    if (kind === 'look') {
+      const row = document.createElement('div');
+      row.className = 'tour-choices';
+      const p = prefsApi.get();
+      const choose = (label, key, value) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `btn${(key === 'ui' ? prefsApi.getUi() : p[key]) === value ? ' btn-primary' : ''}`;
+        b.textContent = t(label);
+        b.addEventListener('click', () => {
+          if (key === 'ui') { prefsApi.setUi(value); prefsApi.set({ uiDefault: value }); } else prefsApi.set({ [key]: value });
+          renderPrefs();
+          extra('look');
+        });
+        return b;
+      };
+      row.append(choose('Windows', 'ui', 'windows'), choose('Mac', 'ui', 'mac'), choose('Claro', 'theme', 'light'), choose('Oscuro', 'theme', 'dark'), choose('Automático', 'theme', 'auto'));
+      box.appendChild(row);
+    } else if (kind === 'folder' && desktopApi) {
+      const path = document.createElement('code');
+      path.className = 'share-url';
+      desktopApi.getSettings().then((s) => { path.textContent = s.downloadDir; });
+      const change = document.createElement('button');
+      change.type = 'button';
+      change.className = 'btn';
+      change.textContent = t('Cambiar…');
+      change.addEventListener('click', async () => { await desktopApi.chooseFolder(); const s = await desktopApi.getSettings(); path.textContent = s.downloadDir; window.dispatchEvent(new Event('focus')); });
+      box.append(path, change);
+    }
+  }
+
+  function render() {
+    const s = steps[i];
+    $('tourIcon').innerHTML = s.icon;
+    $('tourTitle').textContent = t(s.title);
+    $('tourText').textContent = t(s.text);
+    extra(s.extra);
+    $('tourDots').innerHTML = steps.map((_, n) => `<span class="${n === i ? 'on' : ''}"></span>`).join('');
+    $('tourBack').classList.toggle('hidden', i === 0);
+    $('tourSkip').classList.toggle('hidden', i === steps.length - 1);
+    $('tourNext').textContent = i === steps.length - 1 ? t('Empezar') : t('Siguiente');
+  }
+  function open() {
+    i = 0;
+    render();
+    $('tourModal').classList.remove('hidden');
+    $('tourNext').focus();
+  }
+  function close() {
+    $('tourModal').classList.add('hidden');
+    prefsApi.set({ onboarded: true });
+  }
+  $('tourNext').addEventListener('click', () => { if (i < steps.length - 1) { i += 1; render(); } else close(); });
+  $('tourBack').addEventListener('click', () => { if (i > 0) { i -= 1; render(); } });
+  $('tourSkip').addEventListener('click', close);
+  $('btnTour').addEventListener('click', open);
+  document.addEventListener('keydown', (e) => {
+    if ($('tourModal').classList.contains('hidden')) return;
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowRight') $('tourNext').click();
+    else if (e.key === 'ArrowLeft') $('tourBack').click();
+  });
+  return { open, firstRun: () => { if (!prefsApi.get().onboarded) open(); } };
+})();
+
 // === Browser extension (desktop): copy it somewhere stable and show the steps ===
 if (desktopApi) {
   $('btnExtension').addEventListener('click', async () => {
@@ -3411,6 +3604,7 @@ const backup = (() => {
 
 restoreLastOptions();
 setView('dl-link');
+tour.firstRun();
 renderHistory();
 connectEvents();
 loadConfig();

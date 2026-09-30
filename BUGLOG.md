@@ -422,3 +422,15 @@ Alcance: todo el código actual (servidor, proceso principal de Electron, págin
 - Rutas nuevas de la API dentro de la protección de origen, límites de peticiones y (en web) del acceso con contraseña; la biblioteca y compartir no existen en la versión web.
 - Extensión: solo permiso `contextMenus`, sin `externally_connectable`, botón en shadow root cerrado.
 - Pruebas nuevas: validador de carpetas, comprobaciones estáticas del proceso principal (registro con `--`, carpeta local, aislamiento de la ventana), servidor de compartir (dirección, `HEAD`, descarga cortada, cambio de red), letras sin fin, subida rechazada. 174 pruebas.
+
+---
+
+## 2026-09-30 — v3.1.0: control desde el móvil, avisos, aspecto propio y presentación
+
+Nuevo: **control desde el móvil** (página en la WiFi para mandar descargas al PC), **avisos en el móvil** con ntfy, **color de énfasis y fondo propios**, y **presentación** de primer uso.
+
+### Revisión de seguridad
+- **Control desde el móvil (`lib/remote.js`):** no es el servidor de la app expuesto a la red, sino uno aparte con tres rutas (`/pair/<código>`, `/`, `POST /add`), solo en la dirección privada de la WiFi y sin JavaScript en la página (CSP `default-src 'none'`, `form-action 'self'`). Emparejar exige el código de 256 bits del QR (máx. 10 fallos por minuto e IP); después, una cookie `HttpOnly; SameSite=Strict` derivada del código (cambiar el código desconecta todos los móviles). Se rechaza cualquier `Host` que no sea exactamente esa dirección (contra DNS rebinding), un `Origin` ajeno, otro tipo de contenido y cuerpos de más de 16 KB. Los enlaces pasan por la misma API de descargas y sus comprobaciones (lista de sitios, límites) que los de la app. La página nunca muestra lo que envía el móvil: los mensajes son fijos y los títulos se escapan. El enlace secreto solo viaja dentro del QR (la API de la app no lo devuelve en texto). Solo en escritorio.
+- **Avisos (ntfy):** desde el proceso principal, publicación JSON (UTF-8) a un servidor `https://` sin credenciales ni rutas (por defecto `ntfy.sh`), sin seguir redirecciones, 10 s de límite y máx. 30 avisos por hora; solo título y nombre del archivo. Canal aleatorio de 96 bits; LEGAL.md explica que quien lo conozca puede leer los avisos.
+- **Aspecto propio:** el color solo se acepta como `#rrggbb`; la imagen la reduce la propia página a un JPEG y solo se aplica si es exactamente `data:image/jpeg;base64,…` (≤ 3 MB), así que nada arbitrario llega al CSS (probado con inyecciones de CSS, SVG, URLs y comillas).
+- Pruebas nuevas: `test/remote.test.js` (emparejar, cookie, formulario, Host ajeno, Origin ajeno, 415, cuerpo enorme, fuerza bruta, cambio de código, persistencia), integración de escritorio en `test/server.test.js`, `test/prefs.test.js` (color y fondo manipulados) e `i18n` ampliado. En la app real: presentación, color e imagen propios, aviso real recibido en ntfy.sh y QR de control.

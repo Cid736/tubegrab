@@ -15,6 +15,8 @@ const { parseUsers, basicAuth } = require('./lib/auth');
 const tags = require('./lib/tags');
 const { Library, ShareServer } = require('./lib/library');
 const { isLocalFolderPath } = require('./lib/filenames');
+const { RemoteServer } = require('./lib/remote');
+const http = require('http');
 const qrcode = require('qrcode-generator');
 const { EventEmitter } = require('events');
 
@@ -672,6 +674,48 @@ app.delete('/api/library/share/:token', requireDesktop, requireClient, (req, res
   return res.json({ ok: true });
 });
 
+// === Control from the phone (desktop app only) ===
+// The phone's page sends links here; they go through the very same download
+// API (and its checks) as the app's own requests, for the app's client id.
+function addDownloadsFromPhone(clientId, urls, mode) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ urls, mode });
+    const req = http.request({
+      host: '127.0.0.1', port: PORT, path: '/api/jobs/download', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'x-client-id': clientId, Host: `localhost:${PORT}` },
+    }, (res) => {
+      res.resume();
+      resolve(res.statusCode === 200 ? 'ok' : res.statusCode === 400 ? 'invalid' : res.statusCode === 429 ? 'busy' : 'failed');
+    });
+    req.on('error', () => resolve('failed'));
+    req.setTimeout(20000, () => { req.destroy(); resolve('failed'); });
+    req.end(body);
+  });
+}
+const remote = IS_DESKTOP ? new RemoteServer({
+  file: path.join(process.env.TUBEGRAB_DATA_DIR || jobs.dir, 'remote.json'),
+  addDownloads: addDownloadsFromPhone,
+  listJobs: (clientId) => jobs.listFor(clientId),
+}) : null;
+async function remoteView(state) {
+  if (!state.pairUrl) return state;
+  const qr = qrcode(0, 'M');
+  qr.addData(state.pairUrl);
+  qr.make();
+  const { pairUrl, ...rest } = state;
+  return { ...rest, qr: `data:image/svg+xml;base64,${Buffer.from(qr.createSvgTag({ cellSize: 6, margin: 3, scalable: true })).toString('base64')}` };
+}
+app.get('/api/remote', requireDesktop, requireClient, async (req, res) => res.json(await remoteView(await remote.status())));
+app.post('/api/remote', requireDesktop, requireClient, async (req, res) => {
+  try {
+    const state = (req.body || {}).enabled === true ? await remote.enable(req.clientId) : remote.disable();
+    res.json(await remoteView(state));
+  } catch (err) {
+    res.status(500).json({ error: 'No se pudo activar el control desde el móvil.' });
+  }
+});
+app.post('/api/remote/reset', requireDesktop, requireClient, async (req, res) => res.json(await remoteView(await remote.reset())));
+
 app.post('/api/jobs/merge', createLimiter, requireClient, uploadMany.array('files', MAX_MERGE_FILES), (req, res) => {
   const files = req.files || [];
   const discard = () => files.forEach((f) => fs.unlink(f.path, () => {}));
@@ -890,6 +934,7 @@ function onListening() {
   // Desktop app: tell the Electron process (our parent) that *this* server is
   // the one listening, so it never loads a page from another program.
   if (process.send) process.send({ type: 'listening', port: server.address().port });
+  if (remote) remote.autoStart();
   console.log(`\n🎵 TubeGrab Pro (yt-dlp) corriendo en http://localhost:${PORT}`);
   console.log(HOST === '0.0.0.0'
     ? '🔒 Modo despliegue: accesible externamente (contenedor/proxy).\n'

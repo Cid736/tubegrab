@@ -48,6 +48,9 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - **Send to phone**: a QR code with a link on your WiFi that expires in 30 minutes — no cables, no cloud
 - **Browser extension** (Chrome, Edge, Brave, Opera): a button on YouTube and "Download with TubeGrab" in the right-click menu open the link in the app (see `extension/README.md`)
 - **Backup**: export settings, history and subscriptions to a file and import them on another PC
+- **Control from your phone** (desktop): scan a QR and a page on your WiFi lets you send links to download on the PC and follow them
+- **Phone notifications** (desktop): a message on your phone through the free ntfy app when a long task finishes (or fails)
+- **Your own look**: any accent colour and your own background picture; a short **tour** on first launch (and in Settings → About)
 - Saves straight to your folder; several files (chapters, subtitles) go together in a subfolder
 - **System tray**: keep running when closed (downloads and subscriptions carry on); **detect copied links** (opt-in) and download them with one click
 - Self-updating from GitHub Releases (SHA-256 verified), and keeps yt-dlp up to date
@@ -223,6 +226,9 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - **Enviar al móvil**: un código QR con un enlace en tu WiFi que caduca en 30 minutos, sin cables ni nube
 - **Extensión del navegador** (Chrome, Edge, Brave, Opera): un botón en YouTube y «Descargar con TubeGrab» en el menú del botón derecho abren el enlace en la app (ver `extension/README.md`)
 - **Copia de seguridad**: exporta ajustes, historial y suscripciones a un archivo e impórtalos en otro PC
+- **Control desde el móvil** (escritorio): escaneas un QR y una página en tu WiFi te deja mandar enlaces para que se descarguen en el PC y ver cómo van
+- **Avisos en el móvil** (escritorio): un aviso en el móvil, con la app gratuita ntfy, cuando termina (o falla) una tarea larga
+- **A tu gusto**: cualquier color de énfasis y tu propia imagen de fondo; una **presentación** corta la primera vez (y en Ajustes → Acerca de)
 - Guarda directamente en tu carpeta; varios archivos (capítulos, subtítulos) van juntos en una subcarpeta
 - **Bandeja del sistema**: seguir abierta al cerrar (descargas y suscripciones continúan); **detectar enlaces copiados** (opcional) y descargarlos con un clic
 - Se actualiza sola desde GitHub Releases (verificada por SHA-256) y mantiene al día yt-dlp

@@ -362,3 +362,5 @@ body.window-maximized .cap-restore { display: block; }
 [data-ui="windows"] .modal-card, [data-ui="windows"] .player { background: var(--solid); }
 :root[data-ui="windows"] { --solid: #f3f3f3; }
 :root[data-ui="windows"][data-theme="dark"] { --solid: #2b2b2b; }
+/* Own background picture: shown in the Windows interface too (over Mica). */
+[data-ui="windows"][data-wall="custom"] body.is-desktop-app, [data-ui="windows"][data-wall="custom"] body { background: var(--wall-desktop); }

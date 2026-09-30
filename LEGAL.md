@@ -33,6 +33,10 @@ Conexiones a terceros (necesarias para funcionar; cada servicio aplica su propia
 
 **Enviar al móvil** (app de escritorio): al compartir un archivo, TubeGrab abre un pequeño servidor en tu red local (WiFi/cable) que solo sirve ese archivo, con un enlace secreto que caduca a los 30 minutos (o antes si pulsas "Dejar de compartir"). No sale a internet. Cualquiera en tu misma red que tenga el enlace podría descargarlo mientras dure: úsalo en redes de confianza (casa, no WiFi públicas).
 
+**Avisos en el móvil** (opcional, app de escritorio): si los activas, TubeGrab envía a **ntfy** (`ntfy.sh`, o el servidor que indiques) un aviso con el nombre del archivo cuando termina una tarea. Cualquiera que conozca el nombre del canal puede leer esos avisos: por eso se crea uno largo y aleatorio; no lo compartas. Política de ntfy: https://ntfy.sh/docs/privacy/
+
+**Control desde el móvil** (opcional, app de escritorio): abre en tu red local una página para mandar enlaces a este PC. Solo funciona desde un móvil que haya escaneado el código QR de la app (el código es secreto y puedes cambiarlo para desconectar los móviles). No sale a internet.
+
 **Extensión del navegador** (opcional): solo lee la dirección de la pestaña o del enlace sobre el que la usas, y solo la envía a la app de tu PC. Para ello, la app de escritorio registra para tu usuario de Windows los enlaces `tubegrab://`.
 - **GitHub** (`api.github.com`, `github.com`): comprobar y descargar actualizaciones de la app, de yt-dlp y, en la versión ligera, de ffmpeg.
 
@@ -81,6 +85,10 @@ Third-party connections (needed for the app to work; each service has its own pr
 - **LRCLIB** (`lrclib.net`), only if you turn on "Lyrics" when downloading or "Find lyrics" in Tags: receives the song's artist, title, album and length (nothing else).
 
 **Send to phone** (desktop app): when you share a file, TubeGrab opens a small server on your local network (WiFi/cable) that only serves that file, behind a secret link that expires after 30 minutes (or sooner if you press "Stop sharing"). Nothing goes to the internet. Anyone on the same network with the link could download it meanwhile: use it on networks you trust (home, not public WiFi).
+
+**Phone notifications** (optional, desktop app): if you turn them on, TubeGrab sends **ntfy** (`ntfy.sh`, or the server you set) a message with the file name when a task finishes. Anyone who knows the channel name can read those messages: that's why a long random one is created; don't share it. ntfy's policy: https://ntfy.sh/docs/privacy/
+
+**Control from your phone** (optional, desktop app): opens a page on your local network to send links to this PC. It only works from a phone that scanned the app's QR code (the code is secret, and you can change it to sign phones out). Nothing goes to the internet.
 
 **Browser extension** (optional): it only reads the address of the tab or link you use it on, and only sends it to the app on your PC. For that, the desktop app registers `tubegrab://` links for your Windows user.
 - **GitHub** (`api.github.com`, `github.com`): checking for and downloading updates of the app, yt-dlp and, in the light build, ffmpeg.

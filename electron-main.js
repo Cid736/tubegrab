@@ -617,6 +617,91 @@ ipcMain.handle('desktop:installExtension', (event) => {
   }
 });
 
+
+// === Phone notifications through ntfy (https://ntfy.sh): free, no account ===
+// The phone subscribes to a channel ("topic") with a long random name; the
+// app posts a short message there when a long task finishes. Only file names
+// and "done"/"failed" are sent, and only if the user turned it on.
+const NTFY_DEFAULTS = { enabled: false, server: 'https://ntfy.sh', topic: '', when: 'long', errors: true };
+const NTFY_LONG_SECONDS = 60;
+const ntfySent = [];
+const randomTopic = () => `tubegrab-${crypto.randomBytes(12).toString('hex')}`;
+
+function ntfyServerOk(value) {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' && !u.username && !u.password && (u.pathname === '/' || u.pathname === '') && !u.search && !u.hash;
+  } catch { return false; }
+}
+function ntfySettings() {
+  const raw = getSettings().ntfy || {};
+  const n = { ...NTFY_DEFAULTS };
+  if (typeof raw.enabled === 'boolean') n.enabled = raw.enabled;
+  if (typeof raw.server === 'string' && ntfyServerOk(raw.server)) n.server = new URL(raw.server).origin;
+  if (typeof raw.topic === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(raw.topic)) n.topic = raw.topic;
+  if (['long', 'all'].includes(raw.when)) n.when = raw.when;
+  if (typeof raw.errors === 'boolean') n.errors = raw.errors;
+  if (!n.topic) { n.topic = randomTopic(); saveSettings({ ntfy: n }); }
+  return n;
+}
+function ntfyQr(n) {
+  const qr = require('qrcode-generator')(0, 'M');
+  qr.addData(`${n.server}/${n.topic}`);
+  qr.make();
+  return `data:image/svg+xml;base64,${Buffer.from(qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true })).toString('base64')}`;
+}
+async function ntfyPost(n, { title, message, ok }) {
+  const now = Date.now();
+  while (ntfySent.length && now - ntfySent[0] > 60 * 60 * 1000) ntfySent.shift();
+  if (ntfySent.length >= 30) return { ok: false, error: 'Demasiados avisos en la última hora.' };
+  ntfySent.push(now);
+  const clean = (v, max) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max);
+  try {
+    const res = await electronNet.fetch(`${n.server}/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic: n.topic, title: clean(title, 120), message: clean(message, 300) || ' ', tags: [ok ? 'white_check_mark' : 'x'] }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    return res.ok ? { ok: true } : { ok: false, error: `ntfy respondió ${res.status}` };
+  } catch {
+    return { ok: false, error: 'No se pudo contactar con el servidor de avisos.' };
+  }
+}
+
+ipcMain.handle('desktop:getNtfy', (event) => {
+  if (!isTrustedSender(event)) return null;
+  const n = ntfySettings();
+  return { ...n, qr: ntfyQr(n) };
+});
+ipcMain.handle('desktop:setNtfy', (event, patch) => {
+  if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return null;
+  const n = ntfySettings();
+  if (typeof patch.enabled === 'boolean') n.enabled = patch.enabled;
+  if (['long', 'all'].includes(patch.when)) n.when = patch.when;
+  if (typeof patch.errors === 'boolean') n.errors = patch.errors;
+  if (typeof patch.server === 'string') { if (!ntfyServerOk(patch.server)) return { error: 'El servidor tiene que ser una dirección https://' }; n.server = new URL(patch.server).origin; }
+  if (patch.newTopic === true) n.topic = randomTopic();
+  saveSettings({ ntfy: n });
+  return { ...n, qr: ntfyQr(n) };
+});
+ipcMain.handle('desktop:testNtfy', (event) => {
+  if (!isTrustedSender(event)) return null;
+  return ntfyPost(ntfySettings(), { title: 'TubeGrab', message: 'Aviso de prueba: si lo ves, ya está todo listo.', ok: true });
+});
+// A finished task, from the page: sent only if it's on and it qualifies.
+ipcMain.on('desktop:jobFinished', (event, info) => {
+  if (!isTrustedSender(event) || !info || typeof info !== 'object') return;
+  const n = ntfySettings();
+  if (!n.enabled) return;
+  const ok = info.ok === true;
+  if (!ok && !n.errors) return;
+  const seconds = Number(info.seconds) || 0;
+  if (ok && n.when === 'long' && seconds < NTFY_LONG_SECONDS) return;
+  ntfyPost(n, { title: typeof info.title === 'string' ? info.title : 'TubeGrab', message: info.message, ok });
+});
+
 // === Library: show a file of the download folder in Explorer ===
 // The page sends a path relative to the folder; only a real media file that
 // is really inside it (links resolved) is shown.

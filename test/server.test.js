@@ -554,3 +554,43 @@ test('a rejected upload leaves nothing on disk (a big video + a bad logo, three 
   await new Promise((r) => setTimeout(r, 300));
   assert.equal(count(), before);
 });
+
+test('control from the phone (desktop): pair through the QR link; links go through the normal checks; absent on the web', async () => {
+  assert.equal((await api('/api/remote')).status, 404, 'web instance');
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-remote-api-'));
+  const port = await freePort();
+  const { child, first } = startServer(port, { TUBEGRAB_ELECTRON: '1', TUBEGRAB_DATA_DIR: data });
+  const base = `http://localhost:${port}`;
+  const h = { 'x-client-id': CLIENT, 'content-type': 'application/json' };
+  try {
+    await first;
+    const on = await (await fetch(`${base}/api/remote`, { method: 'POST', headers: h, body: JSON.stringify({ enabled: true }) })).json();
+    if (on.error) { assert.match(on.error, /red WiFi o local/); return; } // no LAN on this machine
+    assert.match(on.qr, /^data:image\/svg\+xml;base64,/);
+    assert.equal(on.pairUrl, undefined, 'the secret link only travels inside the QR');
+    const pairUrl = Buffer.from(on.qr.split(',')[1], 'base64').toString().length > 0; // QR present
+    assert.ok(pairUrl);
+    const remoteFile = JSON.parse(fs.readFileSync(path.join(data, 'remote.json'), 'utf8'));
+    const lan = new URL(on.url);
+    const get = (p, headers = {}, body = null) => new Promise((resolve, reject) => {
+      const req = http.request({ host: lan.hostname, port: lan.port, path: p, method: body ? 'POST' : 'GET', headers }, (res) => {
+        let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: b }));
+      });
+      req.on('error', reject);
+      if (body) req.write(body);
+      req.end();
+    });
+    const paired = await get(`/pair/${remoteFile.token}`);
+    assert.equal(paired.status, 303);
+    const cookie = paired.headers['set-cookie'][0].split(';')[0];
+    const body = new URLSearchParams({ urls: 'https://evil.example/video.mp4', mode: 'audio' }).toString();
+    const sent = await get('/add', { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) }, body);
+    assert.equal(sent.headers.location, '/?m=invalid', 'the app\'s own allowlist said no');
+    const off = await (await fetch(`${base}/api/remote`, { method: 'POST', headers: h, body: JSON.stringify({ enabled: false }) })).json();
+    assert.equal(off.enabled, false);
+    await assert.rejects(get('/', { Cookie: cookie }), 'nothing listening once off');
+  } finally {
+    child.kill();
+    fs.rmSync(data, { recursive: true, force: true });
+  }
+});
