@@ -472,3 +472,8 @@ Nuevo: descargar audio y vídeo a la vez; plantillas de nombre de archivo; «Emp
 - Audio y vídeo a la vez: dos peticiones normales a la API (mismos límites y validaciones).
 - Encontrado al probar en la app real: el texto del botón entraba en recursión infinita con «Audio y vídeo a la vez» en modo Audio (corregido), y el tamaño estimado no se recalculaba al cambiar de modo (corregido).
 - `npm audit` → 0 vulnerabilidades; dependencias en su última versión. 187 pruebas.
+
+### Pasada general de seguridad (tras la v3.3.0)
+- **Código:** sin `eval`/`new Function`, sin comandos con shell (todos los `exec` son expresiones regulares), sin HTML construido con datos sin escapar, `openExternal` solo para `https://`, `openPath` solo con carpetas de la app o validadas, y ningún registro imprime contraseñas, cookies ni tokens.
+- **Repositorio:** ningún archivo privado versionado (cookies, ajustes, códigos de emparejamiento, certificados) ni claves o contraseñas reales en el historial. `.gitignore` ahora excluye también `cookies.txt`, certificados (`*.pfx`, `*.p12`, `*.pem`), `settings.json` y `remote.json` por si acabaran en la carpeta del proyecto.
+- **Riesgos que quedan (documentados, por diseño):** enviar al móvil, el control desde el móvil y el acceso con contraseña de la web usan HTTP dentro de la red local (quien esté en la misma WiFi podría ver el tráfico: usarlos solo en redes de confianza; la web pública en Render va por HTTPS); el canal de ntfy.sh lo puede leer quien conozca su nombre (es largo y aleatorio); el `.exe` no está firmado.
