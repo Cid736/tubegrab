@@ -386,3 +386,39 @@ Nuevo: **Biblioteca** con reproductor (escritorio), **Enviar al móvil** con QR,
 - **Copia de seguridad:** al importar, las preferencias pasan por el mismo saneador de siempre, el historial se valida campo a campo (id de 32 hex, textos acotados, `source` solo `http(s)`), las suscripciones se recrean a través del servidor (que las valida como nuevas) y la carpeta de descargas solo se aplica si existe en este PC. El archivo se lee/escribe con diálogos nativos (máx. 5 MB) y no incluye `cookies.txt`. Probado en la app real con una copia hostil (HTML en el idioma, `javascript:` en el historial, sitio no permitido, carpeta inexistente, opción falsa): todo descartado.
 - **Mostrar en la carpeta:** el proceso principal solo muestra un archivo multimedia cuyo `realpath` esté dentro de la carpeta de descargas.
 - **Pruebas:** `test/library.test.js` (escaneo, resolución, red local, servidor de compartir, enlaces `tubegrab://`), API de la biblioteca en modo escritorio en `test/server.test.js`, `test/i18n.test.js` ampliado (Biblioteca, Sistema, reproductor y diálogo). Además, la app de escritorio real arrancada con datos aislados (`TUBEGRAB_USER_DATA`, nuevo, solo para pruebas) y controlada por CDP: biblioteca, reproducción, QR con la IP local real, copia hostil y un segundo arranque con `tubegrab://`.
+
+---
+
+## 2026-09-30 — Revisión 12 (v3.0.1)
+
+Alcance: todo el código actual (servidor, proceso principal de Electron, página, extensión y dependencias), con hipótesis de ataque comprobadas en real antes de corregir. `npm audit` → 0 vulnerabilidades.
+
+### [MEDIUM] Una copia de seguridad manipulada podía apuntar la carpeta de descargas a un servidor de red
+- **Archivos:** `electron-main.js`, `server.js`, `lib/filenames.js`
+- **Reproducción:** `path.isAbsolute()` acepta `\servidor\carpeta`, `//servidor/carpeta` y rutas de dispositivo (`\?\…`, `\.\PhysicalDrive0`). Al importar una copia con `downloadDir` así, la app hacía `stat` sobre esa ruta: Windows se conecta por SMB y envía el hash NTLM del usuario al servidor del atacante, y las descargas acabarían guardándose allí.
+- **Fix:** `isLocalFolderPath()` solo acepta rutas de un disco local (`C:\…`; `/…` fuera de Windows), sin `\`, `//` ni rutas de dispositivo. Se exige al importar la carpeta, al cargar `settings.json` (una copia ya importada vuelve a la carpeta por defecto) y en el servidor al leer la carpeta de la biblioteca.
+
+### [MEDIUM] `tubegrab://`: opciones de Chromium detrás del enlace se aplicaban
+- **Archivo:** `electron-main.js`
+- **Reproducción:** arrancando la app con `tubegrab://download?url=x --gpu-launcher=…`, Chromium intentó usar ese lanzador (el ataque clásico de protocolos en Electron, CVE-2018-1000006). Desde un navegador no es explotable en la práctica porque las URL llevan comillas y espacios codificados y no pueden salir de `"%1"`, pero otro programa que lance el enlace sin codificar sí podría.
+- **Fix:** el protocolo se registra como `"exe" -- "%1"`: tras `--` Chromium ya no lee opciones. Comprobado: con `--` delante, la opción inyectada se ignora y el enlace sigue llegando a la app. Las instalaciones de la 3.0.0 se vuelven a registrar solas al arrancar.
+
+### [LOW] Enviar al móvil escuchaba en todas las interfaces y podía dejar archivos abiertos
+- **Archivo:** `lib/library.js`
+- **Reproducción:** el servidor de compartir escuchaba en `0.0.0.0` (también en VPN o adaptadores públicos) aunque solo anuncia la IP de la WiFi; una petición `HEAD` abría el archivo sin cerrarlo, y una descarga cortada a medias lo dejaba abierto (repetido, agota descriptores).
+- **Fix:** escucha solo en la dirección privada que va en el QR (si cambia la red, se reinicia y los enlaces viejos caducan), máx. 32 conexiones; `HEAD` responde sin abrir el archivo y la descarga usa `stream.pipeline`, que lo cierra pase lo que pase. Probado: por `127.0.0.1` ya no responde; tras cortar una descarga el archivo se puede borrar en Windows (no queda abierto).
+
+### [LOW] Letras: la respuesta se leía entera antes de comprobar el tamaño
+- **Archivo:** `lib/lyrics.js`
+- **Fix:** se lee por trozos y se corta en 512 KB aunque falte o mienta la longitud. Probado con una respuesta infinita.
+
+### Otros
+- **Electron 44.4.5 → 44.5.1** (parche de seguridad de Chromium).
+- La pantalla completa del reproductor no funcionaba (el permiso `fullscreen` estaba bloqueado): se permite solo a la propia página de la app.
+
+### Comprobado sin hallazgos
+- Subidas rechazadas a media petición (vídeo grande + logo no válido, repetido): multer borra lo subido; prueba permanente añadida.
+- Ventana: `nodeIntegration: false`, `contextIsolation`, `sandbox`, navegación y ventanas nuevas bloqueadas; todas las IPC comprueban el remitente.
+- Rutas nuevas de la API dentro de la protección de origen, límites de peticiones y (en web) del acceso con contraseña; la biblioteca y compartir no existen en la versión web.
+- Extensión: solo permiso `contextMenus`, sin `externally_connectable`, botón en shadow root cerrado.
+- Pruebas nuevas: validador de carpetas, comprobaciones estáticas del proceso principal (registro con `--`, carpeta local, aislamiento de la ventana), servidor de compartir (dirección, `HEAD`, descarga cortada, cambio de red), letras sin fin, subida rechazada. 174 pruebas.

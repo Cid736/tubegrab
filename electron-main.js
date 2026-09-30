@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const { fork, execFile, spawn } = require('child_process');
 
 const net = require('net');
+const { isLocalFolderPath } = require('./lib/filenames');
 
 // The local UI server's port. Stable across launches (the page's saved
 // preferences and history are tied to its origin): PORT, else the one saved
@@ -315,7 +316,8 @@ let settingsCache = null;
 function getSettings() {
   if (!settingsCache) {
     try { settingsCache = JSON.parse(fs.readFileSync(SETTINGS_PATH(), 'utf8')); } catch { settingsCache = {}; }
-    if (typeof settingsCache.downloadDir !== 'string' || !path.isAbsolute(settingsCache.downloadDir)) {
+    // A network or device path (e.g. from a tampered backup) falls back to the default folder.
+    if (!isLocalFolderPath(settingsCache.downloadDir)) {
       settingsCache.downloadDir = path.join(app.getPath('downloads'), 'TubeGrab');
     }
   }
@@ -532,7 +534,7 @@ function uniquePath(dir, fileName) {
 
 // Electron grants every permission a page asks for unless told otherwise.
 // This UI only needs notifications and reading the clipboard (paste a link).
-const ALLOWED_PERMISSIONS = new Set(['notifications', 'clipboard-read', 'clipboard-sanitized-write']);
+const ALLOWED_PERMISSIONS = new Set(['notifications', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen']);
 function isAppOrigin(url) {
   try { return new URL(url).origin === new URL(APP_ORIGIN).origin; } catch { return false; }
 }
@@ -594,7 +596,9 @@ function registerProtocol() {
   if (!app.isPackaged) return;
   // The portable build runs from a temp copy: point Windows at the real .exe.
   const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
-  try { app.setAsDefaultProtocolClient(PROTOCOL, exe, []); } catch (err) { console.warn('[Protocol]', err.message); }
+  // "exe" -- "%1": after "--" Chromium reads no more switches, so nothing in
+  // the link can ever be taken as a command-line option (e.g. --gpu-launcher).
+  try { app.setAsDefaultProtocolClient(PROTOCOL, exe, ['--']); } catch (err) { console.warn('[Protocol]', err.message); }
 }
 pendingProtocolUrl = protocolUrlFrom(process.argv);
 
@@ -655,7 +659,9 @@ ipcMain.handle('desktop:importBackup', async (event) => {
 });
 // From a backup: only an existing folder on this computer is accepted.
 ipcMain.handle('desktop:setDownloadDir', (event, dir) => {
-  if (!isTrustedSender(event) || typeof dir !== 'string' || !path.isAbsolute(dir) || dir.length > 1000) return { ok: false };
+  // Only a local folder: a backup naming \\\\server\\share would make Windows
+  // hand the user's network credentials to that server when it's checked.
+  if (!isTrustedSender(event) || !isLocalFolderPath(dir)) return { ok: false };
   try {
     if (!fs.statSync(dir).isDirectory()) return { ok: false };
   } catch { return { ok: false }; }

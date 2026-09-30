@@ -125,3 +125,44 @@ test('tubegrab:// links: only the exact form, only supported sites', () => {
     assert.equal(protocolUrlFrom(argv), null, JSON.stringify(argv).slice(0, 80));
   }
 });
+
+// ---- Security review 12 ------------------------------------------------------
+test('share server: listens only on the advertised address; HEAD never opens the file; a cut download frees it', async () => {
+  const server = new ShareServer({ lanAddressFn: () => '127.0.0.1' });
+  const file = path.join(work, 'grande.bin');
+  fs.writeFileSync(file, Buffer.alloc(8 * 1024 * 1024, 1));
+  try {
+    const share = await server.share(file, 'grande.bin');
+    assert.equal(server.server.address().address, '127.0.0.1', 'not 0.0.0.0');
+    assert.equal(server.server.maxConnections, 32);
+    const head = await get(`${share.url}/file`, 'HEAD');
+    assert.equal(head.status, 200);
+    assert.equal(head.headers['content-length'], String(8 * 1024 * 1024));
+    assert.equal(head.body.length, 0);
+    // Start a download and hang up after the first bytes.
+    await new Promise((resolve) => {
+      const req = http.get(`${share.url}/file`, (res) => { res.once('data', () => { req.destroy(); setTimeout(resolve, 300); }); });
+      req.on('error', () => {});
+    });
+    fs.rmSync(file); // Windows refuses while a handle is still open
+    assert.equal(fs.existsSync(file), false);
+    assert.equal((await get(`${share.url}/file`)).status, 404, 'gone file → 404, no crash');
+  } finally {
+    server.stop();
+  }
+});
+
+test('share server: a different network clears the old links', async () => {
+  let address = '127.0.0.1';
+  const server = new ShareServer({ lanAddressFn: () => address });
+  try {
+    const a = await server.share(__filename, 'a');
+    address = '127.0.0.2';
+    const b = await server.share(__filename, 'b');
+    assert.equal(server.server.address().address, '127.0.0.2');
+    assert.equal(server.shares.has(a.token), false);
+    assert.equal(server.shares.has(b.token), true);
+  } finally {
+    server.stop();
+  }
+});

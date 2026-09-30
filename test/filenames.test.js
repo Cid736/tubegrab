@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
 const { safeSaveName } = require('../lib/filenames');
 const { outputBaseName } = require('../lib/convert');
 
@@ -47,4 +49,24 @@ test('Windows device names are never used as file names', () => {
   assert.equal(outputBaseName('concierto.wav'), 'concierto');
   assert.equal(outputBaseName('../../etc/passwd.mp4'), '....etcpasswd'.replace(/^[.\s]+/, ''));
   assert.equal(outputBaseName('...'), 'archivo');
+});
+
+test('isLocalFolderPath: local disks only, never network shares or device paths', () => {
+  const { isLocalFolderPath } = require('../lib/filenames');
+  const bs = String.fromCharCode(92);
+  for (const ok of [`C:${bs}Users${bs}ana${bs}Música`, 'D:/Descargas', `e:${bs}`]) assert.equal(isLocalFolderPath(ok, 'win32'), true, ok);
+  for (const bad of [`${bs}${bs}evil.example${bs}share`, '//evil.example/share', `${bs}${bs}?${bs}C:${bs}x`, `${bs}${bs}.${bs}PhysicalDrive0`,
+    `C:${bs}a${bs}${bs}server${bs}x`, 'C:x', 'relative', '', null, 42, `C:${bs}x${String.fromCharCode(0)}`, `C:${bs}${'a'.repeat(1001)}`]) {
+    assert.equal(isLocalFolderPath(bad, 'win32'), false, String(bad));
+  }
+  assert.equal(isLocalFolderPath('/home/ana', 'linux'), true);
+  assert.equal(isLocalFolderPath('//server/x', 'linux'), false);
+});
+
+test('desktop main process keeps its hardening (static checks)', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'electron-main.js'), 'utf8');
+  assert.match(main, /setAsDefaultProtocolClient\(PROTOCOL, exe, \['--'\]\)/, 'tubegrab:// registered as "exe" -- "%1"');
+  assert.match(main, /desktop:setDownloadDir[\s\S]{0,400}isLocalFolderPath\(dir\)/, 'backup folder must be local');
+  assert.match(main, /if \(!isLocalFolderPath\(settingsCache\.downloadDir\)\)/, 'stored folder re-checked on load');
+  assert.match(main, /nodeIntegration: false,\s*contextIsolation: true,\s*sandbox: true/);
 });

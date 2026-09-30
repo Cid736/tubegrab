@@ -1,6 +1,6 @@
 {
   "name": "tubegrab",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "main": "electron-main.js",
   "scripts": {
     "start": "node server.js",
@@ -65,7 +65,7 @@
     "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
-    "electron": "^44.4.5",
+    "electron": "^44.5.1",
     "electron-builder": "^26.15.3"
   }
 }

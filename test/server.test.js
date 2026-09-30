@@ -537,3 +537,20 @@ test('library API (desktop): list, play with Range, share with a QR; absent on t
     fs.rmSync(data, { recursive: true, force: true });
   }
 });
+
+test('a rejected upload leaves nothing on disk (a big video + a bad logo, three times)', async () => {
+  const uploads = path.join(os.tmpdir(), 'tubegrab-jobs', String(server.pid), 'uploads');
+  const count = () => { try { return fs.readdirSync(uploads).length; } catch { return 0; } };
+  const before = count();
+  const big = new Blob([Buffer.alloc(8 * 1024 * 1024, 1)], { type: 'video/mp4' });
+  for (let i = 0; i < 3; i++) {
+    const fd = new FormData();
+    fd.append('segments', '[[0,1]]');
+    fd.append('targetFormat', 'original');
+    fd.append('file', big, 'grande.mp4');
+    fd.append('logo', new Blob(['<svg/>'], { type: 'image/svg+xml' }), 'x.svg');
+    assert.equal((await api('/api/jobs/edit', { method: 'POST', body: fd })).status, 400);
+  }
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(count(), before);
+});

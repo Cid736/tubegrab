@@ -121,3 +121,11 @@ test('tag editor with real ffmpeg', { skip: !ffmpeg && 'ffmpeg not found', timeo
     assert.deepEqual(fs.readdirSync(dir).sort(), out.map((f) => path.basename(f)).sort(), 'no temp files');
   });
 });
+
+test('lyrics: an endless answer without a length is cut at the cap (never read whole)', async () => {
+  let sent = 0;
+  const endless = new ReadableStream({ pull(c) { sent += 65536; c.enqueue(new Uint8Array(65536)); } });
+  const fetchImpl = async () => new Response(endless, { status: 200 });
+  await assert.rejects(lyrics.findLyrics({ artist: 'A', title: 'B' }, { fetchImpl }), /demasiado grande/);
+  assert.ok(sent < 2 * 1024 * 1024, `${sent} bytes pulled`);
+});

@@ -14,6 +14,7 @@ const { Subscriptions, INTERVALS_H } = require('./lib/subscriptions');
 const { parseUsers, basicAuth } = require('./lib/auth');
 const tags = require('./lib/tags');
 const { Library, ShareServer } = require('./lib/library');
+const { isLocalFolderPath } = require('./lib/filenames');
 const qrcode = require('qrcode-generator');
 const { EventEmitter } = require('events');
 
@@ -627,10 +628,10 @@ app.post('/api/schedule', (req, res) => {
 function libraryRoot() {
   try {
     const settings = JSON.parse(fs.readFileSync(path.join(process.env.TUBEGRAB_DATA_DIR || '', 'settings.json'), 'utf8'));
-    if (typeof settings.downloadDir === 'string' && path.isAbsolute(settings.downloadDir)) return settings.downloadDir;
+    if (isLocalFolderPath(settings.downloadDir)) return settings.downloadDir;
   } catch { /* no settings yet: the default folder */ }
   const fallback = process.env.TUBEGRAB_DEFAULT_DOWNLOADS;
-  return fallback && path.isAbsolute(fallback) ? fallback : null;
+  return isLocalFolderPath(fallback) ? fallback : null;
 }
 const library = new Library({ rootFn: libraryRoot });
 const shares = new ShareServer();
