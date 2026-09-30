@@ -200,3 +200,24 @@ test('scheduled start: downloads wait, conversions don\'t; start now or at the t
   assert.ok(holds.includes(null));
   for (const bad of [NaN, Date.now() - 1000, 'mañana']) assert.equal(jm.setHold(bad), null, String(bad));
 });
+
+test('start now: skips the limit and a scheduled time, only for waiting jobs', async () => {
+  const jm = new JobManager({ root });
+  jm.setConcurrency('download', 1);
+  const busy = jm.create({ clientId: A, type: 'download', title: 'busy', detail: '', run: fakeRun({ ms: 400 }) });
+  const waiting = jm.create({ clientId: A, type: 'download', title: 'w', detail: '', run: fakeRun({ ms: 20 }) });
+  await until(() => busy.status === 'running');
+  assert.equal(waiting.status, 'queued');
+  assert.equal(jm.startNow(waiting), true);
+  await until(() => waiting.status === 'done', 2000);
+  assert.equal(busy.status, 'running', 'the other one is still going');
+  jm.setHold(Date.now() + 60_000);
+  const held = jm.create({ clientId: A, type: 'download', title: 'h', detail: '', run: fakeRun({ ms: 20 }) });
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(held.status, 'queued');
+  jm.startNow(held);
+  await until(() => held.status === 'done', 2000);
+  assert.equal(jm.startNow(held), false, 'finished jobs are not "waiting"');
+  jm.setHold(null);
+  await until(() => busy.status === 'done', 2000);
+});

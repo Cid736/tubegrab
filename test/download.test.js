@@ -40,7 +40,7 @@ test('parseDownloadOptions falls back to safe defaults for unknown values', () =
   assert.deepEqual(o, {
     mode: 'audio', audioFormat: 'mp3', audioBitrate: '192', quality: '1080', container: 'mp4',
     metadata: true, subtitles: false, subLangs: 'es,en', subMode: 'embed', sponsorblock: false, playlist: false,
-    music: false, lyrics: false, chapters: false, sectionStart: null, sectionEnd: null, rateLimit: null,
+    music: false, lyrics: false, nameTemplate: null, chapters: false, sectionStart: null, sectionEnd: null, rateLimit: null,
   });
   assert.equal(download.parseDownloadOptions({ mode: 'audio', lyrics: 'true' }).lyrics, false, 'only a real true');
   assert.equal(download.parseDownloadOptions({ mode: 'video', lyrics: true }).lyrics, false, 'audio only');
@@ -196,4 +196,17 @@ test('formatSizes: rough sizes per height and for audio; odd data ignored', () =
   assert.deepEqual(sizes, { audio: 2e6, video: { 360: 9e6, 720: 18750000, 1080: 6e7 } });
   assert.deepEqual(download.formatSizes({}), { audio: null, video: {} });
   assert.deepEqual(download.formatSizes({ formats: 'nope' }), { audio: null, video: {} });
+});
+
+test('file-name templates: our tags only, nothing that can leave the folder', () => {
+  assert.equal(download.nameTemplate('{artist} - {title}'), '%(artist,creator,uploader|Desconocido).80B - %(title).150B');
+  assert.equal(download.nameTemplate('{date} {title} [{id}]'), '%(upload_date>%Y-%m-%d|)s %(title).150B [%(id)s]');
+  for (const bad of ['', 'sin etiquetas', '{artist}', '{title}/x', '..\{title}', '{title}%(uploader)s', '{title} {evil}', '{channel}: {title}',
+    '{title}?', '{title}*', '{title}<>', `${'a'.repeat(120)}{title}`, '{title}\nx', '{Title}', '..{title}', '.{title}']) {
+    assert.equal(download.nameTemplate(bad), null, JSON.stringify(bad));
+  }
+  const opts = download.parseDownloadOptions({ mode: 'audio', nameTemplate: '{artist} - {title}' });
+  const args = download.buildArgs('https://www.youtube.com/watch?v=x', opts, env);
+  assert.match(args[args.indexOf('-o') + 1], /%\(artist,creator,uploader\|Desconocido\)\.80B - %\(title\)\.150B\.%\(ext\)s$/);
+  assert.equal(download.parseDownloadOptions({ nameTemplate: '{title}/../../x' }).nameTemplate, null);
 });

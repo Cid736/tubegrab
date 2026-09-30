@@ -449,3 +449,26 @@ Nuevo: tamaño estimado antes de descargar, «Reintentar lo que falló», se rea
 - **Bandeja:** «Descargar el enlace copiado» lee el portapapeles solo al pulsarlo y solo acepta enlaces de sitios compatibles (misma función que la detección de enlaces copiados); la descarga pasa por la API normal.
 - **Página del móvil:** formato y calidad solo de listas fijas (y la API los vuelve a validar); el idioma se elige entre dos textos fijos según `Accept-Language`, nunca se refleja nada de la petición (probado).
 - 182 pruebas.
+
+---
+
+## 2026-10-01 — Revisión 13 (v3.3.0): audio y vídeo a la vez, nombres, «Empezar ya», favoritos, orden, iniciar con Windows
+
+Nuevo: descargar audio y vídeo a la vez; plantillas de nombre de archivo; «Empezar ya» en la cola; favoritos y estrellas en la biblioteca (guardados por ruta en `library.json`); ordenar y agrupar por carpeta; iniciar con Windows en la bandeja (`--hidden`).
+
+### [MEDIUM] «Empezar ya» se saltaba los límites de un servidor compartido
+- **Riesgo:** en una instancia web pública, un visitante podía marcar sus 50 trabajos como «empezar ya» y arrancarlos todos a la vez, por encima del límite de descargas simultáneas que protege el servidor.
+- **Fix:** la ruta `/api/jobs/:id/now` solo existe en la app de escritorio (404 en web) y el botón solo aparece allí. Prueba añadida.
+
+### [LOW] Marcar favoritos/estrellas escribía en disco sin límite de peticiones
+- **Fix:** límite de peticiones como el resto de acciones (además de ser solo escritorio y exigir el id de cliente).
+
+### Plantillas de nombre (revisado sin hallazgos)
+- Solo etiquetas de una lista fija, traducidas a campos de yt-dlp en el servidor; el texto fijo solo admite letras, números, espacios y `- _ . , ( ) [ ] ! & ' + # @`; sin `/`, `\`, `:`, `%`, `{…}` desconocidas; no puede empezar por punto ni contener `..`; máx. 120 caracteres y debe incluir `{title}` o `{id}`. La preferencia también se valida en la página. El archivo resultante sigue comprobándose dentro de la carpeta del trabajo. Probado con yt-dlp real.
+
+### Otros (revisado sin hallazgos)
+- Favoritos: solo ids del último escaneo, `fav` booleano y estrellas 0–5; el archivo `library.json` se limpia al leerlo (probado manipulado) y tiene tope de 20 000 entradas.
+- Iniciar con Windows: se registra para el usuario con un argumento fijo (`--hidden`) y solo en la app empaquetada.
+- Audio y vídeo a la vez: dos peticiones normales a la API (mismos límites y validaciones).
+- Encontrado al probar en la app real: el texto del botón entraba en recursión infinita con «Audio y vídeo a la vez» en modo Audio (corregido), y el tamaño estimado no se recalculaba al cambiar de modo (corregido).
+- `npm audit` → 0 vulnerabilidades; dependencias en su última versión. 187 pruebas.

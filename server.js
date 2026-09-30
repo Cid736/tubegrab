@@ -636,13 +636,20 @@ function libraryRoot() {
   const fallback = process.env.TUBEGRAB_DEFAULT_DOWNLOADS;
   return isLocalFolderPath(fallback) ? fallback : null;
 }
-const library = new Library({ rootFn: libraryRoot });
+const library = new Library({ rootFn: libraryRoot, metaFile: IS_DESKTOP && process.env.TUBEGRAB_DATA_DIR ? path.join(process.env.TUBEGRAB_DATA_DIR, 'library.json') : null });
 const shares = new ShareServer();
 const requireDesktop = (req, res, next) => (IS_DESKTOP ? next() : res.status(404).json({ error: 'Solo en la app de escritorio.' }));
 
 app.get('/api/library', requireDesktop, requireClient, infoLimiter, (req, res) => {
   const { files, truncated } = library.scan();
   res.json({ files, truncated });
+});
+
+app.post('/api/library/meta', requireDesktop, requireClient, createLimiter, (req, res) => {
+  const body = req.body || {};
+  const meta = library.setMeta(body.id, { fav: body.fav, rating: body.rating });
+  if (!meta) return res.status(404).json({ error: 'No se encuentra el archivo.' });
+  return res.json(meta);
 });
 
 app.get('/api/library/file', requireDesktop, requireClient, (req, res) => {
@@ -764,6 +771,13 @@ app.post('/api/jobs/:id/pause', requireClient, requireJob, (req, res) => {
 
 app.post('/api/jobs/:id/resume', requireClient, requireJob, (req, res) => {
   if (!jobs.resume(req.job)) return res.status(409).json({ error: 'Este trabajo no está en pausa.' });
+  res.json({ ok: true });
+});
+
+// Desktop only: on a shared web instance it would let one visitor start every
+// job at once, past the limits that keep the server usable for everybody.
+app.post('/api/jobs/:id/now', requireDesktop, requireClient, requireJob, (req, res) => {
+  if (!jobs.startNow(req.job)) return res.status(409).json({ error: 'Ese trabajo ya no está esperando.' });
   res.json({ ok: true });
 });
 

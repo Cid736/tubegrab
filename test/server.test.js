@@ -594,3 +594,9 @@ test('control from the phone (desktop): pair through the QR link; links go throu
     fs.rmSync(data, { recursive: true, force: true });
   }
 });
+
+test('"start now" and library marks are desktop-only (a web visitor can\'t skip the shared limits)', async () => {
+  const id = 'a'.repeat(32);
+  assert.equal((await api(`/api/jobs/${id}/now`, json({}))).status, 404);
+  assert.equal((await api('/api/library/meta', json({ id, fav: true }))).status, 404);
+});

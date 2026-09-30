@@ -580,6 +580,22 @@ function setupDownloads() {
 
 const { normalizeMediaUrl } = require('./lib/download');
 
+// === Start with Windows (in the tray) ===
+// Registered for this user; the login launch passes --hidden so the window
+// stays in the tray (downloads, subscriptions and schedules keep working).
+const STARTED_HIDDEN = process.argv.includes('--hidden');
+const startupExe = () => process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+ipcMain.handle('desktop:getStartup', (event) => {
+  if (!isTrustedSender(event)) return null;
+  if (!app.isPackaged) return { available: false, enabled: false };
+  return { available: true, enabled: app.getLoginItemSettings({ path: startupExe(), args: ['--hidden'] }).openAtLogin };
+});
+ipcMain.handle('desktop:setStartup', (event, enabled) => {
+  if (!isTrustedSender(event) || typeof enabled !== 'boolean' || !app.isPackaged) return null;
+  app.setLoginItemSettings({ openAtLogin: enabled, path: startupExe(), args: ['--hidden'] });
+  return { available: true, enabled: app.getLoginItemSettings({ path: startupExe(), args: ['--hidden'] }).openAtLogin };
+});
+
 // === Browser extension: tubegrab://download?url=… opens the app with the link ===
 // Registered for this user only (HKCU). Any web page could open such a link
 // (the browser asks first), so all it can ever do is fill in the download
@@ -1081,6 +1097,8 @@ function createWindow() {
   // 1366x768 laptop's work area forced users to maximize the window.
   const { width: workW, height: workH } = screen.getPrimaryDisplay().workAreaSize;
   mainWindow = new BrowserWindow({
+    // Started with Windows: stay in the tray until the user opens it.
+    show: !STARTED_HIDDEN,
     width: Math.min(900, Math.round(workW * 0.9)),
     height: Math.min(820, Math.round(workH * 0.92)),
     minWidth: 540,

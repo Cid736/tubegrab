@@ -166,3 +166,21 @@ test('share server: a different network clears the old links', async () => {
     server.stop();
   }
 });
+
+test('favourites and stars: kept by path, survive a restart, only sane values', () => {
+  const { root } = makeTree();
+  const metaFile = path.join(work, `meta-${Date.now()}.json`);
+  const lib = new Library({ rootFn: () => root, metaFile });
+  const { files } = lib.scan();
+  const song = files.find((f) => f.name === 'canción.mp3');
+  assert.deepEqual([song.fav, song.rating], [false, 0]);
+  assert.deepEqual(lib.setMeta(song.id, { fav: true, rating: 4 }), { fav: true, rating: 4 });
+  assert.deepEqual(lib.setMeta(song.id, { rating: 9, fav: 'yes' }), { fav: true, rating: 4 }, 'odd values ignored');
+  assert.equal(lib.setMeta('0'.repeat(32), { fav: true }), null, 'unknown id');
+  assert.equal(lib.setMeta('../x', { fav: true }), null);
+  const again = new Library({ rootFn: () => root, metaFile }).scan().files.find((f) => f.name === 'canción.mp3');
+  assert.deepEqual([again.fav, again.rating], [true, 4], 'after a restart (new ids, same file)');
+  fs.writeFileSync(metaFile, JSON.stringify({ 'canción.mp3': { fav: 'x', rating: 99 }, '<b>': 5 }));
+  const clean = new Library({ rootFn: () => root, metaFile }).scan().files.find((f) => f.name === 'canción.mp3');
+  assert.deepEqual([clean.fav, clean.rating], [false, 0], 'a tampered file is cleaned');
+});

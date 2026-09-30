@@ -43,4 +43,6 @@ contextBridge.exposeInMainWorld('desktop', {
   jobFinished: (info) => ipcRenderer.send('desktop:jobFinished', info),
   onQuickDownload: (cb) => ipcRenderer.on('desktop:quickDownload', (_e, info) => cb(info)),
   onTrayAction: (cb) => ipcRenderer.on('desktop:trayAction', (_e, info) => cb(info)),
+  getStartup: () => ipcRenderer.invoke('desktop:getStartup'),
+  setStartup: (enabled) => ipcRenderer.invoke('desktop:setStartup', enabled),
 });

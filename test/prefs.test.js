@@ -119,3 +119,11 @@ test('accessibility: high contrast and fewer animations, booleans only', () => {
   assert.equal(e.attrs['data-contrast'], 'normal');
   assert.equal(e.attrs['data-motion'], 'normal');
 });
+
+test('file-name template pref: tags and safe characters only', () => {
+  const ok = boot({ local: { tubegrab_prefs: JSON.stringify({ nameTemplate: '{artist} - {title}' }) } });
+  assert.equal(ok.prefs.get().nameTemplate, '{artist} - {title}');
+  for (const evil of ['{title}/../x', '{title}%(uploader)s', '<img src=x>{title}', 'no tags', 'x'.repeat(130)]) {
+    assert.equal(boot({ local: { tubegrab_prefs: JSON.stringify({ nameTemplate: evil }) } }).prefs.get().nameTemplate, '', evil);
+  }
+});

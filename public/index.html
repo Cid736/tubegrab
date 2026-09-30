@@ -288,6 +288,7 @@
             <label class="row switch"><span class="row-label">Portada y metadatos</span><input type="checkbox" id="optMetadata" checked><span class="switch-ui"></span></label>
             <label class="row switch"><span class="row-label">Playlist completa</span><input type="checkbox" id="optPlaylist"><span class="switch-ui"></span></label>
             <label class="row switch"><span class="row-label">Quitar patrocinios <small>SponsorBlock</small></span><input type="checkbox" id="optSponsorblock"><span class="switch-ui"></span></label>
+            <label class="row switch"><span class="row-label">Audio y vídeo a la vez <small>descarga los dos, cada uno con su formato</small></span><input type="checkbox" id="optBoth"><span class="switch-ui"></span></label>
           </div>
 
           <details class="more" id="dlMoreOptions">
@@ -956,7 +957,15 @@
               <button class="kind-btn active" data-kind="" type="button">Todo</button>
               <button class="kind-btn" data-kind="audio" type="button">Música</button>
               <button class="kind-btn" data-kind="video" type="button">Vídeos</button>
+              <button class="kind-btn" data-kind="fav" type="button">Favoritos</button>
             </div>
+            <select class="lib-select" id="libSort" aria-label="Ordenar">
+              <option value="recent">Más recientes</option>
+              <option value="name">Nombre</option>
+              <option value="rating">Valoración</option>
+              <option value="size">Tamaño</option>
+            </select>
+            <label class="lib-group"><input type="checkbox" id="libGroup"> Agrupar por carpeta</label>
             <button class="link-btn" id="libRefresh" type="button">Actualizar</button>
           </div>
           <p class="hint lib-count" id="libCount"></p>
@@ -1065,6 +1074,28 @@
                 <button class="btn" id="btnChooseFolder" type="button">Cambiar…</button>
               </div>
             </div>
+            <label class="row"><span class="row-label">Nombre de los archivos</span>
+              <select id="nameTemplate">
+                <option value="">Título</option>
+                <option value="{artist} - {title}">Artista - Título</option>
+                <option value="{channel} - {title}">Canal - Título</option>
+                <option value="{date} - {title}">Fecha - Título</option>
+                <option value="{title} [{id}]">Título [id]</option>
+                <option value="custom">Personalizado…</option>
+              </select>
+            </label>
+            <div class="row name-custom hidden" id="nameCustomRow">
+              <div class="row-text">
+                <input class="text-input" id="nameCustom" maxlength="120" autocomplete="off" spellcheck="false" placeholder="{artist} - {title}" aria-label="Plantilla del nombre">
+                <div class="name-tokens" id="nameTokens">
+                  <button type="button" data-token="{title}">título</button><button type="button" data-token="{artist}">artista</button>
+                  <button type="button" data-token="{channel}">canal</button><button type="button" data-token="{album}">álbum</button>
+                  <button type="button" data-token="{date}">fecha</button><button type="button" data-token="{year}">año</button>
+                  <button type="button" data-token="{track}">pista</button><button type="button" data-token="{id}">id</button>
+                </div>
+              </div>
+            </div>
+            <p class="footnote name-example" id="nameExample"></p>
             <label class="row"><span class="row-label">Organizar en carpetas <small>las descargas, por artista o canal</small></span>
               <select id="optOrganize">
                 <option value="none">No</option>
@@ -1183,6 +1214,7 @@
 
           <div class="section-header desktop-only"><h2>Windows</h2></div>
           <div class="group desktop-only">
+            <label class="row switch hidden" id="startupRow"><span class="row-label">Iniciar con Windows <small>en la bandeja, para que las suscripciones y lo programado sigan</small></span><input type="checkbox" id="optStartup"><span class="switch-ui"></span></label>
             <label class="row switch"><span class="row-label">Seguir en la bandeja al cerrar <small>las descargas y suscripciones continúan</small></span><input type="checkbox" id="optCloseToTray"><span class="switch-ui"></span></label>
             <label class="row switch"><span class="row-label">Detectar enlaces copiados <small>te ofrece descargarlos con un clic</small></span><input type="checkbox" id="optClipboard"><span class="switch-ui"></span></label>
           </div>

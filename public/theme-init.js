@@ -10,10 +10,12 @@
   var MAX_WALLPAPER = 3 * 1024 * 1024;
   var DEFAULTS = {
     uiDefault: 'windows', lang: 'es', rateLimit: '', theme: 'auto', accent: 'blue', wall: 'aurora', glass: 'tinted', size: 'medium',
-    remember: true, notify: true, sound: false, onboarded: false, accentColor: '#0a84ff', highContrast: false, reduceMotion: false,
+    remember: true, notify: true, sound: false, onboarded: false, accentColor: '#0a84ff', highContrast: false, reduceMotion: false, nameTemplate: '',
   };
   // "#rrggbb" only: it ends up in a CSS variable.
   var HEX_RE = /^#[0-9a-fA-F]{6}$/;
+  // File-name template (the server checks it again): tags and safe characters only.
+  var NAME_RE = /^[\p{L}\p{N} _\-.,()[\]!&'+#@{}]*$/u;
   // Every stored value is checked against a fixed list: prefs end up in
   // attributes and CSS, so nothing arbitrary from storage is ever applied.
   var ALLOWED = {
@@ -32,6 +34,7 @@
     Object.keys(DEFAULTS).forEach(function (k) {
       var v = raw ? raw[k] : undefined;
       var ok = k === 'accentColor' ? typeof v === 'string' && HEX_RE.test(v)
+        : k === 'nameTemplate' ? typeof v === 'string' && v.length <= 120 && NAME_RE.test(v) && (v === '' || /\{(title|id)\}/.test(v))
         : ALLOWED[k] ? ALLOWED[k].indexOf(v) !== -1 : typeof v === 'boolean';
       out[k] = ok ? v : DEFAULTS[k];
     });

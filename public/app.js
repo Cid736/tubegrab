@@ -18,6 +18,7 @@ const optSubtitles = $('optSubtitles');
 const optSponsorblock = $('optSponsorblock');
 const optMusic = $('optMusic');
 const optLyrics = $('optLyrics');
+const optBoth = $('optBoth');
 const optChapters = $('optChapters');
 const subLangs = $('subLangs');
 const subMode = $('subMode');
@@ -311,6 +312,7 @@ function renderPrefs() {
     $(id).querySelectorAll('[data-value]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === p[key])));
   }
   // Own colour / own picture (no data-value: they open a picker first).
+  renderNameTemplate();
   $('prefContrast').checked = p.highContrast;
   $('prefMotion').checked = p.reduceMotion;
   $('accentCustom').setAttribute('aria-checked', String(p.accent === 'custom'));
@@ -367,6 +369,63 @@ $('prefSound').addEventListener('change', (e) => {
 });
 $('prefRateLimit').addEventListener('change', (e) => prefsApi.set({ rateLimit: e.target.value }));
 $('btnResetPrefs').addEventListener('click', () => { prefsApi.resetAppearance(); renderPrefs(); });
+
+// === File names: presets or a template of your own ===
+const NAME_SAMPLE = { title: 'Mi canción', artist: 'Artista', channel: 'Canal', album: 'Álbum', date: '2026-10-01', year: '2026', track: '3', id: 'dQw4w9WgXcQ' };
+const NAME_OK = /^[\p{L}\p{N} _\-.,()[\]!&'+#@{}]*$/u;
+function nameTemplateValid(tpl) {
+  return tpl.length <= 120 && NAME_OK.test(tpl) && /\{(title|id)\}/.test(tpl)
+    && [...tpl.matchAll(/\{([a-z]+)\}/g)].every((m) => Object.prototype.hasOwnProperty.call(NAME_SAMPLE, m[1]))
+    && !/[{}]/.test(tpl.replace(/\{[a-z]+\}/g, ''));
+}
+function renderNameTemplate() {
+  const tpl = prefsApi.get().nameTemplate;
+  const preset = [...$('nameTemplate').options].some((o) => o.value === tpl && o.value !== 'custom') ? tpl : 'custom';
+  if (document.activeElement !== $('nameTemplate')) $('nameTemplate').value = preset;
+  const custom = $('nameTemplate').value === 'custom';
+  $('nameCustomRow').classList.toggle('hidden', !custom);
+  if (custom && document.activeElement !== $('nameCustom')) $('nameCustom').value = tpl;
+  const shown = custom ? $('nameCustom').value.trim() : $('nameTemplate').value;
+  const valid = !shown || nameTemplateValid(shown);
+  $('nameCustom').classList.toggle('invalid', custom && !valid);
+  $('nameExample').textContent = valid
+    ? t('Ejemplo: {name}.mp3', { name: (shown || '{title}').replace(/\{([a-z]+)\}/g, (_, k) => NAME_SAMPLE[k]) })
+    : t('Usa {title} o {id}, y solo letras, números, espacios y - _ . , ( ) [ ] ! & \' + # @');
+}
+$('nameTemplate').addEventListener('change', () => {
+  const v = $('nameTemplate').value;
+  if (v !== 'custom') prefsApi.set({ nameTemplate: v });
+  else if (!$('nameCustom').value.trim()) $('nameCustom').value = prefsApi.get().nameTemplate || '{artist} - {title}';
+  renderNameTemplate();
+  if (v === 'custom') $('nameCustom').focus();
+});
+$('nameCustom').addEventListener('input', () => {
+  const v = $('nameCustom').value.trim();
+  if (nameTemplateValid(v)) prefsApi.set({ nameTemplate: v });
+  renderNameTemplate();
+});
+$('nameTokens').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-token]');
+  if (!b) return;
+  const input = $('nameCustom');
+  const at = input.selectionStart ?? input.value.length;
+  input.value = `${input.value.slice(0, at)}${b.dataset.token}${input.value.slice(input.selectionEnd ?? at)}`;
+  input.dispatchEvent(new Event('input'));
+  input.focus();
+});
+
+// === Start with Windows (desktop) ===
+if (desktopApi && desktopApi.getStartup) {
+  desktopApi.getStartup().then((s) => {
+    if (!s || !s.available) return;
+    $('startupRow').classList.remove('hidden');
+    $('optStartup').checked = s.enabled;
+  });
+  $('optStartup').addEventListener('change', async (e) => {
+    const s = await desktopApi.setStartup(e.target.checked);
+    if (s) e.target.checked = s.enabled;
+  });
+}
 
 // === Accessibility: high contrast, fewer animations ===
 $('prefContrast').addEventListener('change', (e) => { prefsApi.set({ highContrast: e.target.checked }); renderPrefs(); });
@@ -513,7 +572,7 @@ function playDoneSound() {
 
 // Remember the last download options (restored on next launch).
 const REMEMBERED_SELECTS = { audioFormat, audioBitrate, videoQuality, videoContainer, subLangs, subMode };
-const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, lyrics: optLyrics };
+const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, lyrics: optLyrics, both: optBoth };
 
 function saveLastOptions() {
   if (!prefsApi.get().remember) return;
@@ -654,6 +713,7 @@ document.querySelector('.sidebar').addEventListener('click', (e) => {
 
 [audioFormat, audioBitrate, videoQuality, videoContainer].forEach((el) => el.addEventListener('change', () => refreshEstimate()));
 optPlaylist.addEventListener('change', () => refreshEstimate());
+optBoth.addEventListener('change', () => { saveLastOptions(); refreshButton(); refreshEstimate(); });
 
 function setMode(mode) {
   if (mode !== 'convert') {
@@ -713,8 +773,10 @@ function refreshButton() {
 }
 
 /** "MP3 192 kbps" / "MP4 1080p" for the current download options. */
-function describeDownloadFormat(short = false) {
-  if (downloadMode === 'audio') {
+function describeDownloadFormat(short = false, mode = downloadMode, combined = true) {
+  // "Audio and video at once": "MP3 + MP4".
+  if (combined && optBoth.checked) return `${describeDownloadFormat(true, 'audio', false)} + ${describeDownloadFormat(true, 'video', false)}`;
+  if (mode === 'audio') {
     const label = t(AUDIO_DL_LABELS[audioFormat.value]);
     return short || LOSSLESS_DL.has(audioFormat.value) ? label : `${label} ${audioBitrate.value} kbps`;
   }
@@ -729,9 +791,11 @@ audioFormat.addEventListener('change', () => {
 videoContainer.addEventListener('change', refreshButton);
 
 /** Options sent with every download (links, search results, playlist picks, subscriptions). */
-function downloadOptions() {
+function downloadOptions(mode = downloadMode) {
+  const tpl = prefsApi.get().nameTemplate;
   return {
-    mode: downloadMode,
+    mode,
+    nameTemplate: tpl || undefined,
     audioFormat: audioFormat.value,
     audioBitrate: audioBitrate.value,
     quality: videoQuality.value,
@@ -876,7 +940,10 @@ $('btnPlaylistDownload').addEventListener('click', async () => {
 async function queueItems(items, statusEl) {
   const opts = downloadOptions();
   try {
-    const data = await postJson('/api/jobs/download', { ...opts, items: items.map((i) => ({ url: i.url, title: i.title })) });
+    const payload = { items: items.map((i) => ({ url: i.url, title: i.title })) };
+    let created = (await postJson('/api/jobs/download', { ...opts, ...payload })).created;
+    if (optBoth.checked) created += (await postJson('/api/jobs/download', { ...downloadOptions(downloadMode === 'audio' ? 'video' : 'audio'), ...payload })).created;
+    const data = { created };
     const msg = data.created === 1 ? t('Añadido a la cola') : t('{n} añadidos a la cola', { n: data.created });
     statusEl.textContent = msg;
     statusEl.className = `${statusEl.className.replace(/\s*(success|error)/g, '')} success`;
@@ -1024,17 +1091,22 @@ function refreshEstimate() {
     const s = parseTime(dlStart.value) || 0;
     const e = dlEnd.value.trim() ? parseTime(dlEnd.value) : secs;
     const part = Number.isFinite(s) && Number.isFinite(e) && e > s ? Math.min(1, (e - s) / secs) : 1;
-    if (downloadMode === 'audio') {
+    const audioBytes = () => {
       const kbps = { flac: 900, wav: 1411 }[audioFormat.value];
-      bytes = audioFormat.value === 'best' ? previewSizes.audio
-        : (kbps || Number(audioBitrate.value) || 192) * secs * 125;
-    } else {
+      return audioFormat.value === 'best' ? previewSizes.audio : (kbps || Number(audioBitrate.value) || 192) * secs * 125;
+    };
+    const videoBytes = () => {
       const heights = Object.keys(previewSizes.video || {}).map(Number).sort((a, b) => a - b);
-      if (heights.length) {
-        const q = videoQuality.value === 'best' ? Infinity : Number(videoQuality.value);
-        const h = [...heights].reverse().find((x) => x <= q) || heights[0];
-        bytes = previewSizes.video[h] + (previewSizes.audio || 0);
-      }
+      if (!heights.length) return null;
+      const q = videoQuality.value === 'best' ? Infinity : Number(videoQuality.value);
+      const h = [...heights].reverse().find((x) => x <= q) || heights[0];
+      return previewSizes.video[h] + (previewSizes.audio || 0);
+    };
+    if (optBoth.checked) {
+      const v = videoBytes();
+      bytes = v ? v + (audioBytes() || 0) : null;
+    } else {
+      bytes = downloadMode === 'audio' ? audioBytes() : videoBytes();
     }
     if (bytes) bytes *= part;
   }
@@ -1427,14 +1499,19 @@ async function submitDownload() {
   }
   setBusy(true, optPlaylist.checked ? t('Leyendo playlist…') : t('Añadiendo…'));
   try {
-    const data = await postJson('/api/jobs/download', {
-      ...downloadOptions(),
+    const extra = {
       urls,
       playlist: optPlaylist.checked,
       chapters: optChapters.checked,
       sectionStart: dlStart.value.trim(),
       sectionEnd: dlEnd.value.trim(),
-    });
+    };
+    const data = await postJson('/api/jobs/download', { ...downloadOptions(), ...extra });
+    // "Audio and video at once": the other kind too, with its own format.
+    if (optBoth.checked) {
+      const second = await postJson('/api/jobs/download', { ...downloadOptions(downloadMode === 'audio' ? 'video' : 'audio'), ...extra });
+      data.created += second.created;
+    }
     const skipped = data.rejected && data.rejected.length ? ` · ${t('{n} enlace(s) no soportado(s)', { n: data.rejected.length })}` : '';
     showStatus(`${data.created === 1 ? t('Añadido a la cola') : t('{n} añadidos a la cola', { n: data.created })}${skipped}`, 'success');
     urlInput.value = '';
@@ -2958,6 +3035,7 @@ const ICONS = {
   up: svg('<path d="M12 19V5m0 0l-6 6m6-6l6 6"/>'),
   down: svg('<path d="M12 5v14m0 0l-6-6m6 6l6-6"/>'),
   top: svg('<path d="M5 4h14"/><path d="M12 20V8m0 0l-5 5m5-5l5 5"/>'),
+  now: svg('<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>'),
 };
 
 function iconButton(icon, label, onClick, cls = '') {
@@ -3011,6 +3089,7 @@ function renderRow(job) {
   actions.innerHTML = '';
   const add = (...args) => actions.appendChild(iconButton(...args));
   if (job.status === 'queued' || job.status === 'paused') {
+    if (desktopApi) add('now', t('Empezar ya, sin esperar turno'), () => jobAction(job, 'now'));
     add('top', t('Que sea lo siguiente'), () => jobAction(job, 'move', { where: 'top' }), 'queue-only-btn');
     add('up', t('Subir en la cola'), () => jobAction(job, 'move', { where: 'up' }), 'queue-only-btn');
     add('down', t('Bajar en la cola'), () => jobAction(job, 'move', { where: 'down' }), 'queue-only-btn');
@@ -3111,7 +3190,54 @@ const library = (() => {
 
   function visible() {
     const q = $('libSearch').value.trim().toLowerCase();
-    return files.filter((f) => (!kind || f.kind === kind) && (!q || `${f.folder} ${f.name}`.toLowerCase().includes(q)));
+    const list = files.filter((f) => (!kind || (kind === 'fav' ? f.fav : f.kind === kind)) && (!q || `${f.folder} ${f.name}`.toLowerCase().includes(q)));
+    const sort = $('libSort').value;
+    const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    if (sort === 'name') list.sort(byName);
+    else if (sort === 'rating') list.sort((a, b) => b.rating - a.rating || Number(b.fav) - Number(a.fav) || b.mtime - a.mtime);
+    else if (sort === 'size') list.sort((a, b) => b.size - a.size);
+    else list.sort((a, b) => b.mtime - a.mtime);
+    // Grouped: folders together (keeping the order inside each).
+    if ($('libGroup').checked) list.sort((a, b) => a.folder.localeCompare(b.folder, undefined, { sensitivity: 'base' }));
+    return list;
+  }
+  async function setMeta(f, patch) {
+    try {
+      const m = await postJson('/api/library/meta', { id: f.id, ...patch });
+      f.fav = m.fav;
+      f.rating = m.rating;
+      render();
+    } catch (err) { showToast(err.message); }
+  }
+  function metaControls(f) {
+    const box = document.createElement('div');
+    box.className = 'lib-meta';
+    const heart = document.createElement('button');
+    heart.type = 'button';
+    heart.className = `lib-fav${f.fav ? ' on' : ''}`;
+    heart.textContent = f.fav ? '♥' : '♡';
+    heart.title = f.fav ? t('Quitar de favoritos') : t('Añadir a favoritos');
+    heart.setAttribute('aria-label', heart.title);
+    heart.setAttribute('aria-pressed', String(f.fav));
+    heart.addEventListener('click', () => setMeta(f, { fav: !f.fav }));
+    const stars = document.createElement('span');
+    stars.className = 'lib-stars';
+    stars.setAttribute('role', 'radiogroup');
+    stars.setAttribute('aria-label', t('Valoración'));
+    for (let n = 1; n <= 5; n++) {
+      const s = document.createElement('button');
+      s.type = 'button';
+      s.className = n <= f.rating ? 'on' : '';
+      s.textContent = '★';
+      s.title = t('{n} de 5', { n });
+      s.setAttribute('aria-label', s.title);
+      s.setAttribute('role', 'radio');
+      s.setAttribute('aria-checked', String(n === f.rating));
+      s.addEventListener('click', () => setMeta(f, { rating: f.rating === n ? 0 : n }));
+      stars.appendChild(s);
+    }
+    box.append(heart, stars);
+    return box;
   }
 
   function render() {
@@ -3124,7 +3250,15 @@ const library = (() => {
     $('libCount').textContent = !loaded ? t('Cargando…')
       : shown.length > MAX_ROWS ? t('{n} archivos · se muestran {m}; busca para encontrar el resto', { n: shown.length, m: MAX_ROWS })
         : t('{n} archivos', { n: shown.length });
+    let lastFolder = null;
     for (const f of shown.slice(0, MAX_ROWS)) {
+      if ($('libGroup').checked && f.folder !== lastFolder) {
+        lastFolder = f.folder;
+        const h = document.createElement('li');
+        h.className = 'lib-group-head';
+        h.textContent = f.folder || t('Carpeta principal');
+        list.appendChild(h);
+      }
       const li = document.createElement('li');
       li.className = `lib-item${player.current() && player.current().id === f.id ? ' playing' : ''}`;
       const main = document.createElement('button');
@@ -3141,7 +3275,7 @@ const library = (() => {
         iconButton('phone', t('Enviar al móvil'), () => shareToPhone(f)),
         iconButton('reveal', t('Mostrar en la carpeta'), () => desktopApi.showLibraryFile(f.folder ? `${f.folder}/${f.name}` : f.name)),
       );
-      li.append(main, actions);
+      li.append(main, metaControls(f), actions);
       list.appendChild(li);
     }
   }
@@ -3161,6 +3295,13 @@ const library = (() => {
   }
 
   $('libSearch').addEventListener('input', render);
+  $('libSort').addEventListener('change', () => { try { localStorage.setItem('tubegrab_libsort', $('libSort').value); } catch { /* ignore */ } render(); });
+  $('libGroup').addEventListener('change', () => { try { localStorage.setItem('tubegrab_libgroup', $('libGroup').checked ? '1' : ''); } catch { /* ignore */ } render(); });
+  try {
+    const sort = localStorage.getItem('tubegrab_libsort');
+    if ([...$('libSort').options].some((o) => o.value === sort)) $('libSort').value = sort;
+    $('libGroup').checked = localStorage.getItem('tubegrab_libgroup') === '1';
+  } catch { /* storage unavailable */ }
   $('libRefresh').addEventListener('click', load);
   $('libFilter').addEventListener('click', (e) => {
     const b = e.target.closest('.kind-btn');

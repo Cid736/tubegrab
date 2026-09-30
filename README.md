@@ -25,6 +25,10 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - **Lyrics** (optional): found on LRCLIB (free, no account), embedded in the song, plus a synced **.lrc** file next to it when available
 - **Folders by artist / album** (desktop): downloads can go into `Artist/Album` automatically
 - **Scheduled downloads** (desktop): the queue waits until a time you choose (e.g. at night); conversions still run
+- **Audio and video at once**: one click downloads both, each in its own format
+- **Your own file names**: presets ("Artist - Title", "Date - Title"…) or a template with `{title}` `{artist}` `{channel}` `{album}` `{date}` `{year}` `{track}` `{id}`
+- **Start now** (desktop): a queued download starts at once, without waiting for its turn
+- **Start with Windows** (desktop): in the tray, so subscriptions and scheduled downloads keep working
 - Cover art, metadata and chapters; subtitles in 9 languages, embedded or as a separate **.srt**; SponsorBlock
 
 **Convert**
@@ -44,7 +48,7 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 **Queue, history and desktop app**
 - Real progress, speed and time left; **pause/resume** downloads (they continue where they stopped), **reorder** what's waiting, cancel, retry (temporary errors retry by themselves once); downloads/conversions at once and a **speed limit** are configurable
 - **History with search**: open the file, show it in its folder, or download it again with the same options
-- **Library and player** (desktop): everything in your download folder, searchable, with a player bar that keeps playing across pages (shuffle, repeat, media keys, videos too)
+- **Library and player** (desktop): everything in your download folder, searchable, with favourites, star ratings, sorting and folder groups, with a player bar that keeps playing across pages (shuffle, repeat, media keys, videos too)
 - **Send to phone**: a QR code with a link on your WiFi that expires in 30 minutes — no cables, no cloud
 - **Browser extension** (Chrome, Edge, Brave, Opera): a button on YouTube and "Download with TubeGrab" in the right-click menu open the link in the app (see `extension/README.md`)
 - **Backup**: export settings, history and subscriptions to a file and import them on another PC
@@ -171,7 +175,9 @@ MIT. Privacy, terms of use and third-party components: [LEGAL.md](LEGAL.md#engli
 
 Security reviews are AI-assisted (Claude, Anthropic) and run on significant changes to check for injection risks, insecure defaults and dependency vulnerabilities. Findings are tracked in [`BUGLOG.md`](BUGLOG.md).
 
-**Last review:** 2026-09-30 (review #12, v3.0.1) — whole codebase, attack hypotheses tested live. Fixed: a tampered backup could point the download folder at a network share (Windows would send the user's NTLM hash to it) — only local disk folders are accepted now; `tubegrab://` is registered as `"exe" -- "%1"` so nothing after the link can become a Chromium switch; phone sharing listens only on the advertised WiFi address and never leaves files open; lyrics responses are capped while streaming; Electron 44.5.1. 0 known vulnerabilities.
+**Last review:** 2026-10-01 (review #13, v3.3.0) — v3.1–v3.3 reviewed with attack tests: phone control only on the WiFi address, for a phone paired by QR, with Host/Origin checks; file-name templates only from our own tags (no `/`, `..`, `%(`…); "start now" desktop-only so nobody can bypass a shared server's limits; tampered prefs (colour, background, template) never reach the page. Found and fixed during testing: an infinite loop in the download button text and a stale size estimate. 0 known vulnerabilities; all dependencies current.
+
+**Review #12:** 2026-09-30 (v3.0.1) — whole codebase, attack hypotheses tested live. Fixed: a tampered backup could point the download folder at a network share (Windows would send the user's NTLM hash to it) — only local disk folders are accepted now; `tubegrab://` is registered as `"exe" -- "%1"` so nothing after the link can become a Chromium switch; phone sharing listens only on the advertised WiFi address and never leaves files open; lyrics responses are capped while streaming; Electron 44.5.1. 0 known vulnerabilities.
 
 **Review of v2.9.0 → v3.0.0:** 2026-09-30 — every new feature was reviewed with attack tests: editor titles are drawn from files and never parsed as filter syntax, logos and covers accept only small PNG/JPG/WEBP pictures, lyrics come only from lrclib.net with size/time caps and cleaned output, library files are served only from the download folder by random id (real path checked), phone sharing serves only the shared file on the local network behind an expiring token, `tubegrab://` links can only prefill a supported link, and backups are validated field by field. Details per version in BUGLOG.md.
 
@@ -204,6 +210,10 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - **Letras** (opcional): las busca en LRCLIB (gratis, sin cuenta), las incrusta en la canción y, si están sincronizadas, guarda también un **.lrc** al lado
 - **Carpetas por artista / álbum** (escritorio): las descargas pueden ir solas a `Artista/Álbum`
 - **Descargas programadas** (escritorio): la cola espera hasta la hora que elijas (por ejemplo, de noche); las conversiones siguen
+- **Audio y vídeo a la vez**: un clic descarga los dos, cada uno en su formato
+- **Nombres de archivo a tu gusto**: plantillas listas («Artista - Título», «Fecha - Título»…) o la tuya con `{title}` `{artist}` `{channel}` `{album}` `{date}` `{year}` `{track}` `{id}`
+- **Empezar ya** (escritorio): una descarga en cola arranca al momento, sin esperar turno
+- **Iniciar con Windows** (escritorio): en la bandeja, para que las suscripciones y lo programado sigan funcionando
 - Portada, metadatos y capítulos; subtítulos en 9 idiomas, dentro del vídeo o como **.srt** aparte; SponsorBlock
 
 **Convertir**
@@ -223,7 +233,7 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 **Cola, historial y app de escritorio**
 - Progreso real, velocidad y tiempo restante; **pausar/reanudar** descargas (siguen donde se quedaron), **reordenar** lo que espera, cancelar, reintentar (los errores temporales se reintentan solos una vez); descargas/conversiones a la vez y **límite de velocidad** configurables
 - **Historial con búsqueda**: abrir el archivo, mostrarlo en su carpeta o volver a descargarlo con las mismas opciones
-- **Biblioteca y reproductor** (escritorio): todo lo de tu carpeta de descargas, con búsqueda, y una barra de reproducción que sigue sonando al cambiar de página (aleatorio, repetir, teclas multimedia, también vídeos)
+- **Biblioteca y reproductor** (escritorio): todo lo de tu carpeta de descargas, con búsqueda, favoritos, estrellas, orden y grupos por carpeta, y una barra de reproducción que sigue sonando al cambiar de página (aleatorio, repetir, teclas multimedia, también vídeos)
 - **Enviar al móvil**: un código QR con un enlace en tu WiFi que caduca en 30 minutos, sin cables ni nube
 - **Extensión del navegador** (Chrome, Edge, Brave, Opera): un botón en YouTube y «Descargar con TubeGrab» en el menú del botón derecho abren el enlace en la app (ver `extension/README.md`)
 - **Copia de seguridad**: exporta ajustes, historial y suscripciones a un archivo e impórtalos en otro PC
@@ -306,7 +316,9 @@ Para vídeos con restricciones, añade un archivo `cookies.txt` (formato Netscap
 
 Las revisiones de seguridad son asistidas por IA (Claude, Anthropic) y se ejecutan en cambios significativos para detectar riesgos de inyección, configuraciones inseguras y vulnerabilidades en dependencias. Los hallazgos se registran en [`BUGLOG.md`](BUGLOG.md).
 
-**Última revisión:** 2026-09-30 (revisión 12, v3.0.1) — todo el código, con hipótesis de ataque probadas en real. Corregido: una copia de seguridad manipulada podía apuntar la carpeta de descargas a una carpeta de red (Windows enviaría el hash NTLM del usuario a ese servidor); ahora solo se aceptan carpetas de un disco local; `tubegrab://` se registra como `"exe" -- "%1"` para que nada detrás del enlace pueda ser una opción de Chromium; enviar al móvil solo escucha en la dirección de la WiFi que anuncia y nunca deja archivos abiertos; las respuestas de letras tienen tope mientras llegan; Electron 44.5.1. 0 vulnerabilidades conocidas.
+**Última revisión:** 2026-10-01 (revisión 13, v3.3.0) — v3.1–v3.3 revisadas con pruebas de ataque: el control desde el móvil solo en la dirección de la WiFi, para un móvil emparejado por QR, comprobando Host y Origin; las plantillas de nombre solo con nuestras etiquetas (sin `/`, `..`, `%(`…); «Empezar ya» solo en escritorio para que nadie se salte los límites de un servidor compartido; las preferencias manipuladas (color, fondo, plantilla) nunca llegan a la página. Encontrado y corregido al probar: un bucle infinito en el texto del botón de descarga y un tamaño estimado que no se actualizaba. 0 vulnerabilidades conocidas; dependencias al día.
+
+**Revisión 12:** 2026-09-30 (v3.0.1) — todo el código, con hipótesis de ataque probadas en real. Corregido: una copia de seguridad manipulada podía apuntar la carpeta de descargas a una carpeta de red (Windows enviaría el hash NTLM del usuario a ese servidor); ahora solo se aceptan carpetas de un disco local; `tubegrab://` se registra como `"exe" -- "%1"` para que nada detrás del enlace pueda ser una opción de Chromium; enviar al móvil solo escucha en la dirección de la WiFi que anuncia y nunca deja archivos abiertos; las respuestas de letras tienen tope mientras llegan; Electron 44.5.1. 0 vulnerabilidades conocidas.
 
 **Revisión de v2.9.0 → v3.0.0:** 2026-09-30 — cada función nueva se revisó con pruebas de ataque: los textos del Editor se dibujan desde archivos y nunca se interpretan como filtros, logos y carátulas solo admiten imágenes PNG/JPG/WEBP pequeñas, las letras solo vienen de lrclib.net con límites de tamaño y tiempo y se limpian, la biblioteca solo sirve archivos de la carpeta de descargas por id aleatorio (comprobando la ruta real), enviar al móvil solo sirve el archivo compartido en la red local con un enlace que caduca, los enlaces `tubegrab://` solo pueden rellenar un enlace de un sitio compatible y las copias de seguridad se validan campo a campo. Detalles por versión en BUGLOG.md.
 
