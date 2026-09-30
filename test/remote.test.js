@@ -31,7 +31,7 @@ function makeServer(extra = {}) {
   const server = new RemoteServer({
     file: path.join(work, `remote-${Math.random()}.json`),
     lanAddressFn: () => '127.0.0.1',
-    addDownloads: async (clientId, urls, mode) => { calls.push({ clientId, urls, mode }); return urls[0].includes('evil') ? 'invalid' : 'ok'; },
+    addDownloads: async (clientId, urls, opts) => { calls.push({ clientId, urls, ...opts }); return urls[0].includes('evil') ? 'invalid' : 'ok'; },
     listJobs: () => jobs,
     ...extra,
   });
@@ -80,7 +80,14 @@ test('pairing, cookie, form and the attacks around them', async () => {
     const sent = await request(port, 'POST', '/add', { headers: form_, body: form('https://youtu.be/abc\nhttps://youtu.be/def') });
     assert.equal(sent.status, 303);
     assert.equal(sent.headers.location, '/?m=ok');
-    assert.deepEqual(calls.at(-1), { clientId: CLIENT, urls: ['https://youtu.be/abc', 'https://youtu.be/def'], mode: 'video' });
+    assert.deepEqual(calls.at(-1), { clientId: CLIENT, urls: ['https://youtu.be/abc', 'https://youtu.be/def'], mode: 'video', audioFormat: 'mp3', quality: '1080' });
+    await request(port, 'POST', '/add', { headers: form_, body: new URLSearchParams({ urls: 'https://youtu.be/q', mode: 'audio', audioFormat: 'flac', quality: '720' }).toString() });
+    assert.deepEqual(calls.at(-1), { clientId: CLIENT, urls: ['https://youtu.be/q'], mode: 'audio', audioFormat: 'flac', quality: '720' });
+    await request(port, 'POST', '/add', { headers: form_, body: new URLSearchParams({ urls: 'https://youtu.be/q', audioFormat: 'exe;rm', quality: '99999' }).toString() });
+    assert.deepEqual([calls.at(-1).audioFormat, calls.at(-1).quality], ['mp3', '1080'], 'unknown choices fall back');
+    const en = await request(port, 'GET', '/', { headers: { ...jar, 'Accept-Language': 'en-GB,en;q=0.9' } });
+    assert.match(en.body, /Download on the PC/);
+    assert.match(en.body, /<html lang="en">/);
     assert.equal((await request(port, 'POST', '/add', { headers: form_, body: form('https://evil.example/x') })).headers.location, '/?m=invalid');
     assert.equal((await request(port, 'POST', '/add', { headers: form_, body: form('') })).headers.location, '/?m=empty');
 

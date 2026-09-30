@@ -54,7 +54,7 @@ test('tampered storage never reaches the page', () => {
   const { attrs, prefs } = boot({ local: { tubegrab_prefs: JSON.stringify(evil) }, session: { tubegrab_ui: 'evil' } });
   assert.deepEqual({ ...attrs }, {
     'data-ui': 'windows', 'data-theme': 'light', 'data-accent': 'blue', 'data-wall': 'aurora', 'data-glass': 'tinted', 'data-size': 'medium',
-    lang: 'es',
+    'data-contrast': 'normal', 'data-motion': 'normal', lang: 'es',
   });
   const p = prefs.get();
   assert.equal(p.remember, true);
@@ -109,4 +109,13 @@ test('own background: only a base64 JPEG the page made, else a normal background
   assert.equal(b.prefs.setWallpaper('data:image/jpeg;base64,' + 'A'.repeat(4 * 1024 * 1024)), false, 'too big');
   assert.ok(b.prefs.setWallpaper(jpeg));
   assert.equal(b.attrs['data-wall'], 'custom');
+});
+
+test('accessibility: high contrast and fewer animations, booleans only', () => {
+  const b = boot({ local: { tubegrab_prefs: JSON.stringify({ highContrast: true, reduceMotion: true }) } });
+  assert.equal(b.attrs['data-contrast'], 'high');
+  assert.equal(b.attrs['data-motion'], 'reduce');
+  const e = boot({ local: { tubegrab_prefs: JSON.stringify({ highContrast: 'yes', reduceMotion: 1 }) } });
+  assert.equal(e.attrs['data-contrast'], 'normal');
+  assert.equal(e.attrs['data-motion'], 'normal');
 });

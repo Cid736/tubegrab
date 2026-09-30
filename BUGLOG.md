@@ -434,3 +434,18 @@ Nuevo: **control desde el móvil** (página en la WiFi para mandar descargas al 
 - **Avisos (ntfy):** desde el proceso principal, publicación JSON (UTF-8) a un servidor `https://` sin credenciales ni rutas (por defecto `ntfy.sh`), sin seguir redirecciones, 10 s de límite y máx. 30 avisos por hora; solo título y nombre del archivo. Canal aleatorio de 96 bits; LEGAL.md explica que quien lo conozca puede leer los avisos.
 - **Aspecto propio:** el color solo se acepta como `#rrggbb`; la imagen la reduce la propia página a un JPEG y solo se aplica si es exactamente `data:image/jpeg;base64,…` (≤ 3 MB), así que nada arbitrario llega al CSS (probado con inyecciones de CSS, SVG, URLs y comillas).
 - Pruebas nuevas: `test/remote.test.js` (emparejar, cookie, formulario, Host ajeno, Origin ajeno, 415, cuerpo enorme, fuerza bruta, cambio de código, persistencia), integración de escritorio en `test/server.test.js`, `test/prefs.test.js` (color y fondo manipulados) e `i18n` ampliado. En la app real: presentación, color e imagen propios, aviso real recibido en ntfy.sh y QR de control.
+
+---
+
+## 2026-10-01 — v3.2.0: comodidad y accesibilidad
+
+Nuevo: tamaño estimado antes de descargar, «Reintentar lo que falló», se reabre en la última página, ayuda de atajos (**?**), buscador en Ajustes, alto contraste y reducir animaciones (también si Windows lo pide), menú de la bandeja con acciones rápidas, y la página del móvil en el idioma del móvil con formato y calidad a elegir.
+
+### Revisión de seguridad
+- **Tamaño estimado:** `/api/info` añade `sizes`, calculado solo con números de la lista de formatos de yt-dlp (alturas 1–4320, tamaños positivos < 1 TB); cualquier otro dato se ignora (probado con alturas `<script>`, negativas y enormes).
+- **Última página:** se guarda solo el nombre de la vista y al abrir solo se acepta si es una de las conocidas; las de escritorio siguen sin abrirse en la web.
+- **Buscador de Ajustes:** busca en el texto que ya muestra la página y pinta los resultados con `textContent`.
+- **Accesibilidad:** dos preferencias booleanas más en el mismo saneador (probadas con valores manipulados).
+- **Bandeja:** «Descargar el enlace copiado» lee el portapapeles solo al pulsarlo y solo acepta enlaces de sitios compatibles (misma función que la detección de enlaces copiados); la descarga pasa por la API normal.
+- **Página del móvil:** formato y calidad solo de listas fijas (y la API los vuelve a validar); el idioma se elige entre dos textos fijos según `Accept-Language`, nunca se refleja nada de la petición (probado).
+- 182 pruebas.

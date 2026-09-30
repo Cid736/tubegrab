@@ -256,6 +256,7 @@ app.post('/api/info', infoLimiter, (req, res) => {
         site: data.extractor_key || null,
         chapters,
         isPlaylist: false,
+        sizes: download.formatSizes(data),
       });
     } catch {
       return res.status(500).json({ error: 'No se pudo obtener información del enlace.' });
@@ -677,9 +678,9 @@ app.delete('/api/library/share/:token', requireDesktop, requireClient, (req, res
 // === Control from the phone (desktop app only) ===
 // The phone's page sends links here; they go through the very same download
 // API (and its checks) as the app's own requests, for the app's client id.
-function addDownloadsFromPhone(clientId, urls, mode) {
+function addDownloadsFromPhone(clientId, urls, { mode, audioFormat, quality }) {
   return new Promise((resolve) => {
-    const body = JSON.stringify({ urls, mode });
+    const body = JSON.stringify({ urls, mode, audioFormat, quality });
     const req = http.request({
       host: '127.0.0.1', port: PORT, path: '/api/jobs/download', method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'x-client-id': clientId, Host: `localhost:${PORT}` },

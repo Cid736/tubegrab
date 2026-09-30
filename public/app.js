@@ -311,6 +311,8 @@ function renderPrefs() {
     $(id).querySelectorAll('[data-value]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === p[key])));
   }
   // Own colour / own picture (no data-value: they open a picker first).
+  $('prefContrast').checked = p.highContrast;
+  $('prefMotion').checked = p.reduceMotion;
   $('accentCustom').setAttribute('aria-checked', String(p.accent === 'custom'));
   $('accentCustom').style.setProperty('--own', p.accentColor);
   $('accentColorInput').value = p.accentColor;
@@ -365,6 +367,92 @@ $('prefSound').addEventListener('change', (e) => {
 });
 $('prefRateLimit').addEventListener('change', (e) => prefsApi.set({ rateLimit: e.target.value }));
 $('btnResetPrefs').addEventListener('click', () => { prefsApi.resetAppearance(); renderPrefs(); });
+
+// === Accessibility: high contrast, fewer animations ===
+$('prefContrast').addEventListener('change', (e) => { prefsApi.set({ highContrast: e.target.checked }); renderPrefs(); });
+$('prefMotion').addEventListener('change', (e) => { prefsApi.set({ reduceMotion: e.target.checked }); renderPrefs(); });
+
+// === Keyboard shortcuts help ("?") ===
+const keysHelp = (() => {
+  const open = () => { $('keysModal').classList.remove('hidden'); $('keysClose').focus(); };
+  const close = () => $('keysModal').classList.add('hidden');
+  $('btnKeys').addEventListener('click', open);
+  $('keysClose').addEventListener('click', close);
+  $('keysModal').addEventListener('click', (e) => { if (e.target === $('keysModal')) close(); });
+  document.addEventListener('keydown', (e) => {
+    const typing = /^(input|textarea|select)$/i.test(e.target.tagName || '') || e.target.isContentEditable;
+    if (!$('keysModal').classList.contains('hidden')) { if (e.key === 'Escape') close(); return; }
+    if (e.key === '?' && !typing && !document.querySelector('.modal:not(.hidden)')) { e.preventDefault(); open(); }
+  });
+  return { open };
+})();
+
+// === Search in Settings: finds an option on any settings page ===
+const settingsSearch = (() => {
+  const input = $('settingsSearch');
+  const list = $('settingsResults');
+  const TAB = { 'set-appearance': 'Apariencia', 'set-downloads': 'Descargas', 'set-convert': 'Conversión', 'set-system': 'Sistema', 'set-about': 'Acerca de' };
+  const fold = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  let index = null;
+  function build() {
+    index = [];
+    document.querySelectorAll('.view[data-views^="set-"]').forEach((section) => {
+      const view = section.dataset.views;
+      if (!TAB[view]) return;
+      section.querySelectorAll('.row').forEach((row) => {
+        if (row.closest('.desktop-only') && !desktopApi) return;
+        const label = row.querySelector('.row-label');
+        if (!label) return;
+        const name = label.childNodes[0] ? label.childNodes[0].textContent.trim() : label.textContent.trim();
+        if (!name) return;
+        index.push({ view, row, name, text: fold(`${label.textContent} ${row.querySelector('.row-sub')?.textContent || ''}`) });
+      });
+    });
+  }
+  function go(item) {
+    input.value = '';
+    list.classList.add('hidden');
+    setView(item.view);
+    requestAnimationFrame(() => {
+      item.row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      item.row.classList.add('flash');
+      setTimeout(() => item.row.classList.remove('flash'), 1600);
+      const focusable = item.row.querySelector('input, select, button');
+      if (focusable) focusable.focus({ preventScroll: true });
+    });
+  }
+  input.addEventListener('input', () => {
+    if (!index) build();
+    const q = fold(input.value.trim());
+    list.innerHTML = '';
+    if (q.length < 2) { list.classList.add('hidden'); return; }
+    const found = index.filter((i) => q.split(/\s+/).every((w) => i.text.includes(w))).slice(0, 10);
+    for (const item of found) {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = '<span class="sr-name"></span><span class="sr-tab"></span>';
+      b.querySelector('.sr-name').textContent = item.name;
+      b.querySelector('.sr-tab').textContent = t(TAB[item.view]);
+      b.addEventListener('click', () => go(item));
+      li.appendChild(b);
+      list.appendChild(li);
+    }
+    if (!found.length) {
+      const li = document.createElement('li');
+      li.className = 'sr-empty';
+      li.textContent = t('No hay ningún ajuste con esas palabras.');
+      list.appendChild(li);
+    }
+    list.classList.remove('hidden');
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { const first = list.querySelector('button'); if (first) first.click(); }
+    if (e.key === 'Escape') { input.value = ''; list.classList.add('hidden'); }
+  });
+  return { build };
+})();
 
 // === Own accent colour and own background picture ===
 $('accentColorInput').addEventListener('input', (e) => {
@@ -498,6 +586,14 @@ const VIEWS = {
   'set-about': { group: 'settings', title: 'Acerca de', sub: 'Versión y actualizaciones', tab: 'Acerca de' },
 };
 const DOWNLOAD_VIEWS = new Set(['dl-link', 'dl-search', 'dl-subs']);
+// The page (and settings tab) you were on, reopened next time.
+const VIEW_KEY = 'tubegrab_view';
+function lastView() {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    return v && Object.prototype.hasOwnProperty.call(VIEWS, v) ? v : 'dl-link';
+  } catch { return 'dl-link'; }
+}
 let currentView = 'dl-link';
 
 function viewsOf(group) {
@@ -527,6 +623,7 @@ function setView(view) {
   if (view === 'dl-subs') { refreshSubFormat(); loadSubscriptions(); }
   if (view.startsWith('set-')) loadConfig();
   document.dispatchEvent(new CustomEvent('tg:view', { detail: view }));
+  try { localStorage.setItem(VIEW_KEY, view); } catch { /* storage unavailable */ }
   $('scroll').scrollTop = 0;
 }
 
@@ -555,6 +652,9 @@ document.querySelector('.sidebar').addEventListener('click', (e) => {
   setView(item.dataset.view);
 });
 
+[audioFormat, audioBitrate, videoQuality, videoContainer].forEach((el) => el.addEventListener('change', () => refreshEstimate()));
+optPlaylist.addEventListener('change', () => refreshEstimate());
+
 function setMode(mode) {
   if (mode !== 'convert') {
     if (downloadMode !== mode) { downloadMode = mode; saveLastOptions(); }
@@ -576,6 +676,7 @@ formatToggle.addEventListener('click', (e) => {
 
 function applyMode() {
   const isConvert = currentMode === 'convert';
+  refreshEstimate();
   $('inputGroup').classList.toggle('hidden', isConvert);
   $('uploadGroup').classList.toggle('hidden', !isConvert);
   if (isConvert) hidePreview(); else updateUrlState();
@@ -715,14 +816,18 @@ async function fetchPreview(url) {
     $('previewMeta').textContent = [data.site, data.uploader, formatDuration(data.duration), chapters].filter(Boolean).join(' · ');
     previewCard.classList.remove('hidden');
     previewDuration = data.duration || null;
+    previewSizes = data.sizes || null;
     dlRange.setDuration(previewDuration);
     syncDlRange();
+    refreshEstimate();
   } catch {
     if (requestId === previewRequestId) hidePreview();
   }
 }
 
 function hidePreview() {
+  previewSizes = null;
+  refreshEstimate();
   previewRequestId += 1;
   previewCard.classList.add('hidden');
   $('playlistCard').classList.add('hidden');
@@ -905,7 +1010,40 @@ function syncDlRange() {
 }
 [dlStart, dlEnd].forEach((el) => el.addEventListener('input', syncDlRange));
 optChapters.addEventListener('change', refreshDlHint);
+/**
+ * "≈ 12 MB" next to the button, from the formats yt-dlp reported for the
+ * previewed link: the chosen audio bitrate × length, or the video stream at
+ * the chosen height plus the audio. Only a guess, so only for one link.
+ */
+let previewSizes = null;
+function refreshEstimate() {
+  const el = $('dlEstimate');
+  const secs = previewDuration;
+  let bytes = null;
+  if (previewSizes && secs && currentMode !== 'convert') {
+    const s = parseTime(dlStart.value) || 0;
+    const e = dlEnd.value.trim() ? parseTime(dlEnd.value) : secs;
+    const part = Number.isFinite(s) && Number.isFinite(e) && e > s ? Math.min(1, (e - s) / secs) : 1;
+    if (downloadMode === 'audio') {
+      const kbps = { flac: 900, wav: 1411 }[audioFormat.value];
+      bytes = audioFormat.value === 'best' ? previewSizes.audio
+        : (kbps || Number(audioBitrate.value) || 192) * secs * 125;
+    } else {
+      const heights = Object.keys(previewSizes.video || {}).map(Number).sort((a, b) => a - b);
+      if (heights.length) {
+        const q = videoQuality.value === 'best' ? Infinity : Number(videoQuality.value);
+        const h = [...heights].reverse().find((x) => x <= q) || heights[0];
+        bytes = previewSizes.video[h] + (previewSizes.audio || 0);
+      }
+    }
+    if (bytes) bytes *= part;
+  }
+  el.classList.toggle('hidden', !bytes || optPlaylist.checked);
+  el.textContent = bytes ? `≈ ${formatBytes(bytes)}` : '';
+}
+
 function refreshDlHint() {
+  refreshEstimate();
   const parts = [];
   if (dlStart.value.trim() || dlEnd.value.trim()) parts.push(t('Solo se descargará el tramo {a}–{b}.', { a: dlStart.value.trim() || '0:00', b: dlEnd.value.trim() || t('final') }));
   if (optChapters.checked) parts.push(t('Se guardará un archivo por capítulo (si el vídeo tiene capítulos), juntos en una carpeta.'));
@@ -2927,6 +3065,7 @@ function renderQueueMeta() {
   $('btnClearFinished').classList.toggle('hidden', all.length === active.length + paused.length);
   $('btnPauseAll').classList.toggle('hidden', !active.some((j) => j.pausable));
   $('btnResumeAll').classList.toggle('hidden', !paused.length);
+  $('btnRetryFailed').classList.toggle('hidden', !all.some((j) => j.status === 'error' && j.retryable));
   $('queueCount').textContent = active.length ? t('{n} en curso', { n: active.length }) : (paused.length ? t('{n} en pausa', { n: paused.length }) : '');
   const badge = $('navBadge');
   badge.textContent = String(active.length);
@@ -2948,6 +3087,14 @@ $('btnClearFinished').addEventListener('click', () => {
   }
 });
 $('btnPauseAll').addEventListener('click', () => postJson('/api/jobs/pause-all', {}).catch((e) => showToast(e.message)));
+$('btnRetryFailed').addEventListener('click', async () => {
+  const failed = [...jobs.values()].filter((j) => j.status === 'error' && j.retryable);
+  let ok = 0;
+  for (const job of failed) {
+    try { await postJson(`/api/jobs/${job.id}/retry`, {}); ok += 1; } catch { /* stays failed */ }
+  }
+  showToast(t('{n} reintentando', { n: ok }));
+});
 $('btnResumeAll').addEventListener('click', () => postJson('/api/jobs/pause-all', { resume: true }).catch((e) => showToast(e.message)));
 
 // === Biblioteca (desktop): what's in the download folder, a player and "send to phone" ===
@@ -3340,6 +3487,24 @@ renderMerge();
 refreshCompressButton();
 refreshImageUI();
 renderPrefs();
+// === Tray quick actions (desktop) ===
+if (desktopApi && desktopApi.onQuickDownload) {
+  desktopApi.onQuickDownload(async ({ url }) => {
+    try {
+      await postJson('/api/jobs/download', { ...downloadOptions(), urls: [url] });
+      if (!document.hasFocus() && typeof Notification !== 'undefined') {
+        try { new Notification(t('Añadido a la cola'), { body: url, silent: true }); } catch { /* ignore */ }
+      }
+    } catch (err) {
+      showToast(err.message);
+    }
+  });
+  desktopApi.onTrayAction(({ action }) => {
+    if (action === 'pause') postJson('/api/jobs/pause-all', {}).catch(() => {});
+    if (action === 'resume') postJson('/api/jobs/pause-all', { resume: true }).catch(() => {});
+  });
+}
+
 // === Phone notifications (desktop, ntfy) ===
 if (desktopApi && desktopApi.getNtfy) {
   const status = (msg, type) => setStatusEl($('ntfyStatus'), msg, type);
@@ -3603,7 +3768,7 @@ const backup = (() => {
 })();
 
 restoreLastOptions();
-setView('dl-link');
+setView(lastView());
 tour.firstRun();
 renderHistory();
 connectEvents();

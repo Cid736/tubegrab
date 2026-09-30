@@ -802,9 +802,27 @@ function setupTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Abrir TubeGrab', click: showWindow },
     { type: 'separator' },
+    { label: 'Descargar el enlace copiado', click: downloadCopiedLink },
+    { label: 'Abrir la carpeta de descargas', click: () => { const dir = getSettings().downloadDir; fs.mkdirSync(dir, { recursive: true }); shell.openPath(dir); } },
+    { label: 'Pausar todo', click: () => sendToRenderer('desktop:trayAction', { action: 'pause' }) },
+    { label: 'Reanudar todo', click: () => sendToRenderer('desktop:trayAction', { action: 'resume' }) },
+    { type: 'separator' },
     { label: 'Salir', click: () => { quitting = true; app.quit(); } },
   ]));
   tray.on('click', showWindow);
+}
+
+// Tray: download the link on the clipboard straight away (with the options
+// last used), without opening the window. Only links to supported sites.
+async function downloadCopiedLink() {
+  let text = '';
+  try { text = String(await clipboard.readText() || '').trim(); } catch { /* locked */ }
+  const url = text.length < 2048 && !/\s/.test(text) ? normalizeMediaUrl(text) : null;
+  if (url) {
+    sendToRenderer('desktop:quickDownload', { url });
+  } else if (Notification.isSupported()) {
+    new Notification({ title: 'TubeGrab', body: 'No hay ningún enlace de un sitio compatible copiado.', silent: true }).show();
+  }
 }
 
 // Close button with "keep running in the tray" on: hide instead of quitting,

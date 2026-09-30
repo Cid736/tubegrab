@@ -20,12 +20,12 @@ test('no duplicated keys in the English table', () => {
 
 // Every visible piece of Spanish in these parts of the page has an English version.
 const SECTIONS = ['id="editSection"', 'id="tagsSection"', 'id="queueSection"', 'data-views="set-downloads"', 'id="mainCard"',
-  'id="librarySection"', 'data-views="set-system"', 'id="settingsSection"', 'data-views="set-about"', ['id="player"', '<!-- '], ['id="shareModal"', '<div class="modal hidden" id="tourModal"'], ['id="tourModal"', '<script']];
+  'id="librarySection"', 'data-views="set-system"', 'id="settingsSection"', 'data-views="set-about"', ['class="view hidden settings-search"', '</section>'], ['id="keysModal"', '<div class="modal hidden" id="tourModal"'], ['id="player"', '<!-- '], ['id="shareModal"', '<div class="modal hidden" id="tourModal"'], ['id="tourModal"', '<script']];
 test('the editor, tags, queue, download settings and download form are fully translated', () => {
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
   const known = new Set(keys);
   const same = new Set(['MP4', 'MKV', 'MOV', 'WEBM', 'MP3', 'M4A', 'V1', 'A1', 'Original', 'Logo', 'Editor', 'SponsorBlock', 'cookies.txt',
-    '4:5 (Instagram)', '9:16 vertical (TikTok, Reels, Shorts)', '1', '2', '3', '4', '5', '6', 'M4A (AAC)', 'OPUS', 'OGG', '48 kHz', '44,1 kHz', 'English', 'Mac', 'Windows', 'TubeGrab', 'GitHub', 'https://ntfy.sh']);
+    '4:5 (Instagram)', '9:16 vertical (TikTok, Reels, Shorts)', '1', '2', '3', '4', '5', '6', 'M4A (AAC)', 'OPUS', 'OGG', '48 kHz', '44,1 kHz', 'English', 'Mac', 'Windows', 'TubeGrab', 'GitHub', 'https://ntfy.sh', 'Ctrl', 'Esc', 'Supr', '?']);
   const missing = [];
   for (const entry of SECTIONS) {
     const [marker, end] = Array.isArray(entry) ? entry : [entry, '</section>'];

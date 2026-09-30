@@ -41,4 +41,6 @@ contextBridge.exposeInMainWorld('desktop', {
   setNtfy: (patch) => ipcRenderer.invoke('desktop:setNtfy', patch),
   testNtfy: () => ipcRenderer.invoke('desktop:testNtfy'),
   jobFinished: (info) => ipcRenderer.send('desktop:jobFinished', info),
+  onQuickDownload: (cb) => ipcRenderer.on('desktop:quickDownload', (_e, info) => cb(info)),
+  onTrayAction: (cb) => ipcRenderer.on('desktop:trayAction', (_e, info) => cb(info)),
 });

@@ -10,7 +10,7 @@
   var MAX_WALLPAPER = 3 * 1024 * 1024;
   var DEFAULTS = {
     uiDefault: 'windows', lang: 'es', rateLimit: '', theme: 'auto', accent: 'blue', wall: 'aurora', glass: 'tinted', size: 'medium',
-    remember: true, notify: true, sound: false, onboarded: false, accentColor: '#0a84ff',
+    remember: true, notify: true, sound: false, onboarded: false, accentColor: '#0a84ff', highContrast: false, reduceMotion: false,
   };
   // "#rrggbb" only: it ends up in a CSS variable.
   var HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -89,6 +89,8 @@
     root.setAttribute('data-wall', p.wall === 'custom' && !picture ? 'aurora' : p.wall);
     root.setAttribute('data-glass', p.glass);
     root.setAttribute('data-size', p.size);
+    root.setAttribute('data-contrast', p.highContrast ? 'high' : 'normal');
+    root.setAttribute('data-motion', p.reduceMotion ? 'reduce' : 'normal');
     root.setAttribute('lang', p.lang);
     // Desktop app: make the native window (acrylic, scrollbars, menus) match.
     if (window.desktop && window.desktop.setTheme) window.desktop.setTheme(p.theme);

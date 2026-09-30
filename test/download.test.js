@@ -177,3 +177,23 @@ test('a failed download is retried once automatically, unless the error is perma
   assert.equal(fs.readFileSync(path.join(dir, 'count'), 'utf8'), '1', 'permanent errors are not retried');
   delete process.env.FAKE_MODE;
 });
+
+test('formatSizes: rough sizes per height and for audio; odd data ignored', () => {
+  const sizes = download.formatSizes({
+    duration: 100,
+    formats: [
+      { vcodec: 'avc1', acodec: 'none', height: 1080, filesize: 5e7 },
+      { vcodec: 'vp9', acodec: 'none', height: 1080, filesize_approx: 6e7 },
+      { vcodec: 'vp9', acodec: 'none', height: 720, tbr: 1500 },
+      { vcodec: 'none', acodec: 'opus', filesize: 2e6 },
+      { vcodec: 'h264', acodec: 'aac', height: 360, filesize: 9e6 },
+      { vcodec: 'x', acodec: 'none', height: '<script>', filesize: 1 },
+      { vcodec: 'x', acodec: 'none', height: 99999, filesize: 1 },
+      { vcodec: 'x', acodec: 'none', height: 480, filesize: -5 },
+      'x', null,
+    ],
+  });
+  assert.deepEqual(sizes, { audio: 2e6, video: { 360: 9e6, 720: 18750000, 1080: 6e7 } });
+  assert.deepEqual(download.formatSizes({}), { audio: null, video: {} });
+  assert.deepEqual(download.formatSizes({ formats: 'nope' }), { audio: null, video: {} });
+});

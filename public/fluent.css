@@ -364,3 +364,4 @@ body.window-maximized .cap-restore { display: block; }
 :root[data-ui="windows"][data-theme="dark"] { --solid: #2b2b2b; }
 /* Own background picture: shown in the Windows interface too (over Mica). */
 [data-ui="windows"][data-wall="custom"] body.is-desktop-app, [data-ui="windows"][data-wall="custom"] body { background: var(--wall-desktop); }
+[data-ui="windows"][data-contrast="high"] body.is-desktop-app, [data-ui="windows"][data-contrast="high"] body { background: var(--wall-desktop); }

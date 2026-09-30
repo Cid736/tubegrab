@@ -451,6 +451,7 @@
 
           <div class="form-footer">
             <div class="status-message" id="statusMessage" role="status"></div>
+            <span class="dl-estimate hidden" id="dlEstimate" title="Tamaño aproximado del archivo"></span>
             <button class="btn btn-primary btn-download" id="btnDownload" type="button">
               <span class="btn-content"><span id="btnText">Descargar</span></span>
               <span class="btn-loading"><span class="spinner"></span><span id="btnLoadingText">Añadiendo…</span></span>
@@ -903,6 +904,7 @@
             <h2>Actividad <span class="count" id="queueCount"></span></h2>
             <div class="row-actions">
               <button class="link-btn desktop-only" id="btnSchedule" type="button">Programar…</button>
+              <button class="link-btn hidden" id="btnRetryFailed" type="button">Reintentar lo que falló</button>
               <button class="link-btn queue-only" id="btnPauseAll" type="button">Pausar todo</button>
               <button class="link-btn queue-only" id="btnResumeAll" type="button">Reanudar todo</button>
               <button class="link-btn" id="btnClearFinished" type="button">Borrar terminadas</button>
@@ -967,6 +969,15 @@
           </div>
         </section>
 
+        <!-- ===== Ajustes: search across every settings page ===== -->
+        <section class="view hidden settings-search" data-views="set-appearance set-downloads set-convert set-system set-about">
+          <div class="field search-field">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input id="settingsSearch" type="search" placeholder="Buscar un ajuste…" aria-label="Buscar un ajuste…" autocomplete="off" spellcheck="false" aria-controls="settingsResults">
+          </div>
+          <ul class="settings-results hidden" id="settingsResults" role="listbox" aria-label="Ajustes encontrados"></ul>
+        </section>
+
         <!-- ===== Ajustes → Apariencia ===== -->
         <section class="view hidden" data-views="set-appearance" id="settingsSection">
           <div class="section-header">
@@ -1028,6 +1039,8 @@
                 <button data-value="solid" type="button" role="radio">Opaco</button>
               </div>
             </div>
+            <label class="row switch"><span class="row-label">Alto contraste <small>textos y bordes más marcados, sin transparencias</small></span><input type="checkbox" id="prefContrast"><span class="switch-ui"></span></label>
+            <label class="row switch"><span class="row-label">Reducir animaciones</span><input type="checkbox" id="prefMotion"><span class="switch-ui"></span></label>
             <div class="row"><span class="row-label">Tamaño del texto</span>
               <div class="segmented segmented-small picker" id="sizePicker" role="radiogroup" aria-label="Tamaño del texto">
                 <button data-value="small" type="button" role="radio">Pequeño</button>
@@ -1258,6 +1271,13 @@
               </div>
               <div class="row-actions"><button class="btn" id="btnTour" type="button">Ver otra vez</button></div>
             </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label">Atajos de teclado</span>
+                <span class="row-sub row-sub-wrap">Pulsa «?» en cualquier momento para verlos.</span>
+              </div>
+              <div class="row-actions"><button class="btn" id="btnKeys" type="button">Ver atajos</button></div>
+            </div>
           </div>
         </section>
 
@@ -1326,6 +1346,42 @@
         <button class="btn" id="shareStop" type="button">Dejar de compartir</button>
         <button class="btn btn-primary" id="shareClose" type="button">Listo</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="keysModal" role="dialog" aria-modal="true" aria-labelledby="keysTitle">
+    <div class="modal-card keys-card">
+      <h2 id="keysTitle">Atajos de teclado</h2>
+      <div class="keys-grid">
+        <h3>General</h3>
+        <dl>
+          <dt><kbd>Ctrl</kbd> <kbd>1</kbd></dt><dd>Descargar</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>2</kbd></dt><dd>Convertir</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>3</kbd></dt><dd>Cola</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>4</kbd></dt><dd>Historial</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>5</kbd></dt><dd>Biblioteca</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>,</kbd></dt><dd>Ajustes</dd>
+          <dt><kbd>?</kbd></dt><dd>Esta ayuda</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Cerrar una ventana</dd>
+        </dl>
+        <h3>Editor</h3>
+        <dl>
+          <dt><kbd>Espacio</kbd></dt><dd>Reproducir / pausa</dd>
+          <dt><kbd>J</kbd> <kbd>L</kbd></dt><dd>−5 s / +5 s</dd>
+          <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Fotograma anterior / siguiente (Mayús: 1 s)</dd>
+          <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Corte anterior / siguiente</dd>
+          <dt><kbd>I</kbd> <kbd>O</kbd></dt><dd>Entrada y salida</dd>
+          <dt><kbd>B</kbd></dt><dd>Cortar en el cabezal</dd>
+          <dt><kbd>Supr</kbd></dt><dd>Quitar o recuperar el tramo</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>Z</kbd> / <kbd>Y</kbd></dt><dd>Deshacer / rehacer</dd>
+          <dt><kbd>Ctrl</kbd> + rueda</dt><dd>Zoom de la línea de tiempo</dd>
+        </dl>
+        <h3>Reproductor</h3>
+        <dl>
+          <dt>Teclas multimedia</dt><dd>Reproducir, pausa, anterior y siguiente</dd>
+        </dl>
+      </div>
+      <div class="modal-actions"><button class="btn btn-primary" id="keysClose" type="button">Cerrar</button></div>
     </div>
   </div>
 
