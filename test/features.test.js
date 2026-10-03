@@ -449,3 +449,14 @@ test('cli: options', () => {
   assert.deepEqual([v.mode, v.quality, v.container, v.out], ['video', '720', 'webm', path.resolve('dest')]);
   assert.equal(parseArgs(['u', '--rm-rf']).bad, '--rm-rf');
 });
+
+test('security review: watch-folder fields and subtitle language are cleaned', () => {
+  const { WatchFolder } = require('../lib/watch');
+  const w = new WatchFolder({ configFile: path.join(work, `watch-sec-${Date.now()}.json`), enqueue: () => true });
+  const v = w.set({ fields: { targetFormat: 'mp3', audioBitrate: '320', evil: { nested: 1 }, long: 'x'.repeat(50), 'bad key': 'y', inject: 'a;b' } });
+  assert.deepEqual(v.fields, { targetFormat: 'mp3', audioBitrate: '320' });
+  assert.equal(w.set({ fields: { audioBitrate: '320' } }).fields, null, 'a format is required');
+  w.stop();
+  assert.equal(convert.parseEditEffects({ captions: 'big', captionsLang: '-tr --evil' }).captions.lang, 'auto');
+  assert.equal(convert.parseEditEffects({ captions: 'big', captionsLang: 'es' }).captions.lang, 'es');
+});

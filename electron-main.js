@@ -787,7 +787,8 @@ async function checkSpace({ notify = true } = {}) {
       // Oldest first; never favourites, 4–5 stars, or anything from the last week.
       const keep = favouritePaths(root);
       const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
-      const media = files.filter((f) => SAVE_EXTENSIONS.has(path.extname(f.path).slice(1).toLowerCase()) && f.mtime < weekAgo && !keep.has(f.path.toLowerCase()))
+      // Only audio and video: never the user's own pictures, texts or lists.
+      const media = files.filter((f) => MEDIA_EXT.has(path.extname(f.path).slice(1).toLowerCase()) && f.mtime < weekAgo && !keep.has(f.path.toLowerCase()))
         .sort((a, b) => a.mtime - b.mtime);
       for (const f of media) {
         if (used <= s.maxFolderGb * GB) break;
@@ -826,8 +827,13 @@ ipcMain.handle('desktop:setSpace', (event, patch) => {
 // The link goes to the open app (or the one starting), which queues it with
 // those choices; only links to supported sites, and only these options.
 function cliRequestFrom(argv) {
-  const i = argv.indexOf('--download');
+  // Only our own switches before "--": whatever comes after it (a
+  // tubegrab:// link from a web page) can never become a download request.
+  const end = argv.indexOf('--');
+  const own = end === -1 ? argv : argv.slice(0, end);
+  const i = own.indexOf('--download');
   if (i === -1) return null;
+  argv = own;
   const url = normalizeMediaUrl(argv[i + 1] || '');
   if (!url) return null;
   const req = { url, mode: null, format: null, quality: null, profile: null };

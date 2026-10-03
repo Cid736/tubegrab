@@ -17,7 +17,7 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 **Download**
 - YouTube and 20+ sites: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
 - Several links at once, whole playlists, or **pick which videos of a playlist** to download
-- **Search** YouTube without a link, and download the results you tick
+- **Search** YouTube without a link, and download the results you tick — hover a thumbnail for a silent preview, or press ▶ to watch it with sound
 - **Subscriptions** (desktop app): channels or playlists checked every 1–24 h; new uploads download by themselves
 - Audio: MP3, M4A, OPUS, OGG, FLAC, WAV or the original stream (96–320 kbps). Video: up to 4K/8K as MP4, MKV or WEBM
 - **Download only a part** (e.g. 1:20–3:45, with a slider), or **split by chapters** into one file per chapter (tagged with title and track number)
@@ -229,7 +229,7 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 **Descargar**
 - YouTube y más de 20 sitios: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
 - Varios enlaces a la vez, playlists completas, o **elegir qué vídeos de una playlist** descargar
-- **Buscar** en YouTube sin tener el enlace, y descargar los resultados que marques
+- **Buscar** en YouTube sin tener el enlace, y descargar los resultados que marques; pasa el ratón por una miniatura para ver una vista previa sin sonido, o pulsa ▶ para verlo con sonido
 - **Suscripciones** (app de escritorio): canales o playlists revisados cada 1–24 h; lo nuevo se descarga solo
 - Audio: MP3, M4A, OPUS, OGG, FLAC, WAV o el original (96–320 kbps). Vídeo: hasta 4K/8K en MP4, MKV o WEBM
 - **Descargar solo un tramo** (p. ej. 1:20–3:45, con deslizador), o **dividir por capítulos** en un archivo por capítulo (con título y número de pista)

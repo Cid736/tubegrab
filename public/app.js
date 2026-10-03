@@ -1219,9 +1219,139 @@ async function queueItems(items, statusEl) {
  * A list of results with checkboxes, thumbnails and durations (playlist
  * picker, search). `onChange` runs whenever the selection changes.
  */
+// === YouTube previews in the result lists (search, playlist picker) ===
+// The player is YouTube's own, from its privacy-enhanced domain
+// (youtube-nocookie.com), sandboxed: hovering a thumbnail plays a silent
+// preview; ▶ opens it with sound under the result, ⏸ pauses it.
+const ytPreview = (() => {
+  const ORIGIN = 'https://www.youtube-nocookie.com';
+  const idOf = (url) => {
+    try {
+      const u = new URL(url);
+      const host = u.hostname.toLowerCase().replace(/^(www\.|m\.|music\.)/, '');
+      const id = host === 'youtu.be' ? u.pathname.slice(1).split('/')[0]
+        : host === 'youtube.com' ? (u.searchParams.get('v') || (/^\/(shorts|live)\/([\w-]{11})/.exec(u.pathname) || [])[2]) : null;
+      return /^[\w-]{11}$/.test(id || '') ? id : null;
+    } catch { return null; }
+  };
+  function frame(id, { muted, controls, start = 0 }) {
+    const f = document.createElement('iframe');
+    const q = new URLSearchParams({ autoplay: '1', mute: muted ? '1' : '0', controls: controls ? '1' : '0', playsinline: '1', rel: '0', modestbranding: '1', enablejsapi: '1', origin: location.origin });
+    if (start) q.set('start', String(Math.floor(start)));
+    f.src = `${ORIGIN}/embed/${id}?${q}`;
+    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    f.allowFullscreen = true;
+    // YouTube's player refuses to load without knowing who embeds it.
+    f.referrerPolicy = 'strict-origin-when-cross-origin';
+    f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+    f.title = t('Vista previa');
+    return f;
+  }
+  const command = (f, func) => { try { f.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: [] }), ORIGIN); } catch { /* not loaded yet */ } };
+
+  // Hover: a floating, silent preview over the thumbnail.
+  const pop = document.createElement('div');
+  pop.className = 'yt-hover hidden';
+  pop.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(pop);
+  let hoverTimer = null;
+  let hoverFor = null;
+  function hideHover() {
+    clearTimeout(hoverTimer);
+    hoverTimer = null;
+    hoverFor = null;
+    pop.classList.add('hidden');
+    pop.innerHTML = '';
+  }
+  function hover(thumb, id, duration) {
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => {
+      if (inline && inline.id === id) return;
+      hoverFor = thumb;
+      pop.innerHTML = '';
+      pop.appendChild(frame(id, { muted: true, controls: false, start: duration > 90 ? Math.min(30, duration * 0.1) : 0 }));
+      const r = thumb.getBoundingClientRect();
+      const w = 320;
+      const h = 180;
+      pop.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left))}px`;
+      pop.style.top = `${r.bottom + h + 8 < window.innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+      pop.classList.remove('hidden');
+    }, 450);
+  }
+
+  // ▶: the video with sound, under its result.
+  let inline = null; // { id, row, frame, btn, playing }
+  function setBtn(btn, playing) {
+    btn.innerHTML = playing ? ICONS.pause : ICONS.play;
+    btn.title = playing ? t('Pausar') : t('Reproducir');
+    btn.setAttribute('aria-label', btn.title);
+    btn.setAttribute('aria-pressed', String(playing));
+  }
+  function close() {
+    if (!inline) return;
+    inline.row.remove();
+    setBtn(inline.btn, false);
+    inline = null;
+  }
+  function toggle(li, btn, id) {
+    hideHover();
+    if (inline && inline.id === id) {
+      inline.playing = !inline.playing;
+      command(inline.frame, inline.playing ? 'playVideo' : 'pauseVideo');
+      setBtn(btn, inline.playing);
+      return;
+    }
+    close();
+    const row = document.createElement('li');
+    row.className = 'pick-player-row';
+    const box = document.createElement('div');
+    box.className = 'pick-player';
+    const f = frame(id, { muted: false, controls: true });
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'link-btn';
+    x.textContent = t('Cerrar');
+    x.addEventListener('click', close);
+    box.appendChild(f);
+    row.append(box, x);
+    li.after(row);
+    inline = { id, row, frame: f, btn, playing: true };
+    setBtn(btn, true);
+  }
+  // Leaving the page stops whatever is playing.
+  document.addEventListener('tg:view', () => { hideHover(); close(); });
+
+  /** The thumbnail of one result, with its preview and play button (or the plain picture). */
+  function thumb(item, li) {
+    const wrap = document.createElement('span');
+    wrap.className = 'pick-thumb-wrap';
+    const img = document.createElement('img');
+    img.className = 'pick-thumb';
+    img.alt = '';
+    img.loading = 'lazy';
+    if (item.thumbnail) img.src = item.thumbnail; else img.style.visibility = 'hidden';
+    wrap.appendChild(img);
+    const id = idOf(item.url);
+    if (!id) return wrap;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pick-play';
+    setBtn(btn, inline !== null && inline.id === id && inline.playing);
+    // Inside the row's label: the click must not tick the box.
+    btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggle(li, btn, id); });
+    wrap.appendChild(btn);
+    wrap.addEventListener('pointerenter', () => hover(wrap, id, item.duration || 0));
+    wrap.addEventListener('pointerleave', () => { if (hoverFor === wrap || hoverTimer) hideHover(); });
+    return wrap;
+  }
+  return { thumb, close, hideHover };
+})();
+
 function createPickList(ul, onChange, { quick } = {}) {
   let items = [];
   const render = () => {
+    ytPreview.hideHover();
+    ytPreview.close();
     ul.innerHTML = '';
     items.forEach((item, i) => {
       const li = document.createElement('li');
@@ -1232,11 +1362,7 @@ function createPickList(ul, onChange, { quick } = {}) {
       box.type = 'checkbox';
       box.checked = item.checked;
       box.addEventListener('change', () => { item.checked = box.checked; onChange(); });
-      const img = document.createElement('img');
-      img.className = 'pick-thumb';
-      img.alt = '';
-      img.loading = 'lazy';
-      if (item.thumbnail) img.src = item.thumbnail; else img.style.visibility = 'hidden';
+      const img = ytPreview.thumb(item, li);
       const text = document.createElement('span');
       text.className = 'pick-text';
       const title = document.createElement('span');

@@ -1298,3 +1298,19 @@ kbd { display: inline-block; min-width: 18px; padding: 1px 6px; border-radius: 5
   .player-center { grid-column: 1 / -1; grid-row: 2; }
 }
 .player-bar { grid-template-columns: minmax(120px, 1fr) minmax(200px, 1.5fr) auto; }
+
+/* YouTube previews in search / playlist results */
+.pick-thumb-wrap { position: relative; flex-shrink: 0; display: block; line-height: 0; }
+.pick-play {
+  position: absolute; inset: 0; margin: auto; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(0, 0, 0, 0.6); color: #fff; cursor: pointer;
+  opacity: 0; transition: opacity 0.15s;
+}
+.pick-play svg { width: 13px; height: 13px; }
+.pick-item:hover .pick-play, .pick-play:focus-visible, .pick-play[aria-pressed="true"] { opacity: 1; }
+.pick-play:hover { background: var(--accent); color: var(--on-accent); }
+.yt-hover { position: fixed; z-index: 150; width: 320px; height: 180px; border-radius: 10px; overflow: hidden; background: #000; box-shadow: var(--shadow-float); pointer-events: none; }
+.yt-hover.hidden { display: none; }
+.yt-hover iframe, .pick-player iframe { width: 100%; height: 100%; border: 0; display: block; }
+.pick-player-row { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding: 8px 12px 10px; }
+.pick-player { width: 100%; max-width: 640px; aspect-ratio: 16 / 9; align-self: center; border-radius: 10px; overflow: hidden; background: #000; }

@@ -500,3 +500,30 @@ Nuevo: subtítulos automáticos (whisper.cpp) en una página propia y en el Edit
 - **Directos:** «Parar y guardar» une solo los trozos que hay en la carpeta del trabajo, con la misma lista blanca de formatos de entrada.
 - **Encontrado al probar en la app real:** los botones nuevos del reproductor se montaban sobre los controles con la ventana estrecha (corregido); la línea de comandos tomaba una opción desconocida con guion como si fuera un enlace (ahora la rechaza).
 - `npm audit` → 0 vulnerabilidades. 210 pruebas.
+
+---
+
+## 2026-10-03 — Revisión 14 (v3.4.1): vista previa en Buscar y repaso de seguridad
+
+Nuevo: en Buscar y en la lista de una playlist, al pasar el ratón por la miniatura sale una vista previa sin sonido, y ▶ / ⏸ abre el vídeo con sonido debajo del resultado. Usa el reproductor de YouTube en su dominio sin cookies (`youtube-nocookie.com`), dentro de un `iframe` con `sandbox` (sin ventanas emergentes ni navegar la página), y la CSP solo deja enmarcar ese dominio (`frame-src`). El reproductor no recibe la API de la app (el puente de Electron solo existe en la ventana principal) y la página nunca escucha sus mensajes.
+
+### [MEDIUM] Línea de comandos: un enlace `tubegrab://` podía leerse como orden de descarga
+- **Riesgo:** el registro de `tubegrab://` lanza la app como `TubeGrab.exe -- "<enlace>"`. La lectura de `--download` miraba todos los argumentos, también los de después de `--`; si un navegador llegara a partir el enlace en varios argumentos, una página web podría poner una descarga en la cola sin que la pidieras.
+- **Fix:** solo se leen las opciones propias **antes** de `--`; todo lo que venga detrás (el enlace de una web) solo rellena la caja de Descargar, como antes.
+
+### [MEDIUM] Límite de espacio: podía mandar a la papelera archivos que no eran de TubeGrab
+- **Riesgo:** al pasar el límite de la carpeta, se elegían los archivos más antiguos de cualquier tipo «guardable», incluidos `.jpg`, `.txt` o listas que el usuario hubiera puesto ahí.
+- **Fix:** solo audio y vídeo (además de lo que ya se excluía: favoritos, 4–5 estrellas y la última semana).
+
+### [LOW] Carpeta vigilada: las opciones se guardaban tal cual llegaban
+- **Fix:** solo hasta 20 valores de texto cortos (letras, números, `. : _ -`) y siempre con un formato de destino; el resto se descarta al guardarlas y al leerlas del archivo (probado con objetos anidados, textos largos y `;`).
+
+### [LOW] Carátulas de la biblioteca: sin tope de procesos a la vez
+- **Fix:** como mucho dos ffmpeg sacando carátulas a la vez (el resto espera su turno); siguen cacheadas.
+
+### [LOW] Otros endurecimientos
+- Listas `.m3u8`: cada entrada en una sola línea pase lo que pase con el nombre del archivo.
+- Editor: el idioma de los subtítulos automáticos se valida ya al leer la petición (antes solo al lanzar Whisper).
+
+### Revisado sin hallazgos
+HTML construido en la página (todo con `textContent` o escapado), procesos (ninguno con shell), rutas que manda la página (siempre por id o comprobadas dentro de la carpeta de descargas), teles (solo red local, mismo equipo que respondió), servidor de red local (tokens aleatorios, `Range` acotado), descargas de Whisper (SHA-256 fijado). `npm audit` → 0 vulnerabilidades. 211 pruebas.

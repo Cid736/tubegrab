@@ -95,7 +95,8 @@ app.use(helmet({
     // Video thumbnails come from the source site's CDN; the trim preview
     // plays the chosen local file, and the editor shows the chosen logo,
     // through blob: URLs (only ever created by the page from the user's files).
-    directives: { 'img-src': ["'self'", 'data:', 'https:', 'blob:'], 'media-src': ["'self'", 'blob:'] },
+    // Search and playlist previews: only YouTube's privacy-enhanced player, framed.
+    directives: { 'img-src': ["'self'", 'data:', 'https:', 'blob:'], 'media-src': ["'self'", 'blob:'], 'frame-src': ['https://www.youtube-nocookie.com'] },
   },
 }));
 
@@ -777,12 +778,15 @@ app.get('/api/library/lyrics', requireDesktop, requireClient, infoLimiter, async
 
 // Cover art of a song (its embedded picture), small, for the player.
 const covers = new Map(); // id -> Buffer | null
+// A few ffmpeg processes at most, however many covers the page asks for.
+const coverSlots = slots(2);
 app.get('/api/library/cover', requireDesktop, requireClient, async (req, res) => {
   const id = String(req.query.id || '');
   const file = library.resolve(id);
   if (!file) return res.status(404).end();
   let jpg = covers.get(id);
   if (jpg === undefined) {
+    if (!coverSlots.take()) return res.status(429).end();
     jpg = await new Promise((resolve) => {
       const p = require('child_process').spawn(currentFfmpegPath(), ['-hide_banner', '-loglevel', 'error', '-protocol_whitelist', 'file', '-format_whitelist', convert.INPUT_DEMUXERS,
         '-i', file, '-map', '0:v:0', '-frames:v', '1', '-vf', "scale='min(400,iw)':-2", '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', '4', 'pipe:1'], { windowsHide: true });
@@ -793,7 +797,7 @@ app.get('/api/library/cover', requireDesktop, requireClient, async (req, res) =>
       const timer = setTimeout(() => p.kill(), 15000);
       p.on('error', () => { clearTimeout(timer); resolve(null); });
       p.on('close', (code) => { clearTimeout(timer); resolve(code === 0 && size && size < 2 * 1024 * 1024 ? Buffer.concat(chunks) : null); });
-    });
+    }).finally(() => coverSlots.release());
     covers.set(id, jpg);
     if (covers.size > 300) covers.delete(covers.keys().next().value);
   }
