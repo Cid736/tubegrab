@@ -23,7 +23,7 @@
   var COLORS_RE = /^#[0-9a-fA-F]{6},#[0-9a-fA-F]{6},#[0-9a-fA-F]{6}$/;
   var TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
   // Pages of the side menu (Ajustes always stays).
-  var NAV = ['dl-link', 'dl-search', 'dl-subs', 'cv-format', 'cv-edit', 'cv-subs', 'cv-merge', 'cv-compress', 'cv-image', 'cv-tags', 'queue', 'history', 'library', 'stats'];
+  var NAV = ['dl-link', 'dl-search', 'listen', 'dl-subs', 'cv-format', 'cv-edit', 'cv-subs', 'cv-merge', 'cv-compress', 'cv-image', 'cv-tags', 'queue', 'history', 'library', 'stats'];
   // Whole numbers within a range.
   var NUMBERS = { wallDim: [0, 90], wallBlur: [0, 30] };
   function navList(v, max) {

@@ -637,6 +637,7 @@ $('hwPicker').addEventListener('click', (e) => {
 const VIEWS = {
   'dl-link': { group: 'download', title: 'Descargar', sub: 'Pega un enlace de YouTube y más de 20 sitios', tab: 'Enlace' },
   'dl-search': { group: 'download', title: 'Buscar', sub: 'Encuentra y descarga sin tener el enlace', tab: 'Buscar' },
+  listen: { group: null, title: 'Escuchar', sub: 'Tus listas de Spotify, Apple Music y YouTube, sin descargar', desktop: true },
   'dl-subs': { group: 'download', title: 'Suscripciones', sub: 'Lo nuevo de tus canales, descargado solo', tab: 'Suscripciones', desktop: true },
   'cv-format': { group: 'convert', title: 'Convertir', sub: '23 formatos de audio y vídeo', tab: 'Formato' },
   'cv-edit': { group: 'convert', title: 'Editor', sub: 'Recorta del segundo que quieras al que quieras, corta y quita partes', tab: 'Editor' },
@@ -1153,6 +1154,10 @@ const playlistPicker = createPickList($('playlistList'), () => {
   const n = playlistPicker.selected().length;
   $('btnPlaylistDownload').textContent = n ? t('Descargar {n} seleccionados', { n }) : t('Descargar seleccionados');
   $('btnPlaylistDownload').disabled = !n;
+}, { listen: true });
+$('playlistListen').addEventListener('click', () => {
+  const sel = playlistPicker.selected();
+  player.playStreams(sel.length ? sel : playlistPicker.all());
 });
 
 async function loadPlaylist(url, requestId) {
@@ -1433,10 +1438,10 @@ const ytPreview = (() => {
     wrap.addEventListener('pointerleave', () => { if (hoverFor === wrap || hoverTimer) hideHover(); });
     return wrap;
   }
-  return { thumb, close, hideHover };
+  return { thumb, close, hideHover, idOf };
 })();
 
-function createPickList(ul, onChange, { quick } = {}) {
+function createPickList(ul, onChange, { quick, listen } = {}) {
   let items = [];
   const render = () => {
     ytPreview.hideHover();
@@ -1470,6 +1475,24 @@ function createPickList(ul, onChange, { quick } = {}) {
       }
       label.append(box, img, text);
       li.appendChild(label);
+      // Listen without downloading: from this song on, like a music app.
+      if (listen && desktopApi && ytPreview.idOf(item.url || '')) {
+        const p = document.createElement('button');
+        p.type = 'button';
+        p.className = 'queue-btn listen-btn';
+        p.innerHTML = ICONS.listen;
+        p.title = t('Escuchar sin descargar');
+        p.setAttribute('aria-label', `${p.title}: ${item.title || ''}`);
+        p.addEventListener('click', () => { ytPreview.close(); player.playStreams(items, i); });
+        const a = document.createElement('button');
+        a.type = 'button';
+        a.className = 'queue-btn';
+        a.innerHTML = ICONS.addList;
+        a.title = t('Añadir a la lista de reproducción');
+        a.setAttribute('aria-label', `${a.title}: ${item.title || ''}`);
+        a.addEventListener('click', () => player.enqueueStreams([item]));
+        li.append(p, a);
+      }
       if (item.url) {
         const c = document.createElement('button');
         c.type = 'button';
@@ -1626,6 +1649,11 @@ const searchPicker = createPickList($('searchList'), () => {
   $('btnSearchDownload').disabled = !n;
 }, {
   quick: (item) => queueItems([item], $('searchStatus')),
+  listen: true,
+});
+$('searchListen').addEventListener('click', () => {
+  const sel = searchPicker.selected();
+  player.playStreams(sel.length ? sel : searchPicker.all());
 });
 function refreshSearchFormat() {
   $('searchFormat').textContent = t('Formato: {f}', { f: describeDownloadFormat() });
@@ -4062,6 +4090,8 @@ const ICONS = {
   stopSave: svg('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 13l2 2 4-4"/>'),
   copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
   flag: svg('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'),
+  listen: svg('<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/>'),
+  addList: svg('<path d="M4 6h11M4 11h11M4 16h6"/><path d="M18 13v8M14 17h8"/>'),
 };
 const PRIORITY_NEXT = { normal: 'high', high: 'low', low: 'normal' };
 const PRIORITY_LABEL = { high: 'Urgente', normal: 'Normal', low: 'Cuando haya tiempo' };
@@ -4619,8 +4649,52 @@ const player = (() => {
   let radio = false;             // at the end of the list, keep going with similar songs
   const recent = [];             // ids played lately (radio doesn't repeat them)
   const cur = () => list[index] || null;
+  // A song from YouTube that isn't saved: { stream: true, yt, title, channel, thumbnail }.
+  const isStream = (f) => Boolean(f && f.stream === true);
+  const nameOf = (f) => (isStream(f) ? f.title || 'YouTube' : f.name.replace(/\.[^.]+$/, ''));
+  const srcOf = (f) => (isStream(f) ? `/api/stream/audio?client=${CLIENT_ID}&id=${f.yt}` : library.url(f));
+  const coverOf = (f) => (isStream(f) ? f.thumbnail || (f.yt ? `https://i.ytimg.com/vi/${f.yt}/hqdefault.jpg` : '') : library.cover(f));
+  /**
+   * Search results / playlist entries / tracks of a list → songs to play from
+   * YouTube. A track known only by name ({ query }, from Spotify) is looked
+   * up on YouTube when its turn comes.
+   */
+  const asStreams = (items) => items.map((e) => {
+    const yt = e.yt || (e.query ? null : e.id) || ytPreview.idOf(e.url || '');
+    const ok = /^[\w-]{11}$/.test(yt || '');
+    if (!ok && !e.query) return null;
+    return {
+      stream: true, yt: ok ? yt : null, query: e.query || null, id: ok ? `yt:${yt}` : `q:${e.query}`, kind: 'audio',
+      title: String(e.title || e.query || ''), channel: String(e.channel || e.artist || ''), artist: String(e.artist || ''), track: e.artist ? String(e.title || '') : '',
+      songDuration: e.artist && e.duration ? e.duration : null, list: e.list || null, n: Number.isInteger(e.n) ? e.n : null,
+      duration: e.duration || null, thumbnail: typeof e.thumbnail === 'string' && /^https:\/\/i\d?\.ytimg\.com\//.test(e.thumbnail) ? e.thumbnail : null,
+      url: ok ? `https://www.youtube.com/watch?v=${yt}` : null,
+    };
+  }).filter(Boolean);
+  /** A song known only by its name → its YouTube video (remembered in its list). */
+  async function findOnYouTube(f) {
+    if (f.yt) return true;
+    if (f.finding) return f.finding;
+    const q = new URLSearchParams({ q: f.query });
+    if (f.songDuration) q.set('d', String(f.songDuration));
+    if (f.list && Number.isInteger(f.n)) { q.set('list', f.list); q.set('n', String(f.n)); }
+    f.finding = api(`/api/stream/find?${q}`).then((r) => {
+      f.yt = r.id;
+      f.url = `https://www.youtube.com/watch?v=${r.id}`;
+      if (!f.thumbnail) f.thumbnail = r.thumbnail || null;
+      if (!f.duration) f.duration = r.duration || null;
+      return true;
+    }, () => false).finally(() => { f.finding = null; });
+    return f.finding;
+  }
   /** "Artist - Title" from the file name, else the folder as the artist. */
   const tagsOf = (f) => {
+    if (isStream(f) && f.artist) return { artist: f.artist.split(',')[0].trim(), track: f.track || f.title };
+    if (isStream(f)) {
+      const clean = f.title.replace(/\s*[([](official|oficial|lyric|lyrics|letra|audio|video|vídeo|videoclip|visualizer|hd|4k|mv)[^)\]]*[)\]]/gi, '').trim();
+      const m = /^(.+?)\s+[-–—]\s+(.+)$/.exec(clean);
+      return m ? { artist: m[1].trim(), track: m[2].trim() } : { artist: f.channel.replace(/\s*-\s*topic$/i, '').replace(/VEVO$/i, '').trim(), track: clean };
+    }
     const base = f.name.replace(/\.[^.]+$/, '').replace(/\s*\[[\w-]{6,}\]$/, '').replace(/^\d{1,3}[\s.\-_]+/, '');
     const m = /^(.+?)\s+[-–—]\s+(.+)$/.exec(base);
     if (m) return { artist: m[1].trim(), track: m[2].trim() };
@@ -4695,8 +4769,10 @@ const player = (() => {
   function show(f) {
     $('player').classList.remove('hidden');
     document.body.classList.add('has-player');
-    $('plTitle').textContent = f.name.replace(/\.[^.]+$/, '');
-    $('plSub').textContent = f.folder || '';
+    $('plTitle').textContent = nameOf(f);
+    $('plSub').textContent = isStream(f) ? [f.channel, t('desde YouTube, sin descargar')].filter(Boolean).join(' · ') : f.folder || '';
+    $('plSave').classList.toggle('hidden', !isStream(f));
+    $('player').classList.toggle('streaming', isStream(f));
     const icon = $('plIcon');
     icon.innerHTML = ICONS[f.kind === 'video' ? 'video' : 'music'];
     if (f.kind !== 'video') {
@@ -4705,7 +4781,7 @@ const player = (() => {
       img.alt = '';
       img.className = 'player-cover';
       img.onload = () => { if (cur() === f) { icon.innerHTML = ''; icon.appendChild(img); } };
-      img.src = library.cover(f);
+      img.src = coverOf(f);
     }
     const isVideo = f.kind === 'video';
     $('plExpand').classList.toggle('hidden', !isVideo);
@@ -4713,7 +4789,7 @@ const player = (() => {
     $('playerVideoWrap').classList.toggle('hidden', !isVideo);
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: $('plTitle').textContent, artist: f.folder || 'TubeGrab', ...(isVideo ? {} : { artwork: [{ src: library.cover(f), sizes: '400x400', type: 'image/jpeg' }] }),
+        title: $('plTitle').textContent, artist: isStream(f) ? tagsOf(f).artist || 'YouTube' : f.folder || 'TubeGrab', ...(isVideo ? {} : { artwork: [{ src: coverOf(f), sizes: '400x400', type: 'image/jpeg' }] }),
       });
     }
     countedFor = null;
@@ -4722,10 +4798,94 @@ const player = (() => {
     lyrics.load(f);
     subs.load(f);
     library.render();
+    renderQueue();
     pushState();
   }
 
+  // ---- "Up next": the list from here on, to jump to, remove or reorder ----
+  function renderQueue() {
+    const ol = $('plQueueList');
+    if ($('plQueue').classList.contains('hidden')) return;
+    ol.innerHTML = '';
+    list.forEach((f, i) => {
+      if (i < index) return;
+      const li = document.createElement('li');
+      li.className = i === index ? 'now' : '';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'plq-main';
+      const img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      if (f.kind !== 'video') img.src = coverOf(f); else img.style.visibility = 'hidden';
+      img.onerror = () => { img.style.visibility = 'hidden'; };
+      const text = document.createElement('span');
+      text.className = 'plq-text';
+      const name = document.createElement('span');
+      name.className = 'plq-title';
+      name.textContent = nameOf(f);
+      const sub = document.createElement('span');
+      sub.className = 'plq-sub';
+      sub.textContent = isStream(f) ? [f.channel, 'YouTube'].filter(Boolean).join(' · ') : f.folder || '';
+      text.append(name, sub);
+      b.append(img, text);
+      b.addEventListener('click', () => { if (i !== index) { index = i; start(); } });
+      li.appendChild(b);
+      if (i !== index) {
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'queue-btn';
+        x.innerHTML = ICONS.remove;
+        x.title = t('Quitar de la lista');
+        x.setAttribute('aria-label', x.title);
+        x.addEventListener('click', () => { list.splice(i, 1); renderQueue(); pushState(); });
+        li.appendChild(x);
+      }
+      ol.appendChild(li);
+    });
+    if (ol.children.length <= 1) {
+      const li = document.createElement('li');
+      li.className = 'plq-empty';
+      li.textContent = radio ? t('Al acabar seguirán canciones parecidas (modo radio).') : t('No hay nada más en la lista. Añade canciones con «+» en Buscar o activa el modo radio.');
+      ol.appendChild(li);
+    }
+  }
+  /** Adds songs after the one playing ("next") or at the end. */
+  function enqueue(items, { next = false } = {}) {
+    if (!items.length) return;
+    if (!cur()) { play(items, 0); return; }
+    list.splice(next ? index + 1 : list.length, 0, ...items);
+    renderQueue();
+    pushState();
+    showToast(items.length === 1 ? t('«{t}» añadida a la lista', { t: nameOf(items[0]) }) : t('{n} canciones añadidas a la lista', { n: items.length }));
+  }
+  $('plQueueClear').addEventListener('click', () => { list.splice(index + 1); renderQueue(); pushState(); });
+  $('plQueueSave').addEventListener('click', () => listenUi.saveAsList(list.slice(), t('Lo que sonaba ({d})', { d: new Date().toLocaleDateString() })));
+  // ⬇ on a song from YouTube: download it with the options you have.
+  $('plSave').addEventListener('click', async () => {
+    const f = cur();
+    if (!isStream(f)) return;
+    const status = { textContent: '', className: '' };
+    if (await queueItems([f.url ? { url: f.url, title: f.title } : { query: f.query, title: f.title }], status)) showToast(t('«{t}» se está descargando', { t: f.title }));
+    else if (status.textContent) showToast(status.textContent);
+  });
+
   // ---- radio: similar songs from your library, once the list runs out ----
+  // A song from YouTube: YouTube's own mix of similar songs (like a music app's radio).
+  let radioBusy = false;
+  async function radioFromYouTube() {
+    const f = cur();
+    if (!isStream(f) || radioBusy) return false;
+    radioBusy = true;
+    try {
+      const { entries } = await api(`/api/stream/radio?id=${f.yt}`);
+      const fresh = asStreams(entries || []).filter((x) => !recent.includes(x.id) && !list.some((y) => y.id === x.id)).slice(0, 15);
+      if (!fresh.length) return false;
+      list.push(...fresh);
+      renderQueue();
+      return true;
+    } catch { return false; } finally { radioBusy = false; }
+  }
   function radioNext() {
     const f = cur();
     const all = library.files().filter((x) => x.kind === 'audio' && !recent.includes(x.id));
@@ -4787,7 +4947,23 @@ const player = (() => {
     const f = cur();
     if (!f) return;
     cancelFade();
-    if (cast.active()) { cast.playFile(f); show(f); return; }
+    // Known only by name: find it on YouTube first (the title shows meanwhile).
+    if (isStream(f) && !f.yt) {
+      deck.pause();
+      show(f);
+      findOnYouTube(f).then((ok) => {
+        if (cur() !== f) return;
+        if (ok) { start(); return; }
+        showToast(t('No se encontró «{t}» en YouTube; paso a la siguiente.', { t: nameOf(f) }));
+        if (index < list.length - 1) step(1);
+      });
+      return;
+    }
+    // The next one known only by name: looked up now, so there's no gap.
+    const after = list[index + 1];
+    if (isStream(after) && !after.yt) findOnYouTube(after);
+    if (cast.active() && !isStream(f)) { cast.playFile(f); show(f); return; }
+    if (cast.active()) showToast(t('Las canciones de YouTube sin descargar suenan en este equipo, no en la tele.'));
     // Videos always on the deck that can show them.
     const target = f.kind === 'video' ? A : deck;
     const other = target === A ? B : A;
@@ -4795,7 +4971,7 @@ const player = (() => {
     deck = target;
     graph();
     if (gains.get(deck)) gains.get(deck).gain.value = 1;
-    deck.src = library.url(f);
+    deck.src = srcOf(f);
     deck.play().catch(() => {});
     show(f);
   }
@@ -4843,13 +5019,13 @@ const player = (() => {
     if (!Number.isFinite(left) || left > eq.crossfade || left <= 0.3) return;
     const n = index < list.length - 1 || shuffle ? nextIndex(1) : -1;
     const next = list[n];
-    if (!next || next.kind === 'video') return;
+    if (!next || next.kind === 'video' || (isStream(next) && !next.yt)) return;
     const from = deck;
     const to = deck === A ? B : A;
     const now = actx.currentTime;
     const gFrom = gains.get(from);
     const gTo = gains.get(to);
-    to.src = library.url(next);
+    to.src = srcOf(next);
     to.volume = from.volume;
     gTo.gain.setValueAtTime(0, now);
     gTo.gain.linearRampToValueAtTime(1, now + left);
@@ -4886,20 +5062,31 @@ const player = (() => {
       lyrics.at(m.currentTime);
       // Counted as a play after 30 s (or half of a short song).
       const f = cur();
-      if (f && countedFor !== f && m.currentTime > Math.min(30, (m.duration || 60) / 2)) { countedFor = f; library.played(f); }
+      if (f && countedFor !== f && m.currentTime > Math.min(30, (m.duration || 60) / 2)) { countedFor = f; if (!isStream(f)) library.played(f); }
+      // Radio with songs from YouTube: fetch the next ones a little before the end.
+      if (radio && isStream(f) && index >= list.length - 1 && m.duration - m.currentTime < 25) radioFromYouTube();
       maybeFade();
       pushStateSoon();
     });
-    m.addEventListener('ended', () => {
+    m.addEventListener('ended', async () => {
       if (m !== deck || fading) return;
       if (repeat) { m.currentTime = 0; m.play().catch(() => {}); return; }
       if (index < list.length - 1 || shuffle) step(1);
-      else if (radio) {
+      else if (radio && isStream(cur())) {
+        if (await radioFromYouTube() && index < list.length - 1) step(1);
+      } else if (radio) {
         const next = radioNext();
         if (next) { list.push(next); index = list.length - 1; start(); }
       }
     });
-    m.addEventListener('error', () => { if (m === deck && cur() && m.getAttribute('src')) showToast(t('No se puede reproducir este archivo aquí.')); });
+    m.addEventListener('error', () => {
+      if (m !== deck || !cur() || !m.getAttribute('src')) return;
+      const f = cur();
+      if (!isStream(f)) { showToast(t('No se puede reproducir este archivo aquí.')); return; }
+      // One song YouTube won't play (private, age limit…): on to the next one.
+      showToast(t('No se puede escuchar «{t}» desde YouTube; paso a la siguiente.', { t: nameOf(f) }));
+      if (index < list.length - 1) setTimeout(() => { if (cur() === f) step(1); }, 1200);
+    });
   }
   const toggle = () => {
     if (cast.active()) { cast.toggle(); return; }
@@ -4922,7 +5109,8 @@ const player = (() => {
     radio = !radio;
     $('plRadio').classList.toggle('on', radio);
     $('plRadio').setAttribute('aria-pressed', String(radio));
-    showToast(radio ? t('Modo radio: al acabar la lista seguirán canciones parecidas de tu biblioteca') : t('Modo radio desactivado'));
+    showToast(radio ? t('Modo radio: al acabar la lista seguirán canciones parecidas') : t('Modo radio desactivado'));
+    renderQueue();
   });
   // Volume and mute from the keyboard, the mini player and the taskbar.
   const setVolume = (v) => {
@@ -4940,13 +5128,15 @@ const player = (() => {
   $('plFull').addEventListener('click', () => { if (A.requestFullscreen) A.requestFullscreen().catch(() => {}); });
   const panel = (id, btn) => {
     const open = $(id).classList.contains('hidden');
-    ['plLyrics', 'plEq'].forEach((p) => $(p).classList.add('hidden'));
-    $('plLyricsBtn').setAttribute('aria-pressed', 'false');
-    $('plEqBtn').setAttribute('aria-pressed', 'false');
+    ['plLyrics', 'plEq', 'plQueue'].forEach((p) => $(p).classList.add('hidden'));
+    ['plLyricsBtn', 'plEqBtn', 'plQueueBtn'].forEach((b) => $(b).setAttribute('aria-pressed', 'false'));
     $(id).classList.toggle('hidden', !open);
     $(btn).setAttribute('aria-pressed', String(open));
     if (open && id === 'plLyrics') lyrics.at(deck.currentTime, true);
+    if (open && id === 'plQueue') renderQueue();
   };
+  $('plQueueBtn').addEventListener('click', () => panel('plQueue', 'plQueueBtn'));
+  $('plQueueClose').addEventListener('click', () => panel('plQueue', 'plQueueBtn'));
   $('plLyricsBtn').addEventListener('click', () => panel('plLyrics', 'plLyricsBtn'));
   $('plEqBtn').addEventListener('click', () => { graph(); panel('plEq', 'plEqBtn'); });
   $('plLyricsClose').addEventListener('click', () => panel('plLyrics', 'plLyricsBtn'));
@@ -4960,20 +5150,49 @@ const player = (() => {
   }
 
   // ---- synced lyrics ----
+  // Follows the song frame by frame (not the media element's few updates a
+  // second): the line being sung fills in like karaoke, the next ones come up
+  // smoothly. If a version starts earlier or later than the lyrics, ± moves
+  // them (remembered per song).
   const lyrics = (() => {
     let lines = [];
     let at = -1;
     let forId = null;
+    let forSong = null;
+    let raf = 0;
+    let offset = 0;
+    const OFFSET_KEY = 'tubegrab_lyric_offsets';
+    const offsets = (() => { try { const o = JSON.parse(localStorage.getItem(OFFSET_KEY)); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } })();
+    const keyOf = (f) => (isStream(f) ? (f.yt ? `yt:${f.yt}` : null) : f.id);
+    function saveOffset() {
+      const k = keyOf(forSong);
+      if (!k) return;
+      if (offset) offsets[k] = offset; else delete offsets[k];
+      const keys = Object.keys(offsets);
+      if (keys.length > 300) delete offsets[keys[0]];
+      try { localStorage.setItem(OFFSET_KEY, JSON.stringify(offsets)); } catch { /* ignore */ }
+    }
+    function showOffset() {
+      $('plLyricsOffset').textContent = offset ? t('Desfase {s} s', { s: `${offset > 0 ? '+' : ''}${offset.toFixed(1).replace('.', ',')}` }) : t('Sin desfase');
+      $('plLyricsSync').classList.toggle('hidden', !lines.length);
+    }
     async function load(f) {
       lines = [];
       at = -1;
       forId = f.id;
+      forSong = f;
+      const k = keyOf(f);
+      offset = k && Number.isFinite(offsets[k]) && Math.abs(offsets[k]) <= 30 ? offsets[k] : 0;
       const box = $('plLyricsLines');
       box.innerHTML = '';
       $('plLyricsEmpty').classList.add('hidden');
+      $('plLyricsHint').classList.add('hidden');
+      showOffset();
       if (f.kind === 'video') { $('plLyricsEmpty').classList.remove('hidden'); return; }
+      if (isStream(f) && !f.yt) return; // looked for once it's found on YouTube
       let res = null;
-      try { res = await api(`/api/library/lyrics?id=${f.id}`); } catch { /* none */ }
+      const q = isStream(f) && f.artist ? `&a=${encodeURIComponent(tagsOf(f).artist.slice(0, 200))}&t=${encodeURIComponent(tagsOf(f).track.slice(0, 200))}${f.songDuration ? `&d=${f.songDuration}` : ''}` : '';
+      try { res = await api(isStream(f) ? `/api/stream/lyrics?id=${f.yt}${q}` : `/api/library/lyrics?id=${f.id}`); } catch { /* none */ }
       if (forId !== f.id) return;
       if (res && res.synced && res.synced.length) {
         lines = res.synced;
@@ -4981,9 +5200,12 @@ const player = (() => {
           const li = document.createElement('li');
           li.textContent = l.text || '♪';
           li.dataset.i = String(i);
-          li.addEventListener('click', () => { if (cast.active()) cast.seek(l.t); else deck.currentTime = l.t; });
+          li.addEventListener('click', () => { const to = Math.max(0, l.t - offset); if (cast.active()) cast.seek(to); else deck.currentTime = to; });
           box.appendChild(li);
         });
+        // A video version that's much longer than the song: its intro may push the words late.
+        const dur = Number.isFinite(deck.duration) ? deck.duration : f.duration;
+        if (res.duration && Number.isFinite(dur) && Math.abs(dur - res.duration) > 4) $('plLyricsHint').classList.remove('hidden');
       } else if (res && res.plain) {
         for (const text of res.plain.split('\n')) {
           const li = document.createElement('li');
@@ -4994,27 +5216,59 @@ const player = (() => {
       } else {
         $('plLyricsEmpty').classList.remove('hidden');
       }
+      showOffset();
+      loop();
     }
     function lineAt(sec) {
       let lo = 0; let hi = lines.length - 1; let found = -1;
-      while (lo <= hi) { const mid = (lo + hi) >> 1; if (lines[mid].t <= sec + 0.15) { found = mid; lo = mid + 1; } else hi = mid - 1; }
+      while (lo <= hi) { const mid = (lo + hi) >> 1; if (lines[mid].t <= sec) { found = mid; lo = mid + 1; } else hi = mid - 1; }
       return found;
     }
-    return {
-      load,
-      at(sec, force = false) {
-        if (!lines.length) return;
-        const i = lineAt(sec);
-        if (i === at && !force) return;
+    const panelOpen = () => !$('plLyrics').classList.contains('hidden');
+    function paint(sec, force = false) {
+      if (!lines.length) return;
+      const s = sec + offset + 0.05;
+      const i = lineAt(s);
+      const box = $('plLyricsLines');
+      if (i !== at || force) {
+        if (at >= 0 && box.children[at]) { box.children[at].classList.remove('on'); box.children[at].style.removeProperty('--p'); }
+        box.querySelectorAll('.past').forEach((el) => el.classList.remove('past'));
+        for (let k = Math.max(0, i - 3); k < i; k++) if (box.children[k]) box.children[k].classList.add('past');
         at = i;
-        const box = $('plLyricsLines');
-        box.querySelectorAll('.on').forEach((el) => el.classList.remove('on'));
         const el = i >= 0 ? box.children[i] : null;
         if (el) {
           el.classList.add('on');
-          if (!$('plLyrics').classList.contains('hidden')) el.scrollIntoView({ block: 'center', behavior: prefsApi.get().reduceMotion ? 'auto' : 'smooth' });
+          if (panelOpen()) el.scrollIntoView({ block: 'center', behavior: prefsApi.get().reduceMotion ? 'auto' : 'smooth' });
         }
-      },
+      }
+      // How far into the line: the karaoke fill.
+      const el = at >= 0 ? box.children[at] : null;
+      if (el) {
+        const start = lines[at].t;
+        const end = at + 1 < lines.length ? lines[at + 1].t : start + 5;
+        const p = Math.min(1, Math.max(0, (s - start) / Math.max(0.3, Math.min(end - start, 12))));
+        el.style.setProperty('--p', `${(p * 100).toFixed(1)}%`);
+      }
+    }
+    // Frame by frame while the words are on screen and the song plays.
+    function loop() {
+      cancelAnimationFrame(raf);
+      if (!lines.length || !panelOpen()) return;
+      const tick = () => {
+        if (!lines.length || !panelOpen()) return;
+        if (cast.active()) return;
+        paint(deck.currentTime);
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }
+    const nudge = (d) => { offset = Math.max(-30, Math.min(30, Math.round((offset + d) * 10) / 10)); saveOffset(); showOffset(); paint(deck.currentTime, true); };
+    $('plLyricsEarlier').addEventListener('click', () => nudge(-0.5));
+    $('plLyricsLater').addEventListener('click', () => nudge(0.5));
+    $('plLyricsReset').addEventListener('click', () => { offset = 0; saveOffset(); showOffset(); paint(deck.currentTime, true); });
+    return {
+      load,
+      at(sec, force = false) { if (force) { paint(sec, true); loop(); } else if (!raf || !panelOpen()) paint(sec); },
     };
   })();
 
@@ -5092,24 +5346,30 @@ const player = (() => {
     const f = cur();
     const tg = f ? tagsOf(f) : { artist: '', track: '' };
     desktopApi.playerState({
-      title: f ? f.name.replace(/\.[^.]+$/, '') : '', sub: f ? f.folder || '' : '',
+      title: f ? nameOf(f) : '', sub: f ? (isStream(f) ? f.channel : f.folder) || '' : '',
       artist: f && f.kind === 'audio' ? tg.artist : '', track: f && f.kind === 'audio' ? tg.track : '',
       playing: f ? !deck.paused : false, time: deck.currentTime || 0, duration: Number.isFinite(deck.duration) ? deck.duration : 0,
-      cover: f && f.kind !== 'video' ? library.cover(f) : null,
+      cover: f && f.kind !== 'video' ? coverOf(f) : null,
       volume: A.volume, muted: A.muted,
+      streaming: isStream(f),
+      upNext: list.map((x, n) => ({ title: nameOf(x), sub: isStream(x) ? x.channel : x.folder || '', n })).slice(index + 1, index + 31),
     });
   }
   function pushStateSoon() { if (!pushTimer) pushTimer = setTimeout(() => { pushTimer = null; pushState(); }, 700); }
   if (desktopApi && desktopApi.openMini) {
     $('plMiniBtn').addEventListener('click', () => { desktopApi.openMini(); setTimeout(pushState, 800); });
-    desktopApi.onPlayerCommand(({ cmd, value }) => command(cmd, value));
+    desktopApi.onPlayerCommand(({ cmd, value, items }) => command(cmd, value, items));
   } else {
     $('plMiniBtn').classList.add('hidden');
     $('plCastBtn').classList.add('hidden');
   }
   /** One player command (keyboard shortcuts, mini window, taskbar, tray). */
-  function command(cmd, value) {
+  function command(cmd, value, items) {
+    // From the mini window's search: play from YouTube now, or add to the list.
+    if (cmd === 'stream' && Array.isArray(items)) { const songs = asStreams(items); if (songs.length) play(songs, Math.min(value || 0, songs.length - 1)); return; }
+    if (cmd === 'enqueue' && Array.isArray(items)) { enqueue(asStreams(items)); return; }
     if (!cur() && cmd !== 'hello') return;
+    if (cmd === 'jump' && Number.isInteger(value) && list[value]) { index = value; start(); return; }
     if (cmd === 'toggle') toggle();
     else if (cmd === 'next') step(1);
     else if (cmd === 'prev') step(-1);
@@ -5123,7 +5383,12 @@ const player = (() => {
     else if (cmd === 'seek' && Number.isFinite(value) && !cast.active()) deck.currentTime = value;
     pushState();
   }
-  return { play, current: cur, command };
+  return {
+    play, current: cur, command,
+    /** Plays results from YouTube without saving them, from result `i`. */
+    playStreams: (items, i = 0) => { const songs = asStreams(items); if (songs.length) play(songs, Math.min(i, songs.length - 1)); },
+    enqueueStreams: (items, opts) => enqueue(asStreams(items), opts),
+  };
 })();
 
 // === The player's keyboard shortcuts, inside the window ===
@@ -6241,6 +6506,171 @@ const lookUi = (() => {
   render();
   return { applyNav, render };
 })();
+
+// === Escuchar: your lists (Spotify, Apple Music, YouTube playlists, your own),
+// played straight from YouTube without downloading ===
+const listenUi = (() => {
+  if (!desktopApi) return { saveAsList: () => {} };
+  let lists = [];
+  let open = null; // the list shown, with its tracks
+  const SOURCE = { spotify: 'Spotify', apple: 'Apple Music', youtube: 'YouTube', own: 'Tu lista' };
+  const tracksOf = (l) => l.tracks.map((tr, n) => ({ ...tr, list: l.id, n, channel: tr.artist }));
+  const totalTime = (l) => { const s = l.tracks.reduce((a, tr) => a + (tr.duration || 0), 0); return s ? formatDuration(s) : ''; };
+
+  async function load() {
+    try { lists = (await api('/api/streamlists')).lists || []; } catch { lists = []; }
+    renderGrid();
+  }
+  function renderGrid() {
+    const grid = $('listenGrid');
+    grid.innerHTML = '';
+    $('listenEmpty').classList.toggle('hidden', lists.length > 0);
+    for (const l of lists) {
+      const card = document.createElement('div');
+      card.className = 'listen-card';
+      const art = document.createElement('button');
+      art.type = 'button';
+      art.className = 'listen-art';
+      art.title = t('Abrir «{name}»', { name: l.name });
+      if (l.thumbnail) { const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; img.src = l.thumbnail; art.appendChild(img); } else art.innerHTML = ICONS.listen;
+      art.addEventListener('click', () => show(l.id));
+      const play = document.createElement('button');
+      play.type = 'button';
+      play.className = 'listen-play';
+      play.innerHTML = ICONS.play;
+      play.title = t('Reproducir «{name}»', { name: l.name });
+      play.setAttribute('aria-label', play.title);
+      play.addEventListener('click', async (e) => { e.stopPropagation(); const full = await api(`/api/streamlists/${l.id}`); player.playStreams(tracksOf(full)); });
+      const name = document.createElement('span');
+      name.className = 'listen-card-name';
+      name.textContent = l.name;
+      const meta = document.createElement('span');
+      meta.className = 'listen-card-meta';
+      meta.textContent = `${t(SOURCE[l.source] || 'Tu lista')} · ${t('{n} canciones', { n: l.count })}`;
+      const wrap = document.createElement('div');
+      wrap.className = 'listen-art-wrap';
+      wrap.append(art, play);
+      card.append(wrap, name, meta);
+      grid.appendChild(card);
+    }
+  }
+  async function show(id) {
+    try { open = await api(`/api/streamlists/${id}`); } catch (err) { showToast(err.message); return; }
+    $('listenHome').classList.add('hidden');
+    $('listenDetail').classList.remove('hidden');
+    renderDetail();
+  }
+  function back() {
+    open = null;
+    $('listenDetail').classList.add('hidden');
+    $('listenHome').classList.remove('hidden');
+    load();
+  }
+  function renderDetail() {
+    const l = open;
+    const cover = (l.tracks.find((x) => x.thumbnail) || {}).thumbnail;
+    if (cover) $('ldCover').src = cover; else $('ldCover').removeAttribute('src');
+    $('ldKind').textContent = t(SOURCE[l.source] || 'Tu lista');
+    if (document.activeElement !== $('ldName')) $('ldName').value = l.name;
+    $('ldMeta').textContent = [t('{n} canciones', { n: l.tracks.length }), totalTime(l)].filter(Boolean).join(' · ');
+    $('ldRefresh').classList.toggle('hidden', !l.url);
+    $('ldStatus').textContent = '';
+    const ol = $('ldTracks');
+    ol.innerHTML = '';
+    const all = tracksOf(l);
+    all.forEach((tr, i) => {
+      const li = document.createElement('li');
+      const main = document.createElement('button');
+      main.type = 'button';
+      main.className = 'lt-main';
+      main.innerHTML = '<span class="lt-n"></span><img alt="" loading="lazy"><span class="lt-text"><span class="lt-title"></span><span class="lt-sub"></span></span><span class="lt-dur"></span>';
+      main.querySelector('.lt-n').textContent = String(i + 1);
+      const img = main.querySelector('img');
+      if (tr.thumbnail) img.src = tr.thumbnail; else img.style.visibility = 'hidden';
+      main.querySelector('.lt-title').textContent = tr.title;
+      main.querySelector('.lt-sub').textContent = tr.artist || '';
+      main.querySelector('.lt-dur').textContent = formatDuration(tr.duration) || '';
+      main.title = t('Escuchar desde aquí');
+      main.addEventListener('click', () => player.playStreams(all, i));
+      const add = iconButton('addList', t('Añadir a la lista de reproducción'), () => player.enqueueStreams([tr]));
+      const del = iconButton('remove', t('Quitar de la lista'), async () => {
+        try { open = await api(`/api/streamlists/${l.id}/tracks/${i}`, { method: 'DELETE' }); renderDetail(); } catch (err) { showToast(err.message); }
+      });
+      li.append(main, add, del);
+      ol.appendChild(li);
+    });
+  }
+
+  $('listenImport').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = $('listenUrl').value.trim();
+    if (!url) return;
+    const btn = $('listenImportBtn');
+    btn.disabled = true;
+    const before = $('listenHint').textContent;
+    $('listenHint').textContent = t('Leyendo la lista…');
+    try {
+      const l = await postJson('/api/streamlists/import', { url });
+      $('listenUrl').value = '';
+      $('listenHint').textContent = before;
+      showToast(t('«{name}»: {n} canciones', { name: l.name, n: l.tracks.length }));
+      await load();
+      show(l.id);
+    } catch (err) {
+      $('listenHint').textContent = err.message;
+    } finally { btn.disabled = false; }
+  });
+  $('ldBack').addEventListener('click', back);
+  $('ldPlay').addEventListener('click', () => open && player.playStreams(tracksOf(open)));
+  $('ldShuffle').addEventListener('click', () => {
+    if (!open) return;
+    const all = tracksOf(open);
+    for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
+    player.playStreams(all);
+  });
+  $('ldQueue').addEventListener('click', () => open && player.enqueueStreams(tracksOf(open)));
+  $('ldDownload').addEventListener('click', () => {
+    if (!open) return;
+    queueItems(open.tracks.map((tr) => (tr.yt ? { url: `https://www.youtube.com/watch?v=${tr.yt}`, title: tr.title } : { query: tr.query, title: tr.artist ? `${tr.artist} - ${tr.title}` : tr.title })), $('ldStatus'));
+  });
+  $('ldRefresh').addEventListener('click', async () => {
+    if (!open) return;
+    $('ldStatus').textContent = t('Actualizando…');
+    try { open = await postJson(`/api/streamlists/${open.id}/refresh`, {}); renderDetail(); showToast(t('Lista actualizada')); } catch (err) { $('ldStatus').textContent = err.message; }
+  });
+  $('ldDelete').addEventListener('click', async () => {
+    if (!open || !window.confirm(t('¿Borrar la lista «{name}»? Las canciones no estaban descargadas: no se borra ningún archivo.', { name: open.name }))) return;
+    try { await api(`/api/streamlists/${open.id}`, { method: 'DELETE' }); back(); } catch (err) { showToast(err.message); }
+  });
+  let renameTimer = null;
+  $('ldName').addEventListener('input', () => {
+    clearTimeout(renameTimer);
+    renameTimer = setTimeout(async () => {
+      const name = $('ldName').value.trim();
+      if (!open || !name) return;
+      try { open = await postJson(`/api/streamlists/${open.id}`, { name }); } catch { /* keep typing */ }
+    }, 600);
+  });
+  document.addEventListener('tg:view', (e) => { if (e.detail === 'listen') { if (open) show(open.id); else load(); } });
+
+  /** Saves songs (search results, what's playing) as a new list. */
+  async function saveAsList(items, name) {
+    const tracks = items.map((x) => ({
+      title: x.title, artist: x.artist || x.channel || '', duration: x.duration || null,
+      yt: x.yt || (x.query ? null : x.id) || ytPreview.idOf(x.url || ''), query: x.query || null, thumbnail: x.thumbnail || null,
+    })).filter((x) => x.title && (x.yt || x.query));
+    if (!tracks.length) { showToast(t('No hay canciones que guardar.')); return; }
+    try {
+      const l = await postJson('/api/streamlists', { name, tracks });
+      showToast(t('Guardada como «{name}» en Escuchar', { name: l.name }));
+    } catch (err) { showToast(err.message); }
+  }
+  return { saveAsList, load };
+})();
+$('searchSaveList').addEventListener('click', () => {
+  const sel = searchPicker.selected();
+  listenUi.saveAsList(sel.length ? sel : searchPicker.all(), $('searchInput').value.trim() || t('Mi lista'));
+});
 
 restoreLastOptions();
 profilesUi.load();

@@ -1408,3 +1408,76 @@ video::cue { background: rgba(0, 0, 0, 0.7); color: #fff; font-family: "Segoe UI
   .player { position: sticky; bottom: 0; z-index: 20; }
   .player-video video { max-height: 32vh; }
 }
+
+/* ===== v3.7 — listening without downloading, and "Up next" ===== */
+.pl-queue { list-style: none; margin: 0; padding: 0; max-width: 720px; margin-inline: auto; }
+.pl-queue li { display: flex; align-items: center; gap: 4px; border-radius: 8px; }
+.pl-queue li.now { background: var(--accent-soft); }
+.pl-queue .plq-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 5px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.pl-queue .plq-main:hover { background: var(--hover); }
+.pl-queue img { width: 40px; height: 40px; flex: none; object-fit: cover; border-radius: 6px; background: var(--inset); }
+.plq-text { min-width: 0; display: flex; flex-direction: column; }
+.plq-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-queue li.now .plq-title { color: var(--accent); }
+.plq-sub { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plq-empty { padding: 10px 8px; font-size: 12px; color: var(--text-2); }
+.player-queue .pl-panel-head { display: flex; align-items: center; gap: 8px; }
+.player.streaming .player-sub { color: var(--accent); }
+.listen-btn { color: var(--accent); }
+
+/* Lyrics: the line being sung fills in (karaoke), the others fade and slide. */
+.lyrics-lines li {
+  transition: color 0.35s ease, opacity 0.35s ease, transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), font-size 0.25s ease;
+  transform-origin: center; opacity: 0.75;
+}
+.lyrics-lines li.past { opacity: 0.45; }
+.lyrics-lines li.on {
+  opacity: 1; transform: scale(1.04);
+  color: transparent;
+  background: linear-gradient(90deg, var(--accent) 0, var(--accent) var(--p, 0%), var(--text) var(--p, 0%), var(--text) 100%);
+  -webkit-background-clip: text; background-clip: text;
+}
+.lyrics-lines li:hover { opacity: 1; }
+.lyrics-lines li.plain { opacity: 1; }
+:root[data-motion="reduce"] .lyrics-lines li.on { transform: none; }
+.lyrics-sync { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; margin-right: 8px; font-size: 12px; }
+.lyrics-sync .ed-mini { width: 24px; height: 24px; font-size: 15px; line-height: 1; }
+#plLyricsHint { text-align: center; margin: 0 0 6px; }
+.lyrics-lines li { width: fit-content; max-width: 100%; margin-inline: auto; }
+
+/* ===== Escuchar: your lists ===== */
+.listen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; margin-top: 12px; }
+.listen-card { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.listen-art { aspect-ratio: 1; width: 100%; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: var(--inset); display: grid; place-items: center; color: var(--accent); cursor: pointer; box-shadow: var(--shadow-control); }
+.listen-art img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease; }
+.listen-art svg { width: 40%; height: 40%; }
+.listen-card:hover .listen-art img { transform: scale(1.04); }
+.listen-art-wrap { position: relative; }
+.listen-play { position: absolute; right: 8px; bottom: 8px; width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; cursor: pointer;
+  opacity: 0; transform: translateY(6px); transition: opacity 0.2s, transform 0.2s; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3); }
+.listen-play svg { width: 18px; height: 18px; fill: currentColor; stroke: none; }
+.listen-card:hover .listen-play, .listen-play:focus-visible { opacity: 1; transform: none; }
+.listen-card-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.listen-card-meta { font-size: 11px; color: var(--text-2); }
+.listen-head { display: flex; gap: 18px; align-items: flex-end; margin: 8px 0 14px; flex-wrap: wrap; }
+.listen-cover { width: 150px; height: 150px; object-fit: cover; border-radius: 10px; background: var(--inset); box-shadow: var(--shadow-float); }
+.listen-head-text { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 6px; }
+.listen-kind { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); }
+.listen-name { font: inherit; font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--text); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 0 4px; margin-left: -5px; min-width: 0; }
+.listen-name:hover, .listen-name:focus { border-color: var(--hairline); outline: none; }
+.listen-meta { font-size: 12px; color: var(--text-2); }
+.listen-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+#ldBack { align-self: flex-start; }
+.listen-tracks { list-style: none; margin: 8px 0 0; padding: 4px; border-radius: 12px; background: var(--group); box-shadow: inset 0 0 0 0.5px var(--hairline); }
+.listen-tracks li { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+.listen-tracks li:hover { background: var(--hover); }
+.lt-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 5px 8px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.lt-n { width: 24px; text-align: right; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
+.lt-main img { width: 40px; height: 40px; flex: none; object-fit: cover; border-radius: 5px; background: var(--inset); }
+.lt-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lt-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lt-sub { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lt-dur { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
+.picker-head .row-actions { flex-wrap: wrap; justify-content: flex-end; }
+.listen-cover { background: linear-gradient(135deg, var(--accent-light), var(--accent-2)); }
+#listenHome .section-header { margin-top: 18px; }

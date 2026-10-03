@@ -178,3 +178,4 @@
 .row > .segmented-small, .row > .range-row, .row > .time-pair, .row > .color-trio { margin-left: auto; max-width: 100%; }
 .row > .segmented-small.picker { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; }
 [data-ui="windows"] .nav-edit { background: var(--w-card); border: 1px solid var(--w-stroke); border-radius: 6px; }
+:root[data-navicons="color"] .nav-item[data-view="listen"] { --ic: #1db954; }

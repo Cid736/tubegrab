@@ -56,6 +56,10 @@
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>
           <span>Buscar</span>
         </button>
+        <button class="nav-item desktop-only" data-view="listen" type="button" title="Escuchar sin descargar">
+          <svg viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></svg>
+          <span>Escuchar</span>
+        </button>
         <button class="nav-item desktop-only" data-view="dl-subs" type="button" title="Suscripciones">
           <svg viewBox="0 0 24 24"><path d="M5 11a8 8 0 0 1 8 8M5 5a14 14 0 0 1 14 14"/><circle cx="6" cy="18" r="1.3"/></svg>
           <span>Suscripciones</span>
@@ -216,6 +220,7 @@
                   <button class="link-btn" id="playlistAll" type="button">Todos</button>
                   <button class="link-btn" id="playlistNone" type="button">Ninguno</button>
                   <button class="link-btn" id="playlistCopy" type="button">Copiar enlaces</button>
+                  <button class="link-btn desktop-only" id="playlistListen" type="button" title="Escuchar sin descargar">▶ Escuchar todo</button>
                 </div>
               </div>
               <ul class="pick-list" id="playlistList"></ul>
@@ -532,12 +537,59 @@
                 <button class="link-btn" id="searchNone" type="button">Ninguno</button>
                 <button class="link-btn" id="searchCopy" type="button">Copiar enlaces</button>
                 <button class="link-btn" id="searchThumbs" type="button">Solo miniaturas</button>
+                <button class="link-btn desktop-only" id="searchListen" type="button" title="Escuchar sin descargar">▶ Escuchar todo</button>
+                <button class="link-btn desktop-only" id="searchSaveList" type="button" title="Guardar en Escuchar, sin descargar">Guardar como lista</button>
               </div>
             </div>
             <ul class="pick-list" id="searchList"></ul>
             <div class="picker-foot">
               <span class="status-message" id="searchStatus" role="status"></span>
               <button class="btn btn-primary" id="btnSearchDownload" type="button">Descargar seleccionados</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== Escuchar: your lists, played from YouTube without downloading (desktop) ===== -->
+        <section class="view hidden" data-views="listen" id="listenSection">
+          <div class="web-only-note desktop-hide">
+            <p>Escuchar sin descargar funciona en la app de escritorio.</p>
+          </div>
+          <div class="desktop-only">
+            <form class="search-bar" id="listenImport">
+              <div class="field search-field">
+                <svg class="field-icon" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <input id="listenUrl" type="text" placeholder="Pega el enlace de una playlist de Spotify, Apple Music o YouTube" aria-label="Pega el enlace de una playlist de Spotify, Apple Music o YouTube" autocomplete="off" spellcheck="false" maxlength="500">
+              </div>
+              <button class="btn btn-primary" id="listenImportBtn" type="submit">Traer la lista</button>
+            </form>
+            <p class="hint" id="listenHint">Tus listas se quedan aquí y cada canción suena directo desde YouTube cuando le toca, sin descargar nada. En Spotify: los tres puntos de la playlist → Compartir → Copiar enlace (la playlist tiene que ser pública).</p>
+
+            <div class="listen-home" id="listenHome">
+              <div class="section-header"><h2>Tus listas</h2></div>
+              <div class="listen-grid" id="listenGrid"></div>
+              <p class="hint hidden" id="listenEmpty">Aún no tienes listas. Pega arriba el enlace de una playlist, o guarda los resultados de Buscar con «Guardar como lista».</p>
+            </div>
+
+            <div class="listen-detail hidden" id="listenDetail">
+              <div class="listen-head">
+                <img class="listen-cover" id="ldCover" alt="">
+                <div class="listen-head-text">
+                  <span class="listen-kind" id="ldKind"></span>
+                  <input class="listen-name" id="ldName" type="text" maxlength="150" aria-label="Nombre de la lista" spellcheck="false">
+                  <span class="listen-meta" id="ldMeta"></span>
+                  <div class="listen-actions">
+                    <button class="btn btn-primary" id="ldPlay" type="button">▶ Reproducir</button>
+                    <button class="btn" id="ldShuffle" type="button">Aleatorio</button>
+                    <button class="btn" id="ldQueue" type="button">Añadir a lo que suena</button>
+                    <button class="btn" id="ldDownload" type="button">Descargar todo</button>
+                    <button class="btn" id="ldRefresh" type="button">Actualizar</button>
+                    <button class="btn" id="ldDelete" type="button">Borrar</button>
+                  </div>
+                </div>
+                <button class="link-btn" id="ldBack" type="button">← Tus listas</button>
+              </div>
+              <span class="status-message" id="ldStatus" role="status"></span>
+              <ol class="listen-tracks" id="ldTracks"></ol>
             </div>
           </div>
         </section>
@@ -1879,9 +1931,20 @@
         </div>
         <audio id="plMediaB" preload="auto" hidden></audio>
         <div class="player-panel player-lyrics hidden" id="plLyrics" aria-live="off">
-          <div class="pl-panel-head"><strong>Letra</strong><button class="link-btn" id="plLyricsClose" type="button">Cerrar</button></div>
+          <div class="pl-panel-head"><strong>Letra</strong>
+            <span class="lyrics-sync hidden" id="plLyricsSync">
+              <button class="ed-mini" id="plLyricsEarlier" type="button" title="La letra va tarde: adelantarla 0,5 s" aria-label="La letra va tarde: adelantarla 0,5 s">−</button>
+              <button class="link-btn" id="plLyricsReset" type="button" title="Quitar el desfase"><span id="plLyricsOffset">Sin desfase</span></button>
+              <button class="ed-mini" id="plLyricsLater" type="button" title="La letra va adelantada: retrasarla 0,5 s" aria-label="La letra va adelantada: retrasarla 0,5 s">+</button>
+            </span>
+            <button class="link-btn" id="plLyricsClose" type="button">Cerrar</button></div>
+          <p class="hint hidden" id="plLyricsHint">Este vídeo dura distinto que la canción: si la letra va desfasada, ajústala con − y +.</p>
           <ol class="lyrics-lines" id="plLyricsLines"></ol>
           <p class="hint hidden" id="plLyricsEmpty">Esta canción no tiene letra. Descárgala con «Letras» activado, o añádela en Etiquetas.</p>
+        </div>
+        <div class="player-panel player-queue hidden" id="plQueue">
+          <div class="pl-panel-head"><strong>A continuación</strong><span class="ed-flex"></span><button class="link-btn desktop-only" id="plQueueSave" type="button">Guardar como lista</button><button class="link-btn" id="plQueueClear" type="button">Vaciar lo que viene</button><button class="link-btn" id="plQueueClose" type="button">Cerrar</button></div>
+          <ol class="pl-queue" id="plQueueList"></ol>
         </div>
         <div class="player-panel player-eq hidden" id="plEq">
           <div class="pl-panel-head"><strong>Ecualizador</strong><button class="link-btn" id="plEqClose" type="button">Cerrar</button></div>
@@ -1938,6 +2001,8 @@
           </div>
           <div class="player-right">
             <button class="ed-btn" id="plLyricsBtn" type="button" title="Letra" aria-label="Letra" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h10M4 18h7"/></svg></button>
+            <button class="ed-btn hidden" id="plSave" type="button" title="Descargar esta canción" aria-label="Descargar esta canción"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/></svg></button>
+            <button class="ed-btn" id="plQueueBtn" type="button" title="A continuación" aria-label="A continuación" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 6h11M4 11h11M4 16h7"/><path d="M17 13v8l4-4z"/></svg></button>
             <button class="ed-btn" id="plEqBtn" type="button" title="Ecualizador" aria-label="Ecualizador" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M6 4v16M12 4v16M18 4v16"/><circle cx="6" cy="14" r="2"/><circle cx="12" cy="8" r="2"/><circle cx="18" cy="16" r="2"/></svg></button>
             <button class="ed-btn" id="plCastBtn" type="button" title="Enviar a la tele" aria-label="Enviar a la tele"><svg viewBox="0 0 24 24"><path d="M2 16a6 6 0 0 1 6 6M2 12a10 10 0 0 1 10 10M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/></svg></button>
             <button class="ed-btn" id="plMiniBtn" type="button" title="Mini reproductor (siempre encima)" aria-label="Mini reproductor (siempre encima)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><rect x="12" y="12" width="7" height="6" rx="1"/></svg></button>

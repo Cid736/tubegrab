@@ -774,8 +774,11 @@ ipcMain.on('player:state', (event, state) => {
   const clean = {
     title: text(state.title), sub: text(state.sub), artist: text(state.artist, 200), track: text(state.track, 200),
     playing: state.playing === true, time: Number(state.time) || 0, duration: Number(state.duration) || 0,
-    cover: typeof state.cover === 'string' && /^\/api\/library\/cover\?client=[a-f0-9]{32}&id=[a-f0-9]{32}$/.test(state.cover) ? state.cover : null,
+    cover: typeof state.cover === 'string' && (/^\/api\/library\/cover\?client=[a-f0-9]{32}&id=[a-f0-9]{32}$/.test(state.cover) || YT_THUMB_RE.test(state.cover)) ? state.cover : null,
     volume: Number.isFinite(Number(state.volume)) ? Math.min(1, Math.max(0, Number(state.volume))) : 1, muted: state.muted === true,
+    // What comes next (the mini window's "Up next"), titles only.
+    upNext: Array.isArray(state.upNext) ? state.upNext.slice(0, 30).map((x) => ({ title: text(x && x.title, 200), sub: text(x && x.sub, 120), n: Number.isInteger(x && x.n) ? x.n : -1 })) : [],
+    streaming: state.streaming === true,
   };
   clean.active = Boolean(clean.title);
   const was = playerNow;
@@ -793,7 +796,35 @@ ipcMain.on('player:command', (event, cmd) => {
   if (PLAYER_COMMANDS.includes(cmd)) sendToRenderer('player:command', { cmd });
   else if (cmd && typeof cmd === 'object' && cmd.cmd === 'seek' && Number.isFinite(cmd.value)) sendToRenderer('player:command', { cmd: 'seek', value: cmd.value });
   else if (cmd && typeof cmd === 'object' && cmd.cmd === 'volume' && Number.isFinite(cmd.value)) sendToRenderer('player:command', { cmd: 'volume', value: Math.min(1, Math.max(0, cmd.value)) });
+  else if (cmd && typeof cmd === 'object' && cmd.cmd === 'jump' && Number.isInteger(cmd.value) && cmd.value >= 0 && cmd.value < 10000) sendToRenderer('player:command', { cmd: 'jump', value: cmd.value });
+  // Songs found in the mini window, played from YouTube without saving them.
+  else if (cmd && typeof cmd === 'object' && (cmd.cmd === 'stream' || cmd.cmd === 'enqueue')) {
+    const items = cleanStreamItems(cmd.items);
+    if (!items.length) return;
+    const index = Number.isInteger(cmd.index) && cmd.index >= 0 && cmd.index < items.length ? cmd.index : 0;
+    sendToRenderer('player:command', { cmd: cmd.cmd, items, value: index });
+  } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'expand') {
+    // Taller to show the search and what's next; kept on its screen.
+    const tall = cmd.value === true;
+    const [x, y] = miniWindow.getPosition();
+    const h = tall ? MINI_TALL : MINI_SIZE.height;
+    const { workArea: w } = screen.getDisplayMatching({ x, y, width: MINI_SIZE.width, height: h });
+    miniWindow.setBounds({ x, y: Math.max(w.y, Math.min(y, w.y + w.height - h)), width: MINI_SIZE.width, height: h });
+  }
 });
+// A YouTube thumbnail (the only pictures a song from YouTube shows).
+const YT_THUMB_RE = /^https:\/\/i\d?\.ytimg\.com\/[A-Za-z0-9_\-/.]{1,200}(\?[A-Za-z0-9_\-=&%.]{0,300})?$/;
+const MINI_TALL = 470;
+/** Songs from the mini window's search: YouTube ids and short texts only. */
+function cleanStreamItems(list) {
+  if (!Array.isArray(list)) return [];
+  const text = (v, n) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, n);
+  return list.slice(0, 50).filter((x) => x && typeof x === 'object' && /^[A-Za-z0-9_-]{11}$/.test(String(x.id))).map((x) => ({
+    id: String(x.id), title: text(x.title, 300), channel: text(x.channel, 120),
+    duration: Number.isFinite(x.duration) && x.duration > 0 && x.duration < 86400 * 2 ? x.duration : null,
+    thumbnail: typeof x.thumbnail === 'string' && YT_THUMB_RE.test(x.thumbnail) ? x.thumbnail : null,
+  }));
+}
 
 // === Player buttons in the taskbar thumbnail (⏮ ⏯ ⏭) ===
 // Small white glyphs drawn here, pixel by pixel (no image files needed).

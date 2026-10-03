@@ -27,8 +27,19 @@
         <button class="icon" id="next" type="button" title="Siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></svg></button>
         <button class="icon" id="mute" type="button" title="Silenciar" aria-label="Silenciar" aria-pressed="false"><svg class="i-vol" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg><svg class="i-muted" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg></button>
         <input type="range" id="seek" min="0" max="1" step="0.1" value="0" aria-label="Posición">
+        <button class="icon" id="more" type="button" title="Buscar y lo que viene" aria-label="Buscar y lo que viene" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M19 19l-4-4"/></svg></button>
       </div>
     </div>
+  </div>
+  <div class="drawer hidden" id="drawer">
+    <div class="tabs" role="tablist">
+      <button class="tab on" id="tabSearch" type="button" role="tab" aria-selected="true">Buscar</button>
+      <button class="tab" id="tabNext" type="button" role="tab" aria-selected="false">A continuación</button>
+    </div>
+    <form class="search" id="searchForm"><input id="q" type="search" maxlength="200" placeholder="Busca una canción o un artista…" aria-label="Busca una canción o un artista" autocomplete="off" spellcheck="false"></form>
+    <p class="note" id="note">Suena directo desde YouTube, sin descargar nada.</p>
+    <ul class="list" id="results"></ul>
+    <ul class="list hidden" id="upnext"></ul>
   </div>
   <script src="mini.js"></script>
 </body>

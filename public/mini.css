@@ -6,7 +6,7 @@
   --hover: rgba(255, 255, 255, 0.08);
 }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
-.mini { display: flex; gap: 12px; height: 100%; padding: 12px; box-sizing: border-box; cursor: grab; touch-action: none; }
+.mini { display: flex; gap: 12px; height: 128px; padding: 12px; box-sizing: border-box; cursor: grab; touch-action: none; }
 .mini.dragging { cursor: grabbing; }
 .cover { flex: 0 0 104px; height: 104px; border-radius: 10px; background: #2c2c2e; display: grid; place-items: center; overflow: hidden; }
 .cover svg { width: 40px; height: 40px; fill: none; stroke: var(--text-2); stroke-width: 1.6; }
@@ -30,3 +30,28 @@ button, input { cursor: default; }
 input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
 #mute .i-muted, #mute.muted .i-vol { display: none; }
 #mute.muted .i-muted { display: block; }
+#more.on { color: var(--accent); background: var(--hover); }
+.hidden { display: none !important; }
+
+/* The drawer: search YouTube and see what's next (the window grows for it). */
+.drawer { display: flex; flex-direction: column; height: calc(100% - 128px); padding: 0 12px 10px; box-sizing: border-box; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.tabs { display: flex; gap: 4px; padding: 8px 0; }
+.tab { flex: 1; height: 28px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.tab:hover { background: var(--hover); }
+.tab.on { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.search input { width: 100%; box-sizing: border-box; height: 32px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; background: #2c2c2e; color: var(--text); font: inherit; font-size: 13px; outline: none; }
+.search input:focus { border-color: var(--accent); }
+.note { margin: 6px 2px 4px; font-size: 11px; color: var(--text-2); }
+.list { list-style: none; margin: 4px 0 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; }
+.list li { display: flex; align-items: center; gap: 2px; }
+.list .msg { padding: 14px 4px; font-size: 12px; color: var(--text-2); }
+.item { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 5px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.item:hover { background: var(--hover); }
+.item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.item img { width: 56px; height: 32px; flex: none; object-fit: cover; border-radius: 4px; background: #2c2c2e; }
+.item-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.item-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-sub { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.add { flex: none; }
+.list::-webkit-scrollbar { width: 8px; }
+.list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 8px; }

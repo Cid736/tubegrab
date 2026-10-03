@@ -958,6 +958,154 @@ app.get('/api/library/lyrics', requireDesktop, requireClient, infoLimiter, async
   }
 });
 
+// === Listening without downloading (desktop app) ===
+// The audio comes straight from YouTube, relayed by this server only to
+// YouTube's media servers (lib/stream.js); nothing is saved. Not offered on a
+// self-hosted server, where it would relay music for anyone, nor through a
+// proxy (YouTube ties the audio's address to the computer that asked).
+const stream = require('./lib/stream');
+const streamSlots = slots(3);
+function requireStreaming(req, res, next) {
+  if (ytEnv().proxy) return res.status(409).json({ error: 'Escuchar sin descargar no funciona con un proxy: quítalo en Ajustes → Descargas.' });
+  if (!stream.isId(req.query.id)) return res.status(400).json({ error: 'Vídeo no válido.' });
+  return next();
+}
+app.get('/api/stream/info', requireDesktop, requireClient, infoLimiter, requireStreaming, async (req, res) => {
+  if (!streamSlots.take()) return res.status(429).json(BUSY);
+  try {
+    res.json(stream.publicInfo(req.query.id, await stream.resolve(req.query.id, ytEnv())));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  } finally {
+    streamSlots.release();
+  }
+});
+// The audio itself: <audio src> can't send headers, so the client id rides in the query.
+app.get('/api/stream/audio', requireDesktop, requireClient, requireStreaming, async (req, res) => {
+  try {
+    await stream.pipe(req.query.id, ytEnv(), req, res);
+  } catch (err) {
+    if (!res.headersSent) res.status(502).json({ error: err.message }); else res.destroy();
+  }
+});
+// YouTube's mix of similar songs, to keep playing when the list runs out.
+app.get('/api/stream/radio', requireDesktop, requireClient, infoLimiter, requireStreaming, async (req, res) => {
+  if (!playlistSlots.take()) return res.status(429).json(BUSY);
+  try {
+    res.json({ entries: await stream.radio(req.query.id, ytEnv(), download.flatList) });
+  } catch {
+    res.json({ entries: [] });
+  } finally {
+    playlistSlots.release();
+  }
+});
+// A song known by its name (from an imported list) → the YouTube video to play.
+const { StreamLists, pickVideo } = require('./lib/streamlists');
+const streamLists = IS_DESKTOP ? new StreamLists(path.join(dataDir, 'stream-lists.json')) : null;
+const foundVideos = new Map(); // "query|seconds" -> result
+app.get('/api/stream/find', requireDesktop, requireClient, infoLimiter, async (req, res) => {
+  const q = String(req.query.q || '').replace(/[\r\n\t]+/g, ' ').trim();
+  if (!q || q.length > 200) return res.status(400).json({ error: 'Falta qué buscar.' });
+  const d = Number(req.query.d) > 0 && Number(req.query.d) < 7200 ? Math.round(Number(req.query.d)) : null;
+  const key = `${q}|${d || ''}`;
+  let hit = foundVideos.get(key);
+  if (!hit) {
+    if (!infoSlots.take()) return res.status(429).json(BUSY);
+    try {
+      hit = pickVideo(await download.search(q, ytEnv(), 6), d);
+    } finally { infoSlots.release(); }
+    if (!hit) return res.status(404).json({ error: 'No se encontró esta canción en YouTube.' });
+    foundVideos.set(key, hit);
+    if (foundVideos.size > 2000) foundVideos.delete(foundVideos.keys().next().value);
+  }
+  // Remembered in its list, so it isn't looked up again.
+  const n = Number(req.query.n);
+  if (streamLists && typeof req.query.list === 'string' && Number.isInteger(n)) streamLists.remember(req.query.list, n, hit);
+  return res.json({ id: hit.id, title: hit.title, channel: hit.channel, duration: hit.duration, thumbnail: hit.thumbnail });
+});
+
+// === Lists to listen to (Spotify / Apple Music / YouTube playlists, or your own) ===
+const listFor = (req, res) => {
+  const l = streamLists.get(String(req.params.id));
+  if (!l) res.status(404).json({ error: 'No se encuentra esa lista.' });
+  return l;
+};
+/** A link → { name, source, url, tracks } from Spotify, Apple Music or a YouTube playlist. */
+async function readListLink(raw) {
+  const url = String(raw || '').trim();
+  if (importlist.isImportUrl(url)) {
+    const r = await importlist.readImport(url.startsWith('http') ? url : `https://${url}`);
+    return { name: r.title, source: r.service === 'spotify' ? 'spotify' : 'apple', url: url.startsWith('http') ? url : `https://${url}`, tracks: r.tracks.map((t) => ({ title: t.title, artist: t.artist, duration: t.duration, query: t.query })) };
+  }
+  const yt = download.normalizeMediaUrl(url);
+  if (yt && download.isYouTube(yt) && /[?&]list=/.test(yt)) {
+    if (!playlistSlots.take()) throw new Error(BUSY.error);
+    try {
+      const list = await download.flatList(yt, ytEnv(), 500);
+      if (!list || !list.entries.length) throw new Error('Esa playlist está vacía o no se puede leer.');
+      return { name: list.title, source: 'youtube', url: yt, tracks: list.entries.filter((e) => stream.isId(e.id)).map((e) => ({ title: e.title, artist: e.channel || '', duration: e.duration, yt: e.id, thumbnail: e.thumbnail })) };
+    } finally { playlistSlots.release(); }
+  }
+  throw new Error('Pega el enlace de una playlist de Spotify, Apple Music o YouTube.');
+}
+app.get('/api/streamlists', requireDesktop, requireClient, (req, res) => res.json({ lists: streamLists.summary() }));
+app.get('/api/streamlists/:id', requireDesktop, requireClient, (req, res) => { const l = listFor(req, res); if (l) res.json(l); });
+app.post('/api/streamlists/import', requireDesktop, requireClient, infoLimiter, async (req, res) => {
+  if (!importSlots.take()) return res.status(429).json(BUSY);
+  try {
+    const l = streamLists.create(await readListLink((req.body || {}).url));
+    res.json(l);
+  } catch (err) {
+    res.status(400).json({ error: err.message && err.message.length < 200 ? err.message : 'No se pudo leer esa lista.' });
+  } finally { importSlots.release(); }
+});
+app.post('/api/streamlists', requireDesktop, requireClient, createLimiter, (req, res) => {
+  try { res.json(streamLists.create({ name: (req.body || {}).name, tracks: (req.body || {}).tracks })); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.post('/api/streamlists/:id', requireDesktop, requireClient, createLimiter, (req, res) => {
+  if (!listFor(req, res)) return;
+  const b = req.body || {};
+  res.json(streamLists.update(String(req.params.id), { name: b.name, add: Array.isArray(b.add) ? b.add : undefined }));
+});
+app.post('/api/streamlists/:id/refresh', requireDesktop, requireClient, infoLimiter, async (req, res) => {
+  const l = listFor(req, res);
+  if (!l) return;
+  if (!l.url) return res.status(400).json({ error: 'Esta lista no viene de un enlace.' });
+  if (!importSlots.take()) return res.status(429).json(BUSY);
+  try {
+    const fresh = await readListLink(l.url);
+    res.json(streamLists.update(l.id, { tracks: fresh.tracks }));
+  } catch (err) {
+    res.status(400).json({ error: err.message && err.message.length < 200 ? err.message : 'No se pudo leer esa lista.' });
+  } finally { importSlots.release(); }
+});
+app.delete('/api/streamlists/:id/tracks/:n', requireDesktop, requireClient, (req, res) => {
+  const l = streamLists.removeTrack(String(req.params.id), /^\d{1,3}$/.test(req.params.n) ? Number(req.params.n) : -1);
+  if (!l) return res.status(404).json({ error: 'No se encuentra esa canción.' });
+  return res.json(l);
+});
+app.delete('/api/streamlists/:id', requireDesktop, requireClient, (req, res) => res.json({ ok: streamLists.remove(String(req.params.id)) }));
+
+// Lyrics for a song that's playing from YouTube (LRCLIB, by its artist and title).
+app.get('/api/stream/lyrics', requireDesktop, requireClient, infoLimiter, requireStreaming, async (req, res) => {
+  try {
+    const info = await stream.resolve(req.query.id, ytEnv());
+    // A song from an imported list knows its real artist and title (better than the video's).
+    const given = (v) => (typeof v === 'string' && v.trim() && v.length <= 200 ? v.trim() : null);
+    const artist = given(req.query.a) || info.artist;
+    const title = given(req.query.t) || info.track;
+    const { findLyrics } = require('./lib/lyrics');
+    const d = Number(req.query.d) > 0 && Number(req.query.d) < 7200 ? Number(req.query.d) : info.duration;
+    // A video often runs longer than the song: then without the length.
+    const found = await findLyrics({ artist, title, duration: d }) || await findLyrics({ artist, title });
+    if (!found) return res.json({ synced: null, plain: null });
+    const synced = found.synced ? require('./lib/library').parseLrc(found.synced) : null;
+    return res.json({ synced: synced && synced.length ? synced : null, plain: found.plain || null, duration: found.duration || null });
+  } catch {
+    return res.json({ synced: null, plain: null });
+  }
+});
+
 // Cover art of a song (its embedded picture), small, for the player.
 const covers = new Map(); // id -> Buffer | null
 // A few ffmpeg processes at most, however many covers the page asks for.
