@@ -91,7 +91,11 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - **Automatic backup** (desktop) into a folder of yours (OneDrive, a drive…) every day, week or month, keeping the last 8; **notifications with buttons** ("Open", "Show in folder")
 - **Control from your phone** (desktop): scan a QR and a page on your WiFi lets you send links to download on the PC and follow them
 - **Phone notifications** (desktop): a message on your phone through the free ntfy app when a long task finishes (or fails)
-- **Your own look**: any accent colour and your own background picture; a short **tour** on first launch (and in Settings → About)
+- **Your own look**: any accent colour and your own background picture (with its own veil and blur) or **three colours of your own**; a short **tour** on first launch (and in Settings → About)
+  - **Quick styles** in one click (Midnight, Paper, Neon, Terminal, Forest, Sunset, Compact) and a **style code** to copy your look to another computer
+  - **Typeface** (system, wide, serif, monospaced, narrow), bolder text, five text sizes, **spacing** (compact, normal, roomy), **corners** (square, normal, round), content centred or across the whole window, thin or hidden scroll bars
+  - **Side menu your way**: left or right, icons only, normal or wide, icons in the accent colour, each a colour or none, and **choose which pages show and in what order**
+  - **Dark mode by schedule** (say from 20:00 to 7:00), hide the description under the title or the Windows/Mac button, and **pick the page the app opens on**
 - **Comfort**: estimated file size before downloading, "Retry what failed", reopens on the page you left, **?** shows every shortcut, search box in Settings, **high contrast** and **reduce animations**, tray menu with "Download the copied link", open folder, pause/resume all; the phone page follows the phone's language and lets you pick format and quality
 - Saves straight to your folder; several files (chapters, subtitles) go together in a subfolder
 - **System tray**: keep running when closed (downloads and subscriptions carry on); **detect copied links** (opt-in) and download them with one click
@@ -196,7 +200,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 ## Tests
 
 ```bash
-npm test                    # 224 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
+npm test                    # 230 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
 TG_NETWORK=1 npm test       # also real YouTube downloads
 ```
 
@@ -324,7 +328,11 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - **Copia automática** (app de escritorio) en una carpeta tuya (OneDrive, un disco…) cada día, semana o mes, guardando las 8 últimas; **avisos con botones** («Abrir», «Mostrar en la carpeta»)
 - **Control desde el móvil** (escritorio): escaneas un QR y una página en tu WiFi te deja mandar enlaces para que se descarguen en el PC y ver cómo van
 - **Avisos en el móvil** (escritorio): un aviso en el móvil, con la app gratuita ntfy, cuando termina (o falla) una tarea larga
-- **A tu gusto**: cualquier color de énfasis y tu propia imagen de fondo; una **presentación** corta la primera vez (y en Ajustes → Acerca de)
+- **A tu gusto**: cualquier color de énfasis y tu propia imagen de fondo (con su velo y su desenfoque) o **tres colores tuyos**; una **presentación** corta la primera vez (y en Ajustes → Acerca de)
+  - **Estilos rápidos** de un clic (Medianoche, Papel, Neón, Terminal, Bosque, Atardecer, Compacto) y un **código de estilo** para llevar tu aspecto a otro equipo
+  - **Tipo de letra** (del sistema, ancha, con remates, monoespaciada, estrecha), texto más grueso, cinco tamaños de texto, **espaciado** (compacto, normal, amplio), **esquinas** (rectas, normales, redondas), contenido centrado o a toda la ventana, barras de desplazamiento finas u ocultas
+  - **El menú lateral como quieras**: a la izquierda o a la derecha, solo iconos, normal o ancho, iconos del color de énfasis, de colores o sin color, y **elige qué páginas se ven y en qué orden**
+  - **Modo oscuro por horario** (de 20:00 a 7:00, por ejemplo), ocultar la descripción bajo el título o el botón Windows/Mac, y **elegir en qué página se abre la app**
 - **Comodidad**: tamaño aproximado antes de descargar, «Reintentar lo que falló», se abre en la página donde lo dejaste, **?** muestra todos los atajos, buscador en Ajustes, **alto contraste** y **reducir animaciones**, menú de la bandeja con «Descargar el enlace copiado», abrir la carpeta, pausar/reanudar todo; la página del móvil sale en su idioma y deja elegir formato y calidad
 - Guarda directamente en tu carpeta; varios archivos (capítulos, subtítulos) van juntos en una subcarpeta
 - **Bandeja del sistema**: seguir abierta al cerrar (descargas y suscripciones continúan); **detectar enlaces copiados** (opcional) y descargarlos con un clic
@@ -389,7 +397,7 @@ Con la firma desaparece el aviso "Editor desconocido" de SmartScreen (al momento
 ## Pruebas
 
 ```bash
-npm test                    # 224 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
+npm test                    # 230 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
 TG_NETWORK=1 npm test       # también descargas reales de YouTube
 ```
 

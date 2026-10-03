@@ -567,3 +567,13 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - **Síntoma:** con la ventana a media anchura (la barra lateral ocupa parte), el reproductor seguía en tres columnas: el título se cortaba («DJ TUFF - Mig…»), la barra de tiempo quedaba diminuta y los botones de la derecha, amontonados.
 - **Causa:** la barra decidía su forma por el ancho de la **ventana**, no por el suyo.
 - **Fix:** se coloca según su propio ancho (`@container`): ancha, en una fila; mediana, título y herramientas arriba y controles con la barra de tiempo abajo, a lo ancho; estrecha, en una columna. Con la ventana estrecha (la página entera se desplaza) el reproductor queda pegado abajo y no se pierde al final. Probado a 1300, 1100, 1000, 700 y 560 px.
+
+---
+
+## 2026-10-04 — v3.6.0: la interfaz, a gusto de cada uno
+
+### [UI] Casi todo el aspecto se puede cambiar (Ajustes → Apariencia)
+- **Nuevo:** tipo de letra, texto más grueso, cinco tamaños, espaciado, esquinas, ancho del contenido, barras de desplazamiento; menú lateral a la izquierda o a la derecha, solo iconos / normal / ancho, color de sus iconos, qué páginas se ven y en qué orden; modo oscuro por horario; fondo con tres colores propios; velo y desenfoque para la imagen propia; descripción bajo el título y botón Windows/Mac opcionales; página de inicio; estilos rápidos; código de estilo para copiar el aspecto.
+- **Cómo:** todo sigue pasando por `theme-init.js` antes de pintar: cada valor se comprueba contra una lista fija (o un rango de números enteros, `#rrggbb`, `HH:MM`, o páginas conocidas sin repetir) y acaba como atributo en `<html>`; las reglas viven en `custom.css`, encima de las dos interfaces. Ocultar todas las páginas del menú no se puede (vuelven todas).
+- **Código de estilo:** solo lleva las claves del aspecto (nunca la carpeta, el límite de velocidad, la plantilla de nombres ni tu imagen) y al pegarlo pasa por las mismas comprobaciones; probado con valores con CSS inyectado, `__proto__` y claves ajenas.
+- **Encontrado al probarlo en la app:** con «Muy grande» en una ventana pequeña, los cuatro temas y los cinco tamaños no cabían y aparecía desplazamiento horizontal; ahora los grupos de botones bajan de línea. Probado en Windows y Mac, en español e inglés, con cada estilo rápido, menú a la derecha, solo iconos y la imagen desenfocada. 230 pruebas.

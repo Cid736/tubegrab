@@ -9,6 +9,7 @@
   <script src="theme-init.js"></script>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="fluent.css">
+  <link rel="stylesheet" href="custom.css">
 </head>
 <body>
   <div class="window">
@@ -1258,7 +1259,11 @@
                 <button class="theme-tile" data-value="auto" type="button" role="radio"><span class="tile tile-auto"></span><span>Automático</span></button>
                 <button class="theme-tile" data-value="light" type="button" role="radio"><span class="tile tile-light"></span><span>Claro</span></button>
                 <button class="theme-tile" data-value="dark" type="button" role="radio"><span class="tile tile-dark"></span><span>Oscuro</span></button>
+                <button class="theme-tile" data-value="schedule" type="button" role="radio"><span class="tile tile-schedule"><svg class="tile-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span>Por horario</span></button>
               </div>
+            </div>
+            <div class="row hidden" id="scheduleRow"><span class="row-label">Modo oscuro por horario <small>se cambia solo a esas horas</small></span>
+              <div class="time-pair"><span>De</span><input type="time" id="darkFrom" aria-label="Empieza el modo oscuro"><span>a</span><input type="time" id="darkTo" aria-label="Acaba el modo oscuro"></div>
             </div>
             <div class="row"><span class="row-label">Color de énfasis</span>
               <div class="swatches picker" id="accentPicker" role="radiogroup" aria-label="Color de énfasis">
@@ -1281,12 +1286,22 @@
                 <button class="wall-chip wc-forest" data-value="forest" type="button" role="radio" title="Bosque" aria-label="Bosque"></button>
                 <button class="wall-chip wc-graphite" data-value="graphite" type="button" role="radio" title="Grafito" aria-label="Grafito"></button>
                 <button class="wall-chip wc-none" data-value="none" type="button" role="radio" title="Ninguno" aria-label="Ninguno"></button>
+                <button class="wall-chip wc-colors" id="wallColorsChip" data-value="colors" type="button" role="radio" title="Tus colores" aria-label="Tus colores"></button>
                 <button class="wall-chip wc-custom" id="wallCustom" type="button" role="radio" title="Tu imagen" aria-label="Tu imagen"></button>
                 <input type="file" id="wallInput" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden>
               </div>
             </div>
             <div class="row hidden" id="wallCustomRow"><span class="row-label">Tu imagen de fondo</span>
               <div class="row-actions"><button class="btn" id="wallChange" type="button">Cambiar imagen…</button></div>
+            </div>
+            <div class="row hidden" id="wallDimRow"><span class="row-label">Velo sobre la imagen <small>más velo, texto más fácil de leer</small></span>
+              <div class="range-row"><input type="range" id="wallDim" min="0" max="90" step="5" aria-label="Velo sobre la imagen"><output id="wallDimOut"></output></div>
+            </div>
+            <div class="row hidden" id="wallBlurRow"><span class="row-label">Desenfoque de la imagen</span>
+              <div class="range-row"><input type="range" id="wallBlur" min="0" max="30" step="1" aria-label="Desenfoque de la imagen"><output id="wallBlurOut"></output></div>
+            </div>
+            <div class="row hidden" id="wallColorsRow"><span class="row-label">Tus colores de fondo <small>tres colores que se mezclan</small></span>
+              <div class="color-trio"><input type="color" id="wallC1" aria-label="Color 1"><input type="color" id="wallC2" aria-label="Color 2"><input type="color" id="wallC3" aria-label="Color 3"></div>
             </div>
             <div class="row"><span class="row-label">Vidrio</span>
               <div class="segmented segmented-small picker" id="glassPicker" role="radiogroup" aria-label="Vidrio">
@@ -1299,11 +1314,107 @@
             <label class="row switch"><span class="row-label">Reducir animaciones</span><input type="checkbox" id="prefMotion"><span class="switch-ui"></span></label>
             <div class="row"><span class="row-label">Tamaño del texto</span>
               <div class="segmented segmented-small picker" id="sizePicker" role="radiogroup" aria-label="Tamaño del texto">
+                <button data-value="xsmall" type="button" role="radio">Muy pequeño</button>
                 <button data-value="small" type="button" role="radio">Pequeño</button>
                 <button data-value="medium" type="button" role="radio">Normal</button>
                 <button data-value="large" type="button" role="radio">Grande</button>
+                <button data-value="xlarge" type="button" role="radio">Muy grande</button>
               </div>
             </div>
+          </div>
+
+          <div class="section-header"><h2>Estilos rápidos</h2></div>
+          <div class="group">
+            <div class="presets" id="stylePresets" aria-label="Estilos rápidos"></div>
+            <div class="row style-row"><span class="row-label">Compartir tu estilo <small>cópialo como un código y pégalo en otro equipo</small></span>
+              <div class="style-io">
+                <button class="btn" id="styleCopy" type="button">Copiar mi estilo</button>
+                <input class="text-input style-code" id="styleCode" type="text" placeholder="Pega aquí un código de estilo" aria-label="Pega aquí un código de estilo" autocomplete="off" spellcheck="false">
+                <button class="btn" id="stylePaste" type="button">Aplicar</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-header"><h2>Texto y forma</h2></div>
+          <div class="group">
+            <label class="row"><span class="row-label">Tipo de letra</span>
+              <select data-pref="font" aria-label="Tipo de letra">
+                <option value="system">Del sistema</option>
+                <option value="humanist">Ancha y clara</option>
+                <option value="serif">Clásica (con remates)</option>
+                <option value="mono">Monoespaciada</option>
+                <option value="condensed">Estrecha</option>
+              </select>
+            </label>
+            <label class="row switch"><span class="row-label">Texto más grueso</span><input type="checkbox" data-pref="bold"><span class="switch-ui"></span></label>
+            <div class="row"><span class="row-label">Espaciado <small>cuánto sitio ocupa cada fila</small></span>
+              <div class="segmented segmented-small picker" data-pref="density" role="radiogroup" aria-label="Espaciado">
+                <button data-value="compact" type="button" role="radio">Compacto</button>
+                <button data-value="normal" type="button" role="radio">Normal</button>
+                <button data-value="comfy" type="button" role="radio">Amplio</button>
+              </div>
+            </div>
+            <div class="row"><span class="row-label">Esquinas</span>
+              <div class="segmented segmented-small picker" data-pref="corners" role="radiogroup" aria-label="Esquinas">
+                <button data-value="square" type="button" role="radio">Rectas</button>
+                <button data-value="normal" type="button" role="radio">Normales</button>
+                <button data-value="round" type="button" role="radio">Redondas</button>
+              </div>
+            </div>
+            <div class="row"><span class="row-label">Ancho del contenido</span>
+              <div class="segmented segmented-small picker" data-pref="contentWidth" role="radiogroup" aria-label="Ancho del contenido">
+                <button data-value="normal" type="button" role="radio">Centrado</button>
+                <button data-value="full" type="button" role="radio">Toda la ventana</button>
+              </div>
+            </div>
+            <div class="row"><span class="row-label">Barras de desplazamiento</span>
+              <div class="segmented segmented-small picker" data-pref="scrollbar" role="radiogroup" aria-label="Barras de desplazamiento">
+                <button data-value="normal" type="button" role="radio">Normales</button>
+                <button data-value="thin" type="button" role="radio">Finas</button>
+                <button data-value="hidden" type="button" role="radio">Ocultas</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-header">
+            <h2>Menú lateral</h2>
+            <button class="link-btn" id="btnResetNav" type="button">Restablecer el menú</button>
+          </div>
+          <div class="group">
+            <div class="row"><span class="row-label">Lado</span>
+              <div class="segmented segmented-small picker" data-pref="sidebarSide" role="radiogroup" aria-label="Lado del menú">
+                <button data-value="left" type="button" role="radio">Izquierda</button>
+                <button data-value="right" type="button" role="radio">Derecha</button>
+              </div>
+            </div>
+            <div class="row"><span class="row-label">Ancho del menú</span>
+              <div class="segmented segmented-small picker" data-pref="sidebarWidth" role="radiogroup" aria-label="Ancho del menú">
+                <button data-value="icons" type="button" role="radio">Solo iconos</button>
+                <button data-value="normal" type="button" role="radio">Normal</button>
+                <button data-value="wide" type="button" role="radio">Ancho</button>
+              </div>
+            </div>
+            <label class="row"><span class="row-label">Iconos del menú</span>
+              <select data-pref="navIcons" aria-label="Iconos del menú">
+                <option value="auto">Como la interfaz</option>
+                <option value="accent">Color de énfasis</option>
+                <option value="color">Uno de cada color</option>
+                <option value="mono">Sin color</option>
+              </select>
+            </label>
+            <div class="row"><span class="row-label">Páginas del menú <small>elige cuáles se ven y en qué orden</small></span></div>
+            <ul class="nav-edit" id="navEdit" aria-label="Páginas del menú"></ul>
+          </div>
+
+          <div class="section-header"><h2>Barra superior y arranque</h2></div>
+          <div class="group">
+            <label class="row switch"><span class="row-label">Descripción bajo el título <small>la frase que explica cada página</small></span><input type="checkbox" data-pref="showSubtitle"><span class="switch-ui"></span></label>
+            <label class="row switch"><span class="row-label">Botón Windows / Mac en la barra</span><input type="checkbox" data-pref="showUiSwitch"><span class="switch-ui"></span></label>
+            <label class="row"><span class="row-label">Al abrir la app, empezar en</span>
+              <select data-pref="startView" id="startViewSelect" aria-label="Al abrir la app, empezar en">
+                <option value="last">La última página que usaste</option>
+              </select>
+            </label>
           </div>
         </section>
 

@@ -1,0 +1,180 @@
+/* ===========================================================
+   TubeGrab — personalisation (v3.6), on top of both interfaces
+   Loaded after style.css and fluent.css. Every rule hangs off an
+   attribute on <html> that theme-init.js sets from a fixed list:
+     data-font      system | humanist | serif | mono | condensed
+     data-density   compact | normal | comfy
+     data-corners   square | normal | round
+     data-bold      on | off
+     data-navicons  auto | accent | color | mono
+     data-side      left | right
+     data-navwidth  icons | normal | wide
+     data-scrollbar normal | thin | hidden
+     data-content   normal | full
+     data-subtitle  on | off        data-uiswitch on | off
+     data-wallblur  on | off        (+ --wall-dim, --wall-blur)
+   =========================================================== */
+
+/* ----- Extra text sizes ----- */
+:root[data-size="xsmall"] { --zoom: 0.8; }
+:root[data-size="xlarge"] { --zoom: 1.3; }
+
+/* ----- Typeface ----- */
+:root[data-font="humanist"] { --font: Verdana, Tahoma, "Segoe UI", system-ui, sans-serif; --font-display: Verdana, Tahoma, "Segoe UI", system-ui, sans-serif; }
+:root[data-font="serif"] { --font: Georgia, Cambria, "Times New Roman", serif; --font-display: Georgia, Cambria, "Times New Roman", serif; }
+:root[data-font="mono"] { --font: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, monospace; --font-display: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, monospace; }
+:root[data-font="condensed"] { --font: "Bahnschrift SemiCondensed", Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif; --font-display: Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif; }
+:root[data-bold="on"] body { font-weight: 500; }
+:root[data-bold="on"] .row-label, :root[data-bold="on"] .nav-item { font-weight: 500; }
+
+/* ----- Density: how much room rows and menu items take ----- */
+:root[data-density="compact"] .row { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
+:root[data-density="compact"] .group { margin-top: 10px; }
+:root[data-density="compact"] .nav-item { height: 26px; }
+:root[data-density="compact"][data-ui="windows"] .group:not(.list-group) > .row { min-height: 42px; padding: 5px 14px; }
+:root[data-density="compact"][data-ui="windows"] .nav-item { height: 30px; }
+:root[data-density="compact"][data-ui="windows"] .nav { gap: 2px; }
+:root[data-density="comfy"] .row { min-height: 50px; padding-top: 10px; padding-bottom: 10px; }
+:root[data-density="comfy"] .group { margin-top: 18px; }
+:root[data-density="comfy"] .nav-item { height: 36px; }
+:root[data-density="comfy"] .nav { gap: 4px; }
+:root[data-density="comfy"][data-ui="windows"] .group:not(.list-group) > .row { min-height: 68px; padding: 14px 18px; }
+:root[data-density="comfy"][data-ui="windows"] .group:not(.list-group) { gap: 6px; }
+:root[data-density="comfy"][data-ui="windows"] .nav-item { height: 42px; }
+
+/* ----- Corners: square, as they come, or round ----- */
+:root[data-corners="square"] { --corner-box: 2px; --corner-ctl: 2px; }
+:root[data-corners="round"] { --corner-box: 20px; --corner-ctl: 14px; }
+:root:is([data-corners="square"], [data-corners="round"]) :is(
+  .sidebar, .group, .list-group, .notice, .preview, .dropzone, .promo, .modal-card, .stat-tile, .ed-stage, .ed-inspector, .ed-tracks,
+  .ed-clips, .trim-panel, .frame-preview, .order-list, .tags-table-wrap, .schedule-bar, .lib-pl-bar, .web-only-note, .settings-results,
+  .lib-card-art, .whisper-model, .cast-device, .rec-source, .yt-hover, .pick-player, .dupes-group, .ed-text-item
+) { border-radius: var(--corner-box) !important; }
+:root:is([data-corners="square"], [data-corners="round"])[data-ui="windows"] :is(.group:not(.list-group) > .row, .main) { border-radius: var(--corner-box) !important; }
+:root:is([data-corners="square"], [data-corners="round"]) :is(
+  .btn, .nav-item, .segmented, .segmented button, .segmented-small button, .ui-switch, .ui-switch button, .field, .row select, .text-input,
+  .subnav-tab, .ed-btn, .ed-tool, .ed-mini, .lib-select, .link-btn, .keys-box, .queue-icon, .lib-icon, .player-icon, .preview-thumb,
+  .pick-thumb, .wall-chip, .settings-results button, .name-tokens button, .ed-text-row select, .ed-clip-speed, .version-chip
+) { border-radius: var(--corner-ctl) !important; }
+
+/* ----- Side menu: which side, how wide, what colour its icons are ----- */
+@media (min-width: 721px) {
+  :root[data-side="right"] .frame { flex-direction: row-reverse; }
+  :root[data-side="right"]:not([data-ui="windows"]) .sidebar { margin: 8px 8px 8px 0; }
+  :root[data-side="right"][data-ui="windows"] .main { border-left: none; border-right: 1px solid var(--w-stroke); border-top-left-radius: 0; border-top-right-radius: 8px; }
+
+  /* Icons only: the names stay as tooltips. */
+  :root[data-navwidth="icons"] .sidebar { width: 60px; padding-left: 8px; padding-right: 8px; }
+  :root[data-navwidth="icons"][data-ui="windows"] .sidebar { width: 56px; padding: 4px; }
+  :root[data-navwidth="icons"] .nav-item { justify-content: center; padding: 0; position: relative; }
+  :root[data-navwidth="icons"] .nav-item span:first-of-type { display: none; }
+  :root[data-navwidth="icons"] .nav-item svg { width: 19px; height: 19px; }
+  :root[data-navwidth="icons"] .nav-badge { position: absolute; top: 1px; right: 1px; min-width: 15px; height: 15px; line-height: 15px; padding: 0 4px; font-size: 9px; }
+  :root[data-navwidth="icons"] .sidebar-brand { justify-content: center; padding-left: 0; padding-right: 0; }
+  :root[data-navwidth="icons"] .sidebar-brand span:last-child { display: none; }
+  :root[data-navwidth="icons"] .version-chip { display: none; }
+  :root[data-navwidth="icons"] .traffic { flex-direction: column; gap: 5px; }
+  :root[data-navwidth="icons"] .sidebar-top { justify-content: center; padding-left: 0; height: auto; min-height: 44px; }
+
+  :root[data-navwidth="wide"] .sidebar { width: 270px; }
+  :root[data-navwidth="wide"][data-ui="windows"] .sidebar { width: 320px; }
+}
+.nav-item.nav-off { display: none !important; }
+
+:root[data-navicons="accent"] .nav-item svg { stroke: var(--accent); }
+:root[data-navicons="mono"] .nav-item svg { stroke: var(--text-2); }
+:root[data-navicons="color"] .nav-item svg { stroke: var(--ic, var(--accent)); stroke-width: 1.9; }
+:root[data-navicons="color"] .nav-item[data-view="dl-link"] { --ic: #0a84ff; }
+:root[data-navicons="color"] .nav-item[data-view="dl-search"] { --ic: #5e5ce6; }
+:root[data-navicons="color"] .nav-item[data-view="dl-subs"] { --ic: #ff9f0a; }
+:root[data-navicons="color"] .nav-item[data-view="cv-format"] { --ic: #30b0c7; }
+:root[data-navicons="color"] .nav-item[data-view="cv-edit"] { --ic: #ff375f; }
+:root[data-navicons="color"] .nav-item[data-view="cv-subs"] { --ic: #32ade6; }
+:root[data-navicons="color"] .nav-item[data-view="cv-merge"] { --ic: #34c759; }
+:root[data-navicons="color"] .nav-item[data-view="cv-compress"] { --ic: #af52de; }
+:root[data-navicons="color"] .nav-item[data-view="cv-image"] { --ic: #ff9500; }
+:root[data-navicons="color"] .nav-item[data-view="cv-tags"] { --ic: #c69300; }
+:root[data-navicons="color"] .nav-item[data-view="queue"] { --ic: #64748b; }
+:root[data-navicons="color"] .nav-item[data-view="history"] { --ic: #a2845e; }
+:root[data-navicons="color"] .nav-item[data-view="library"] { --ic: #ff2d55; }
+:root[data-navicons="color"] .nav-item[data-view="stats"] { --ic: #28a745; }
+:root[data-navicons="color"] .nav-item[data-view="set-appearance"] { --ic: #8e8e93; }
+
+/* ----- Toolbar pieces you can hide ----- */
+:root[data-subtitle="off"] .toolbar-title span { display: none; }
+:root[data-uiswitch="off"] #uiSwitch { display: none; }
+
+/* ----- Scroll bars ----- */
+:root[data-scrollbar="thin"] ::-webkit-scrollbar { width: 6px; height: 6px; }
+:root[data-scrollbar="thin"] ::-webkit-scrollbar-thumb { border-width: 1px; }
+:root[data-scrollbar="hidden"] ::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ----- Content width ----- */
+:root[data-content="full"] :is(.view, .notice, .footer) { max-width: none; }
+
+/* ----- Own background picture: how veiled and how blurred ----- */
+:root { --wall-veil: rgb(255 255 255 / var(--wall-dim, 0.4)); }
+:root[data-theme="dark"] { --wall-veil: rgb(0 0 0 / min(0.95, calc(var(--wall-dim, 0.4) + 0.1))); }
+:root[data-wall="custom"][data-wallblur="on"] { --wall: var(--wbase); --wall-desktop: var(--wbase); }
+:root[data-wall="custom"][data-wallblur="on"] body::before {
+  content: ''; position: fixed; z-index: -1; pointer-events: none;
+  inset: calc(var(--wall-blur, 0px) * -2);
+  background: linear-gradient(var(--wall-veil), var(--wall-veil)), var(--wall-image) center / cover no-repeat;
+  filter: blur(var(--wall-blur, 0px));
+}
+
+/* ===== Settings controls for all of the above ===== */
+.wc-colors { background: linear-gradient(135deg, var(--c1, #7ab8ff), var(--c2, #c39bff) 55%, var(--c3, #7fe0c8)); }
+.tile-schedule { --tile-line: rgba(128, 128, 128, 0.3); background: linear-gradient(135deg, #dde9fb 50%, #1d2740 50%); }
+.tile-schedule::before { background: rgba(255, 255, 255, 0.8); }
+.tile-schedule .tile-clock { position: absolute; right: 5px; bottom: 4px; width: 14px; height: 14px; color: #fff; z-index: 1; }
+.color-trio { display: flex; gap: 8px; align-items: center; }
+.color-trio input[type="color"] { width: 34px; height: 24px; padding: 0; border: 1px solid var(--hairline); border-radius: 6px; background: none; cursor: pointer; }
+.time-pair { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.time-pair input { height: 26px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--hairline); background: var(--inset); color: var(--text); font: inherit; }
+.range-row { display: flex; align-items: center; gap: 10px; min-width: 200px; }
+.range-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+.range-row output { min-width: 40px; text-align: right; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+/* Quick styles: one click sets many of the options. */
+.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; padding: 12px; }
+.preset {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px; border: 1px solid var(--hairline); border-radius: 10px;
+  background: var(--inset); color: var(--text); font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+}
+.preset:hover { border-color: var(--accent); }
+.preset:focus-visible { outline: none; box-shadow: var(--focus); }
+.preset-look { position: relative; height: 44px; border-radius: 6px; overflow: hidden; background: var(--pw); box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15); }
+.preset-look::before { content: ''; position: absolute; left: 4px; top: 4px; bottom: 4px; width: 16px; border-radius: 3px; background: var(--ps); }
+.preset-look::after { content: ''; position: absolute; left: 25px; right: 6px; top: 8px; height: 6px; border-radius: 3px; background: var(--pa); box-shadow: 0 10px 0 -1px var(--pl), 0 18px 0 -1px var(--pl); }
+.preset-name { font-weight: 600; padding: 0 2px 2px; }
+
+/* The side menu's pages: show/hide and order. */
+.nav-edit { list-style: none; margin: 0; padding: 4px 0; }
+.nav-edit li { display: flex; align-items: center; gap: 10px; padding: 4px 12px; min-height: 36px; }
+.nav-edit li + li { border-top: 0.5px solid var(--hairline); }
+.nav-edit li.off .ne-name { color: var(--text-3); text-decoration: line-through; }
+.nav-edit svg { width: 16px; height: 16px; fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.nav-edit .ne-name { flex: 1; }
+.nav-edit input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+.nav-edit .ne-move { width: 26px; height: 26px; border: 0; border-radius: 6px; background: var(--inset); color: var(--text); cursor: pointer; display: grid; place-items: center; }
+.nav-edit .ne-move:disabled { opacity: 0.3; cursor: default; }
+.nav-edit .ne-move svg { stroke: currentColor; width: 12px; height: 12px; }
+.style-code { width: 100%; min-width: 0; flex: 1; }
+.style-io { display: flex; gap: 8px; align-items: center; flex: 1; justify-content: flex-end; flex-wrap: wrap; }
+.style-io .text-input { max-width: 260px; }
+:root[data-corners="square"] .tile { border-radius: 2px !important; }
+:root[data-corners="round"] .tile { border-radius: 12px !important; }
+.style-row { flex-wrap: wrap; }
+.style-row .style-io { flex: 1 1 100%; flex-wrap: nowrap; justify-content: stretch; }
+.style-row .style-io .text-input { max-width: none; }
+/* Five themes, nine colours, eight backgrounds: let them wrap rather than overflow
+   (also with "Muy grande" text in a small window). */
+.theme-picker, .swatches, .walls { flex-wrap: wrap; justify-content: flex-end; }
+.row-tall { flex-wrap: wrap; }
+.row-tall > .picker { margin-left: auto; }
+/* A row whose buttons don't fit next to its name puts them underneath. */
+.row:has(> .segmented-small, > .range-row, > .time-pair, > .color-trio) { flex-wrap: wrap; row-gap: 6px; }
+.row > .segmented-small, .row > .range-row, .row > .time-pair, .row > .color-trio { margin-left: auto; max-width: 100%; }
+.row > .segmented-small.picker { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; }
+[data-ui="windows"] .nav-edit { background: var(--w-card); border: 1px solid var(--w-stroke); border-radius: 6px; }

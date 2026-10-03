@@ -50,11 +50,15 @@ test('tampered storage never reaches the page', () => {
   const evil = {
     uiDefault: '<img src=x onerror=alert(1)>', theme: 'dark;background:url(//evil)', accent: '__proto__',
     wall: 'javascript:alert(1)', glass: {}, size: 'huge', remember: 'yes', notify: 1, sound: null, last: [1, 2],
+    font: 'Comic Sans; } * { x', density: 9, corners: ['round'], bold: 'on', navIcons: 'rainbow', sidebarSide: 'top', sidebarWidth: '9999px',
+    scrollbar: null, contentWidth: '100vw', showSubtitle: 0, showUiSwitch: 'false',
   };
   const { attrs, prefs } = boot({ local: { tubegrab_prefs: JSON.stringify(evil) }, session: { tubegrab_ui: 'evil' } });
   assert.deepEqual({ ...attrs }, {
     'data-ui': 'windows', 'data-theme': 'light', 'data-accent': 'blue', 'data-wall': 'aurora', 'data-glass': 'tinted', 'data-size': 'medium',
     'data-contrast': 'normal', 'data-motion': 'normal', lang: 'es',
+    'data-wallblur': 'off', 'data-font': 'system', 'data-density': 'normal', 'data-corners': 'normal', 'data-bold': 'off', 'data-navicons': 'auto',
+    'data-side': 'left', 'data-navwidth': 'normal', 'data-scrollbar': 'normal', 'data-content': 'normal', 'data-subtitle': 'on', 'data-uiswitch': 'on',
   });
   const p = prefs.get();
   assert.equal(p.remember, true);
@@ -126,4 +130,103 @@ test('file-name template pref: tags and safe characters only', () => {
   for (const evil of ['{title}/../x', '{title}%(uploader)s', '<img src=x>{title}', 'no tags', 'x'.repeat(130)]) {
     assert.equal(boot({ local: { tubegrab_prefs: JSON.stringify({ nameTemplate: evil }) } }).prefs.get().nameTemplate, '', evil);
   }
+});
+
+test('v3.6 look options: listed values only, numbers in range, colours and times checked', () => {
+  const ok = boot({ local: { tubegrab_prefs: JSON.stringify({
+    font: 'serif', density: 'compact', corners: 'round', bold: true, navIcons: 'color', sidebarSide: 'right', sidebarWidth: 'icons',
+    scrollbar: 'thin', contentWidth: 'full', showSubtitle: false, showUiSwitch: false, size: 'xlarge', wallDim: 70, wallBlur: 12,
+    wall: 'colors', wallColors: '#ff0000,#00ff00,#0000ff',
+  }) } });
+  const a = ok.attrs;
+  assert.deepEqual([a['data-font'], a['data-density'], a['data-corners'], a['data-bold'], a['data-navicons'], a['data-side'], a['data-navwidth'], a['data-scrollbar'], a['data-content'], a['data-subtitle'], a['data-uiswitch'], a['data-size']],
+    ['serif', 'compact', 'round', 'on', 'color', 'right', 'icons', 'thin', 'full', 'off', 'off', 'xlarge']);
+  assert.equal(ok.styles['--wall-dim'], '0.7');
+  assert.equal(ok.styles['--wall-blur'], '12px');
+  assert.equal(a['data-wall'], 'colors');
+  assert.deepEqual([ok.styles['--w1'], ok.styles['--w2'], ok.styles['--w3']], ['#ff0000', '#00ff00', '#0000ff']);
+  assert.equal(a['data-wallblur'], 'off', 'no picture, nothing to blur');
+  ok.prefs.set({ wall: 'ocean' });
+  assert.equal(ok.styles['--w1'], undefined, 'own colours only for that background');
+
+  for (const [k, v] of [['wallDim', 91], ['wallDim', -1], ['wallDim', 4.5], ['wallDim', '50'], ['wallBlur', 31], ['wallBlur', '9px'],
+    ['wallColors', '#fff,#000,#123456'], ['wallColors', '#ff0000,#00ff00,#0000ff;x'], ['wallColors', 'red,green,blue'],
+    ['darkFrom', '24:00'], ['darkFrom', '7:00'], ['darkTo', '07:00; x'], ['startView', 'set-appearance'], ['startView', '__proto__']]) {
+    const e = boot({ local: { tubegrab_prefs: JSON.stringify({ [k]: v }) } });
+    assert.equal(e.prefs.get()[k], e.prefs.DEFAULTS[k], `${k}=${v}`);
+  }
+  assert.equal(boot({ local: { tubegrab_prefs: JSON.stringify({ startView: 'library' }) } }).prefs.get().startView, 'library');
+});
+
+test('side menu pages: known pages only, no repeats, never all hidden', () => {
+  const ok = boot({ local: { tubegrab_prefs: JSON.stringify({ navHidden: ['stats', 'cv-image'], navOrder: ['library', 'dl-link'] }) } });
+  assert.deepEqual([...ok.prefs.get().navHidden], ['stats', 'cv-image']);
+  assert.deepEqual([...ok.prefs.get().navOrder], ['library', 'dl-link']);
+  for (const evil of [['stats', 'stats'], ['<img>'], 'stats', [{}], ['set-appearance'], new Array(40).fill('stats')]) {
+    const e = boot({ local: { tubegrab_prefs: JSON.stringify({ navHidden: evil, navOrder: evil }) } });
+    assert.deepEqual([...e.prefs.get().navHidden], [], JSON.stringify(evil).slice(0, 40));
+    assert.deepEqual([...e.prefs.get().navOrder], []);
+  }
+  const all = ok.prefs.NAV.slice();
+  assert.deepEqual([...ok.prefs.set({ navHidden: all }).navHidden], [], 'hiding every page brings them all back');
+});
+
+test('dark mode by schedule, also across midnight', () => {
+  const RealDate = Date;
+  const at = (h, m) => { global.Date = class extends RealDate { constructor() { super(2026, 9, 4, h, m); } }; };
+  try {
+    // theme-init runs in its own context: give it a clock through the sandbox's Date.
+    const run = (h, m, from, to) => {
+      at(h, m);
+      const attrs = {};
+      const prefsJson = JSON.stringify({ theme: 'schedule', darkFrom: from, darkTo: to });
+      const ls = { getItem: (k) => (k === 'tubegrab_prefs' ? prefsJson : null), setItem() {} };
+      const calls = [];
+      vm.runInNewContext(SRC, {
+        window: { matchMedia: () => ({ matches: false, addEventListener() {} }), desktop: { setTheme: (t) => calls.push(t), setUi() {} } },
+        document: { documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, style: { setProperty() {}, removeProperty() {} } } },
+        localStorage: ls, sessionStorage: ls, JSON, Object, Date: global.Date,
+      });
+      return [attrs['data-theme'], calls[0]];
+    };
+    assert.deepEqual(run(21, 0, '20:00', '07:00'), ['dark', 'dark']);
+    assert.deepEqual(run(3, 30, '20:00', '07:00'), ['dark', 'dark']);
+    assert.deepEqual(run(7, 0, '20:00', '07:00'), ['light', 'light']);
+    assert.deepEqual(run(12, 0, '20:00', '07:00'), ['light', 'light']);
+    assert.deepEqual(run(10, 0, '09:00', '17:00'), ['dark', 'dark']);
+    assert.deepEqual(run(18, 0, '09:00', '17:00'), ['light', 'light']);
+  } finally { global.Date = RealDate; }
+});
+
+test('a shared style code carries only the look, checked like everything else', () => {
+  const a = boot({ local: { tubegrab_prefs: JSON.stringify({ font: 'mono', corners: 'square', accent: 'custom', accentColor: '#123456', rateLimit: '2M', lang: 'en' }) } });
+  const style = a.prefs.exportStyle();
+  assert.equal(style.font, 'mono');
+  assert.equal(style.accentColor, '#123456');
+  assert.equal(style.rateLimit, undefined, 'download settings are not part of a style');
+  assert.equal(style.lang, undefined);
+  const b = boot();
+  assert.ok(b.prefs.importStyle(JSON.parse(JSON.stringify(style))));
+  assert.equal(b.attrs['data-font'], 'mono');
+  assert.equal(b.attrs['data-corners'], 'square');
+  assert.equal(b.prefs.get().accentColor, '#123456');
+  // Only style keys, each validated: nothing else gets in.
+  const c = boot();
+  assert.ok(c.prefs.importStyle({ font: 'x; }', corners: 'round', rateLimit: '20M', remember: false, nameTemplate: '{title}', __proto__: { polluted: 1 } }));
+  assert.equal(c.attrs['data-font'], 'system');
+  assert.equal(c.attrs['data-corners'], 'round');
+  assert.equal(c.prefs.get().rateLimit, '');
+  assert.equal(c.prefs.get().remember, true);
+  assert.equal(c.prefs.get().nameTemplate, '');
+  assert.equal(({}).polluted, undefined);
+  for (const bad of [null, 'x', [1], {}, { evil: 1 }]) assert.equal(c.prefs.importStyle(bad), false);
+  // Without a picture of its own, a "custom" background is left as it was.
+  assert.ok(c.prefs.importStyle({ wall: 'custom', glass: 'solid' }));
+  assert.equal(c.attrs['data-wall'], 'aurora');
+  // Restablecer brings every piece of the look back.
+  c.prefs.set({ density: 'comfy', navHidden: ['stats'], sidebarSide: 'right' });
+  c.prefs.resetAppearance();
+  assert.equal(c.attrs['data-density'], 'normal');
+  assert.equal(c.attrs['data-side'], 'left');
+  assert.deepEqual([...c.prefs.get().navHidden], []);
 });

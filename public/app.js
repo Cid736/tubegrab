@@ -339,6 +339,8 @@ function renderPrefs() {
   $('prefNotify').checked = p.notify;
   $('prefSound').checked = p.sound;
   $('prefRateLimit').value = p.rateLimit;
+  // The v3.6 look controls (and the side menu) render themselves on this.
+  document.dispatchEvent(new CustomEvent('tg:prefs'));
 }
 
 for (const [key, id] of Object.entries(PICKERS)) {
@@ -647,7 +649,7 @@ const VIEWS = {
   history: { group: null, title: 'Historial', sub: 'Lo que has terminado en este equipo' },
   library: { group: null, title: 'Biblioteca', sub: 'Escucha y mira lo que has descargado', desktop: true },
   stats: { group: null, title: 'Estadísticas', sub: 'Lo que has descargado, convertido y escuchado' },
-  'set-appearance': { group: 'settings', title: 'Apariencia', sub: 'Idioma, interfaz, colores y tamaño', tab: 'Apariencia' },
+  'set-appearance': { group: 'settings', title: 'Apariencia', sub: 'Idioma, interfaz, colores, letra, menú y estilos', tab: 'Apariencia' },
   'set-downloads': { group: 'settings', title: 'Descargas', sub: 'Carpeta, velocidad y cookies', tab: 'Descargas' },
   'set-convert': { group: 'settings', title: 'Conversión', sub: 'Tarjeta gráfica y conversiones a la vez', tab: 'Conversión' },
   'set-system': { group: 'settings', title: 'Sistema', sub: 'Avisos, bandeja y portapapeles', tab: 'Sistema' },
@@ -658,6 +660,9 @@ const DOWNLOAD_VIEWS = new Set(['dl-link', 'dl-search', 'dl-subs']);
 const VIEW_KEY = 'tubegrab_view';
 function lastView() {
   try {
+    // Ajustes → Apariencia → "Al abrir la app, empezar en": a page of your choice.
+    const start = prefsApi.get().startView;
+    if (start && start !== 'last' && Object.prototype.hasOwnProperty.call(VIEWS, start)) return start;
     const v = localStorage.getItem(VIEW_KEY);
     return v && Object.prototype.hasOwnProperty.call(VIEWS, v) ? v : 'dl-link';
   } catch { return 'dl-link'; }
@@ -6028,6 +6033,213 @@ const backup = (() => {
     apply(await f.text());
   });
   return { build, apply, cleanHistoryItem };
+})();
+
+// === Ajustes → Apariencia (v3.6): the look piece by piece, quick styles,
+// a shareable style code and the side menu's pages ===
+const lookUi = (() => {
+  const nav = $('nav');
+  const DEFAULT_ORDER = [...nav.querySelectorAll('.nav-item[data-view]')].map((b) => b.dataset.view);
+  const navButton = (id) => nav.querySelector(`.nav-item[data-view="${id}"]`);
+  const usable = (id) => { const b = navButton(id); return b && (!b.classList.contains('desktop-only') || desktopApi); };
+  const HEX = /^#[0-9a-f]{6}$/i;
+  const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+  function order(p) {
+    const saved = p.navOrder.filter((id) => DEFAULT_ORDER.includes(id));
+    return [...saved, ...DEFAULT_ORDER.filter((id) => !saved.includes(id))];
+  }
+  /** Puts the side menu's buttons in your order and hides the ones you hid. */
+  function applyNav() {
+    const p = prefsApi.get();
+    for (const id of order(p)) {
+      const b = navButton(id);
+      if (!b) continue;
+      nav.appendChild(b);
+      b.classList.toggle('nav-off', p.navHidden.includes(id));
+    }
+  }
+
+  // --- The menu editor: a tick to show each page, arrows to move it ---
+  const ARROW = { up: '<svg viewBox="0 0 12 12"><path d="M3 7.5L6 4.5l3 3"/></svg>', down: '<svg viewBox="0 0 12 12"><path d="M3 4.5L6 7.5l3-3"/></svg>' };
+  function renderNavEdit() {
+    const list = $('navEdit');
+    const p = prefsApi.get();
+    const ids = order(p).filter(usable);
+    list.innerHTML = '';
+    ids.forEach((id, i) => {
+      const b = navButton(id);
+      const li = document.createElement('li');
+      const off = p.navHidden.includes(id);
+      li.classList.toggle('off', off);
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.checked = !off;
+      const name = b.querySelector('span').textContent;
+      check.setAttribute('aria-label', t('Mostrar «{name}» en el menú', { name }));
+      check.addEventListener('change', () => {
+        const hidden = new Set(prefsApi.get().navHidden);
+        if (check.checked) hidden.delete(id); else hidden.add(id);
+        if (ids.every((x) => hidden.has(x))) { check.checked = true; showToast(t('Deja al menos una página en el menú.')); return; }
+        prefsApi.set({ navHidden: [...hidden] });
+        renderPrefs();
+      });
+      const icon = b.querySelector('svg').cloneNode(true);
+      const label = document.createElement('span');
+      label.className = 'ne-name';
+      label.textContent = name;
+      const move = (dir) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ne-move';
+        btn.innerHTML = ARROW[dir];
+        btn.title = t(dir === 'up' ? 'Subir' : 'Bajar');
+        btn.setAttribute('aria-label', `${btn.title}: ${name}`);
+        btn.disabled = dir === 'up' ? i === 0 : i === ids.length - 1;
+        btn.addEventListener('click', () => {
+          const full = order(prefsApi.get());
+          const other = ids[dir === 'up' ? i - 1 : i + 1];
+          const a = full.indexOf(id);
+          const c = full.indexOf(other);
+          [full[a], full[c]] = [full[c], full[a]];
+          prefsApi.set({ navOrder: full });
+          renderPrefs();
+          // Keep the keyboard on the same page's arrow after the list is rebuilt.
+          const again = [...$('navEdit').querySelectorAll('.ne-move')].find((x) => x.getAttribute('aria-label') === btn.getAttribute('aria-label'));
+          if (again && !again.disabled) again.focus();
+        });
+        return btn;
+      };
+      li.append(check, icon, label, move('up'), move('down'));
+      list.appendChild(li);
+    });
+  }
+  $('btnResetNav').addEventListener('click', () => {
+    prefsApi.set({ navHidden: [], navOrder: [], sidebarSide: 'left', sidebarWidth: 'normal', navIcons: 'auto' });
+    renderPrefs();
+  });
+
+  // --- Every [data-pref] control: selects, switches and button groups ---
+  const prefControls = [...document.querySelectorAll('[data-pref]')];
+  for (const el of prefControls) {
+    const key = el.dataset.pref;
+    if (el.tagName === 'SELECT') el.addEventListener('change', () => { prefsApi.set({ [key]: el.value }); renderPrefs(); });
+    else if (el.type === 'checkbox') el.addEventListener('change', () => { prefsApi.set({ [key]: el.checked }); renderPrefs(); });
+    else el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-value]');
+      if (!b) return;
+      prefsApi.set({ [key]: b.dataset.value });
+      renderPrefs();
+    });
+  }
+  // Start page: every page you can open here.
+  const startSelect = $('startViewSelect');
+  for (const [id, v] of Object.entries(VIEWS)) {
+    if (v.group === 'settings' || (v.desktop && !desktopApi)) continue;
+    const o = document.createElement('option');
+    o.value = id;
+    o.textContent = t(v.title);
+    startSelect.appendChild(o);
+  }
+
+  // --- Background: veil and blur of your picture, your three colours ---
+  $('wallDim').addEventListener('input', (e) => { prefsApi.set({ wallDim: Number(e.target.value) }); renderLook(); });
+  $('wallBlur').addEventListener('input', (e) => { prefsApi.set({ wallBlur: Number(e.target.value) }); renderLook(); });
+  ['wallC1', 'wallC2', 'wallC3'].forEach((id, i) => $(id).addEventListener('input', (e) => {
+    if (!HEX.test(e.target.value)) return;
+    const cols = prefsApi.get().wallColors.split(',');
+    cols[i] = e.target.value.toLowerCase();
+    prefsApi.set({ wall: 'colors', wallColors: cols.join(',') });
+    renderPrefs();
+  }));
+  // --- Dark mode by the clock ---
+  ['darkFrom', 'darkTo'].forEach((key) => $(key).addEventListener('change', (e) => {
+    if (TIME.test(e.target.value)) prefsApi.set({ [key]: e.target.value });
+    renderPrefs();
+  }));
+
+  // --- Quick styles: one click, many options (your menu stays as it is) ---
+  const KEEP = new Set(['navHidden', 'navOrder', 'sidebarSide', 'darkFrom', 'darkTo']);
+  const PRESETS = [
+    { name: 'Predeterminado', look: ['linear-gradient(135deg, #b9dcff, #e3d2ff 55%, #c8f2e8)', 'rgba(255,255,255,.75)', '#0a84ff', 'rgba(0,0,0,.12)'], patch: {} },
+    { name: 'Medianoche', look: ['linear-gradient(135deg, #1b1c24, #2a2440)', 'rgba(255,255,255,.12)', '#bf5af2', 'rgba(255,255,255,.18)'], patch: { theme: 'dark', accent: 'purple', wall: 'graphite', corners: 'round', navIcons: 'accent' } },
+    { name: 'Papel', look: ['#f4f1ea', '#e4dfd3', '#6b6b70', 'rgba(0,0,0,.13)'], patch: { theme: 'light', accent: 'graphite', wall: 'none', glass: 'solid', font: 'serif', corners: 'square', density: 'comfy' } },
+    { name: 'Neón', look: ['linear-gradient(135deg, #5a0b3c, #2a0a5e 55%, #003a5c)', 'rgba(255,255,255,.14)', '#ff375f', 'rgba(255,255,255,.22)'], patch: { theme: 'dark', accent: 'pink', wall: 'colors', wallColors: '#ff2d95,#7a00ff,#00c2ff', glass: 'clear', corners: 'round', navIcons: 'color', bold: true } },
+    { name: 'Terminal', look: ['#0d0f0d', '#1a1d1a', '#30d158', 'rgba(48,209,88,.28)'], patch: { theme: 'dark', accent: 'green', wall: 'none', glass: 'solid', font: 'mono', corners: 'square', density: 'compact', navIcons: 'mono' } },
+    { name: 'Bosque', look: ['linear-gradient(135deg, #a6e3a8, #c9ea96 55%, #8ad8c8)', 'rgba(255,255,255,.7)', '#34c759', 'rgba(0,0,0,.12)'], patch: { theme: 'light', accent: 'green', wall: 'forest', navIcons: 'color' } },
+    { name: 'Atardecer', look: ['linear-gradient(135deg, #ffbd88, #ff9db8 55%, #d9aaff)', 'rgba(255,255,255,.7)', '#ff9500', 'rgba(0,0,0,.12)'], patch: { theme: 'light', accent: 'orange', wall: 'sunset', corners: 'round', font: 'humanist' } },
+    { name: 'Compacto', look: ['#e9ebf0', '#d5d8df', '#007aff', 'rgba(0,0,0,.14)'], patch: { density: 'compact', size: 'small', sidebarWidth: 'icons', showSubtitle: false, scrollbar: 'thin' } },
+  ];
+  const box = $('stylePresets');
+  for (const preset of PRESETS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'preset';
+    b.innerHTML = '<span class="preset-look"></span><span class="preset-name"></span>';
+    const look = b.querySelector('.preset-look');
+    ['--pw', '--ps', '--pa', '--pl'].forEach((name, i) => look.style.setProperty(name, preset.look[i]));
+    b.querySelector('.preset-name').textContent = t(preset.name);
+    b.title = t('Usar el estilo «{name}»', { name: t(preset.name) });
+    b.addEventListener('click', () => {
+      const patch = {};
+      for (const k of prefsApi.STYLE_KEYS) if (!KEEP.has(k)) patch[k] = prefsApi.DEFAULTS[k];
+      prefsApi.set({ ...patch, ...preset.patch });
+      renderPrefs();
+      showToast(t('Estilo «{name}» aplicado. Puedes cambiar cualquier detalle abajo.', { name: t(preset.name) }));
+    });
+    box.appendChild(b);
+  }
+
+  // --- Share your style: a code with only the look (never your picture) ---
+  const PREFIX = 'tg-style:';
+  $('styleCopy').addEventListener('click', async () => {
+    const code = PREFIX + btoa(JSON.stringify(prefsApi.exportStyle()));
+    $('styleCode').value = code;
+    try { await navigator.clipboard.writeText(code); showToast(t('Estilo copiado: pégalo en Ajustes → Apariencia de otro equipo.')); } catch { $('styleCode').select(); }
+  });
+  function pasteStyle() {
+    const raw = $('styleCode').value.trim();
+    let obj = null;
+    if (raw.length <= 6000) {
+      try { obj = JSON.parse(atob(raw.startsWith(PREFIX) ? raw.slice(PREFIX.length) : raw)); } catch { obj = null; }
+    }
+    if (!obj || !prefsApi.importStyle(obj)) { showToast(t('Ese código de estilo no es válido.')); return; }
+    $('styleCode').value = '';
+    renderPrefs();
+    showToast(t('Estilo aplicado.'));
+  }
+  $('stylePaste').addEventListener('click', pasteStyle);
+  $('styleCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') pasteStyle(); });
+
+  /** Shows each control's current value. */
+  function renderLook() {
+    const p = prefsApi.get();
+    for (const el of prefControls) {
+      const v = p[el.dataset.pref];
+      if (el.tagName === 'SELECT') { if (document.activeElement !== el) el.value = v; }
+      else if (el.type === 'checkbox') el.checked = Boolean(v);
+      else el.querySelectorAll('[data-value]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === v)));
+    }
+    $('scheduleRow').classList.toggle('hidden', p.theme !== 'schedule');
+    $('darkFrom').value = p.darkFrom;
+    $('darkTo').value = p.darkTo;
+    const picture = p.wall === 'custom' && Boolean(prefsApi.getWallpaper());
+    $('wallDimRow').classList.toggle('hidden', !picture);
+    $('wallBlurRow').classList.toggle('hidden', !picture);
+    $('wallDim').value = p.wallDim;
+    $('wallDimOut').textContent = `${p.wallDim}%`;
+    $('wallBlur').value = p.wallBlur;
+    $('wallBlurOut').textContent = p.wallBlur ? `${p.wallBlur} px` : t('No');
+    const cols = p.wallColors.split(',');
+    $('wallColorsRow').classList.toggle('hidden', p.wall !== 'colors');
+    ['wallC1', 'wallC2', 'wallC3'].forEach((id, i) => { if (document.activeElement !== $(id)) $(id).value = cols[i]; });
+    ['--c1', '--c2', '--c3'].forEach((name, i) => $('wallColorsChip').style.setProperty(name, cols[i]));
+  }
+
+  function render() { applyNav(); renderLook(); renderNavEdit(); }
+  document.addEventListener('tg:prefs', render);
+  render();
+  return { applyNav, render };
 })();
 
 restoreLastOptions();
