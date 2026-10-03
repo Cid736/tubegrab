@@ -1383,3 +1383,28 @@ video::cue { background: rgba(0, 0, 0, 0.7); color: #fff; font-family: "Segoe UI
 /* Repeating tasks: link, time, button */
 .rule-form.rec-form { grid-template-columns: minmax(0, 1fr) 120px auto; }
 @media (max-width: 720px) { .rule-form.rec-form { grid-template-columns: minmax(0, 1fr) auto; } .rule-form.rec-form .btn { grid-column: 1 / -1; } }
+
+/* Player bar: laid out by the player's own width (the sidebar takes part of the
+   window), not the window's. Narrow: title + tools on top, controls and the
+   time bar below, full width; very narrow: one column. */
+.player { container-type: inline-size; }
+@container (max-width: 1000px) {
+  .player-bar { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 6px 12px; padding: 8px 16px; }
+  .player-info { grid-column: 1; grid-row: 1; }
+  .player-right { grid-column: 2; grid-row: 1; justify-content: flex-end; gap: 2px; }
+  .player-center { grid-column: 1 / -1; grid-row: 2; flex-direction: row; align-items: center; gap: 12px; }
+  .player-seek { flex: 1; }
+  .player-right input { display: block; width: 72px; }
+  .player-vol-ico { display: block; }
+}
+@container (max-width: 640px) {
+  .player-bar { grid-template-columns: minmax(0, 1fr); }
+  .player-right { grid-column: 1; grid-row: 2; justify-content: center; flex-wrap: wrap; }
+  .player-center { grid-row: 3; flex-direction: column; gap: 4px; }
+  .player-right input, .player-vol-ico { display: none; }
+}
+/* Narrow windows scroll as one page: the player stays stuck to the bottom. */
+@media (max-width: 720px) {
+  .player { position: sticky; bottom: 0; z-index: 20; }
+  .player-video video { max-height: 32vh; }
+}

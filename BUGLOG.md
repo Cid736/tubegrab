@@ -558,3 +558,12 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - **Atajos, Last.fm, Discord, copia automática:** combinaciones de teclas de una lista fija; el secreto y la sesión de Last.fm nunca llegan a la página; a Discord solo título, artista y tiempo, y solo si se activa; la copia automática solo escribe y borra archivos `TubeGrab-copia-AAAA-MM-DD.json` en la carpeta elegida en el diálogo.
 - **Encontrado al probar en la app real:** las grabaciones de pantalla no traen su duración y el Editor no las abría (ahora se busca la duración, en la página y en ffmpeg); MusicBrainz descartaba canciones cuyo vídeo era más corto que la versión del disco; el mini reproductor no recordaba dónde lo dejaste.
 - `npm audit --omit=dev` (lo que va dentro de la app) → 0 vulnerabilidades. `npm audit` completo avisa de `http-cache-semantics` (aviso nuevo, GHSA-ch52-4w7c-c8xp), que solo usa electron-builder para descargar Electron al **construir** el .exe; no tiene versión corregida y no va dentro de la app. 224 pruebas.
+
+---
+
+## 2026-10-04 — v3.5.1: la barra del reproductor se descolocaba
+
+### [UI] Barra del reproductor apretada y título cortado
+- **Síntoma:** con la ventana a media anchura (la barra lateral ocupa parte), el reproductor seguía en tres columnas: el título se cortaba («DJ TUFF - Mig…»), la barra de tiempo quedaba diminuta y los botones de la derecha, amontonados.
+- **Causa:** la barra decidía su forma por el ancho de la **ventana**, no por el suyo.
+- **Fix:** se coloca según su propio ancho (`@container`): ancha, en una fila; mediana, título y herramientas arriba y controles con la barra de tiempo abajo, a lo ancho; estrecha, en una columna. Con la ventana estrecha (la página entera se desplaza) el reproductor queda pegado abajo y no se pierde al final. Probado a 1300, 1100, 1000, 700 y 560 px.
