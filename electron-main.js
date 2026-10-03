@@ -1,5 +1,6 @@
 const {
   app, BrowserWindow, ipcMain, shell, screen, dialog, nativeTheme, net: electronNet, Tray, Menu, Notification, clipboard,
+  globalShortcut, nativeImage, desktopCapturer,
 } = require('electron');
 const path = require('path');
 const os = require('os');
@@ -593,13 +594,21 @@ function uniquePath(dir, fileName) {
 
 // Electron grants every permission a page asks for unless told otherwise.
 // This UI only needs notifications and reading the clipboard (paste a link).
-const ALLOWED_PERMISSIONS = new Set(['notifications', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen']);
+// (display-capture: recording the screen for the Editor, which also needs the user's pick above.)
+const ALLOWED_PERMISSIONS = new Set(['notifications', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen', 'display-capture']);
 function isAppOrigin(url) {
   try { return new URL(url).origin === new URL(APP_ORIGIN).origin; } catch { return false; }
 }
 
 function lockDownSession(ses) {
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    // Recording the screen asks for "media" with no devices: only right after the
+    // user picked a screen or window in the app (never the microphone or camera).
+    if (permission === 'media') {
+      const fresh = pendingCapture && Date.now() - pendingCapture.at < 30000;
+      callback(Boolean(fresh) && Array.isArray(details.mediaTypes) && details.mediaTypes.length === 0 && isAppOrigin(details.requestingUrl || webContents.getURL()));
+      return;
+    }
     callback(ALLOWED_PERMISSIONS.has(permission) && isAppOrigin(details.requestingUrl || webContents.getURL()));
   });
   ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => (
@@ -610,6 +619,7 @@ function lockDownSession(ses) {
 
 function setupDownloads() {
   lockDownSession(mainWindow.webContents.session);
+  setupCapture(mainWindow.webContents.session);
   // No <webview> tags: they could load remote content inside the app.
   mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
 
@@ -704,39 +714,479 @@ ipcMain.handle('desktop:syncMirror', async (event, info) => {
 });
 
 // === Mini player: a small window on top of the others ===
+// Moved by dragging it anywhere but its buttons (the page sends how far the
+// pointer went; only the mini window itself can), and it opens where it was left.
 let miniWindow = null;
-ipcMain.on('desktop:openMini', (event) => {
-  if (!isTrustedSender(event) || event.sender !== (mainWindow && mainWindow.webContents)) return;
-  if (miniWindow && !miniWindow.isDestroyed()) { miniWindow.show(); miniWindow.focus(); return; }
+const MINI_SIZE = { width: 360, height: 128 };
+function miniPosition() {
+  const saved = getSettings().miniPos;
+  if (saved && Number.isInteger(saved.x) && Number.isInteger(saved.y)) {
+    // Only if it's still on a screen (a monitor may have been unplugged).
+    const fits = screen.getAllDisplays().some(({ workArea: w }) => saved.x >= w.x - 40 && saved.y >= w.y - 10 && saved.x + 80 <= w.x + w.width && saved.y + 40 <= w.y + w.height);
+    if (fits) return saved;
+  }
   const { workArea } = screen.getPrimaryDisplay();
+  return { x: workArea.x + workArea.width - MINI_SIZE.width - 20, y: workArea.y + workArea.height - MINI_SIZE.height - 20 };
+}
+function openMini() {
+  if (miniWindow && !miniWindow.isDestroyed()) { miniWindow.show(); miniWindow.focus(); return; }
+  const pos = miniPosition();
   miniWindow = new BrowserWindow({
-    width: 360, height: 128, x: workArea.x + workArea.width - 380, y: workArea.y + workArea.height - 148,
+    ...MINI_SIZE, ...pos,
     frame: false, resizable: false, alwaysOnTop: true, skipTaskbar: false, maximizable: false, fullscreenable: false,
     title: 'TubeGrab', icon: path.join(__dirname, 'build', 'icon.ico'), backgroundColor: '#1c1c1e',
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
   });
+  miniWindow.setAlwaysOnTop(true, 'floating');
   miniWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   miniWindow.webContents.on('will-navigate', (e) => e.preventDefault());
   miniWindow.webContents.on('will-attach-webview', (e) => e.preventDefault());
   miniWindow.loadURL(`${APP_ORIGIN}/mini.html`);
+  // Moved by Windows (keyboard, snap) too: remembered either way.
+  miniWindow.on('moved', saveMiniPosSoon);
   miniWindow.on('closed', () => { miniWindow = null; });
+}
+let miniSaveTimer = null;
+function saveMiniPosSoon() {
+  clearTimeout(miniSaveTimer);
+  miniSaveTimer = setTimeout(() => { if (miniWindow && !miniWindow.isDestroyed()) { const [x, y] = miniWindow.getPosition(); saveSettings({ miniPos: { x, y } }); } }, 400);
+}
+ipcMain.on('desktop:openMini', (event) => {
+  if (!isTrustedSender(event) || event.sender !== (mainWindow && mainWindow.webContents)) return;
+  openMini();
 });
+ipcMain.on('mini:move', (event, delta) => {
+  if (!isTrustedSender(event) || !miniWindow || miniWindow.isDestroyed() || event.sender !== miniWindow.webContents || !delta || typeof delta !== 'object') return;
+  const dx = Math.round(Number(delta.dx));
+  const dy = Math.round(Number(delta.dy));
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.abs(dx) > 4000 || Math.abs(dy) > 4000) return;
+  const [x, y] = miniWindow.getPosition();
+  miniWindow.setPosition(x + dx, y + dy);
+  saveMiniPosSoon();
+});
+// What's playing, as the main page last said (for the mini window, the
+// taskbar buttons, Last.fm and Discord).
+let playerNow = { title: '', sub: '', artist: '', track: '', playing: false, time: 0, duration: 0, cover: null, active: false };
 // The main page's player → the mini window; the mini window's buttons → the main page.
 ipcMain.on('player:state', (event, state) => {
-  if (!isTrustedSender(event) || !mainWindow || event.sender !== mainWindow.webContents || !state || typeof state !== 'object' || !miniWindow || miniWindow.isDestroyed()) return;
+  if (!isTrustedSender(event) || !mainWindow || event.sender !== mainWindow.webContents || !state || typeof state !== 'object') return;
+  const text = (v, n = 300) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, n);
   const clean = {
-    title: String(state.title || '').slice(0, 300), sub: String(state.sub || '').slice(0, 300),
+    title: text(state.title), sub: text(state.sub), artist: text(state.artist, 200), track: text(state.track, 200),
     playing: state.playing === true, time: Number(state.time) || 0, duration: Number(state.duration) || 0,
     cover: typeof state.cover === 'string' && /^\/api\/library\/cover\?client=[a-f0-9]{32}&id=[a-f0-9]{32}$/.test(state.cover) ? state.cover : null,
+    volume: Number.isFinite(Number(state.volume)) ? Math.min(1, Math.max(0, Number(state.volume))) : 1, muted: state.muted === true,
   };
-  miniWindow.webContents.send('player:state', clean);
+  clean.active = Boolean(clean.title);
+  const was = playerNow;
+  playerNow = clean;
+  if (miniWindow && !miniWindow.isDestroyed()) miniWindow.webContents.send('player:state', clean);
+  if (was.active !== clean.active || was.playing !== clean.playing) updateThumbar();
+  scrobbler.onState(clean);
+  discord.onState(clean);
 });
+const PLAYER_COMMANDS = ['toggle', 'next', 'prev', 'hello', 'stop', 'volup', 'voldown', 'mute', 'seekf', 'seekb'];
 ipcMain.on('player:command', (event, cmd) => {
   if (!isTrustedSender(event) || !miniWindow || event.sender !== miniWindow.webContents) return;
   if (cmd === 'close') { miniWindow.close(); return; }
   if (cmd === 'open') { showWindow(); return; }
-  if (['toggle', 'next', 'prev', 'hello'].includes(cmd)) sendToRenderer('player:command', { cmd });
+  if (PLAYER_COMMANDS.includes(cmd)) sendToRenderer('player:command', { cmd });
   else if (cmd && typeof cmd === 'object' && cmd.cmd === 'seek' && Number.isFinite(cmd.value)) sendToRenderer('player:command', { cmd: 'seek', value: cmd.value });
+  else if (cmd && typeof cmd === 'object' && cmd.cmd === 'volume' && Number.isFinite(cmd.value)) sendToRenderer('player:command', { cmd: 'volume', value: Math.min(1, Math.max(0, cmd.value)) });
+});
+
+// === Player buttons in the taskbar thumbnail (⏮ ⏯ ⏭) ===
+// Small white glyphs drawn here, pixel by pixel (no image files needed).
+function glyph(kind) {
+  const S = 16;
+  const buf = Buffer.alloc(S * S * 4);
+  const inTri = (px, py, a, b, c) => {
+    const d = (p, q, r) => (p[0] - r[0]) * (q[1] - r[1]) - (q[0] - r[0]) * (p[1] - r[1]);
+    const d1 = d([px, py], a, b); const d2 = d([px, py], b, c); const d3 = d([px, py], c, a);
+    return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+  };
+  const rect = (px, py, x0, y0, x1, y1) => px >= x0 && px <= x1 && py >= y0 && py <= y1;
+  const shapes = {
+    play: (x, y) => inTri(x, y, [4.5, 2.5], [4.5, 13.5], [13, 8]),
+    pause: (x, y) => rect(x, y, 3.5, 2.5, 6.5, 13.5) || rect(x, y, 9.5, 2.5, 12.5, 13.5),
+    prev: (x, y) => rect(x, y, 2.5, 2.5, 4.5, 13.5) || inTri(x, y, [13.5, 2.5], [13.5, 13.5], [5, 8]),
+    next: (x, y) => rect(x, y, 11.5, 2.5, 13.5, 13.5) || inTri(x, y, [2.5, 2.5], [2.5, 13.5], [11, 8]),
+  }[kind];
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      let hit = 0;
+      for (let sy = 0; sy < 4; sy++) for (let sx = 0; sx < 4; sx++) if (shapes(x + (sx + 0.5) / 4, y + (sy + 0.5) / 4)) hit += 1;
+      const a = Math.round((hit / 16) * 255);
+      const i = (y * S + x) * 4;
+      buf[i] = 255; buf[i + 1] = 255; buf[i + 2] = 255; buf[i + 3] = a; // BGRA
+    }
+  }
+  return nativeImage.createFromBitmap(buf, { width: S, height: S, scaleFactor: 1 });
+}
+let glyphs = null;
+function updateThumbar() {
+  if (process.platform !== 'win32' || !mainWindow || mainWindow.isDestroyed()) return;
+  if (!playerNow.active) { mainWindow.setThumbarButtons([]); return; }
+  if (!glyphs) glyphs = { play: glyph('play'), pause: glyph('pause'), prev: glyph('prev'), next: glyph('next') };
+  const send = (cmd) => () => sendToRenderer('player:command', { cmd });
+  mainWindow.setThumbarButtons([
+    { tooltip: 'Anterior', icon: glyphs.prev, click: send('prev') },
+    { tooltip: playerNow.playing ? 'Pausa' : 'Reproducir', icon: playerNow.playing ? glyphs.pause : glyphs.play, click: send('toggle') },
+    { tooltip: 'Siguiente', icon: glyphs.next, click: send('next') },
+  ]);
+}
+
+// === Keyboard shortcuts for the player, the user's own (also with the window in the background) ===
+const SHORTCUT_ACTIONS = ['toggle', 'next', 'prev', 'stop', 'volup', 'voldown', 'mute', 'seekf', 'seekb', 'mini', 'show'];
+const SHORTCUT_DEFAULTS = {
+  toggle: 'MediaPlayPause', next: 'MediaNextTrack', prev: 'MediaPreviousTrack', stop: 'MediaStop',
+  volup: 'Control+Alt+Up', voldown: 'Control+Alt+Down', mute: 'Control+Alt+M', seekf: 'Control+Alt+Right', seekb: 'Control+Alt+Left',
+  mini: 'Control+Alt+P', show: 'Control+Alt+T',
+};
+const ACCEL_MODS = new Set(['Control', 'Ctrl', 'CommandOrControl', 'CmdOrCtrl', 'Alt', 'Shift', 'Super', 'Meta']);
+const ACCEL_LONE = /^(MediaPlayPause|MediaNextTrack|MediaPreviousTrack|MediaStop|VolumeUp|VolumeDown|VolumeMute|F([1-9]|1\d|2[0-4]))$/;
+const ACCEL_KEY = /^([A-Z0-9]|F([1-9]|1\d|2[0-4])|Up|Down|Left|Right|Space|Tab|Backspace|Delete|Insert|Enter|Home|End|PageUp|PageDown|Plus|num[0-9]|numadd|numsub|nummult|numdiv|numdec|[,.\-=;'/\\`[\]]|MediaPlayPause|MediaNextTrack|MediaPreviousTrack|MediaStop|VolumeUp|VolumeDown|VolumeMute)$/;
+/** "Control+Alt+P" → itself if it's a combination we accept (letters need a modifier), else null. */
+function cleanAccelerator(raw) {
+  const v = String(raw || '').trim();
+  if (!v || v.length > 60) return null;
+  const parts = v.split('+');
+  if (v.endsWith('++')) parts.splice(-2, 2, 'Plus');
+  const key = parts.pop();
+  const mods = parts;
+  if (!ACCEL_KEY.test(key) || new Set(mods).size !== mods.length || !mods.every((m) => ACCEL_MODS.has(m))) return null;
+  if (!mods.length && !ACCEL_LONE.test(key)) return null;
+  // Shift alone with a letter would take over typing capitals.
+  if (mods.length === 1 && mods[0] === 'Shift' && !ACCEL_LONE.test(key)) return null;
+  return [...mods, key].join('+');
+}
+function shortcutSettings() {
+  const raw = getSettings().shortcuts || {};
+  const keys = {};
+  for (const a of SHORTCUT_ACTIONS) {
+    const v = raw.keys && Object.prototype.hasOwnProperty.call(raw.keys, a) ? raw.keys[a] : SHORTCUT_DEFAULTS[a];
+    keys[a] = v === '' ? '' : (cleanAccelerator(v) || SHORTCUT_DEFAULTS[a]);
+  }
+  return { global: raw.global !== false, keys };
+}
+let shortcutFailed = [];
+function applyShortcuts() {
+  globalShortcut.unregisterAll();
+  shortcutFailed = [];
+  const s = shortcutSettings();
+  if (!s.global) return;
+  const seen = new Set();
+  for (const a of SHORTCUT_ACTIONS) {
+    const acc = s.keys[a];
+    if (!acc || seen.has(acc)) continue;
+    seen.add(acc);
+    const fire = () => {
+      if (a === 'show') showWindow();
+      else if (a === 'mini') { if (miniWindow && !miniWindow.isDestroyed()) miniWindow.close(); else openMini(); }
+      else sendToRenderer('player:command', { cmd: a });
+    };
+    let ok = false;
+    try { ok = globalShortcut.register(acc, fire); } catch { ok = false; }
+    // Taken by another program (or Windows itself).
+    if (!ok) shortcutFailed.push(a);
+  }
+}
+const shortcutView = () => ({ ...shortcutSettings(), defaults: SHORTCUT_DEFAULTS, failed: shortcutFailed });
+ipcMain.handle('desktop:getShortcuts', (event) => (isTrustedSender(event) ? shortcutView() : null));
+ipcMain.handle('desktop:setShortcuts', (event, patch) => {
+  if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return null;
+  const cur = shortcutSettings();
+  const next = { global: typeof patch.global === 'boolean' ? patch.global : cur.global, keys: { ...cur.keys } };
+  if (patch.reset === true) next.keys = { ...SHORTCUT_DEFAULTS };
+  if (patch.keys && typeof patch.keys === 'object') {
+    for (const a of SHORTCUT_ACTIONS) {
+      if (!Object.prototype.hasOwnProperty.call(patch.keys, a)) continue;
+      const v = patch.keys[a];
+      if (v === '') next.keys[a] = '';
+      else { const c = cleanAccelerator(v); if (!c) return { ...shortcutView(), error: 'Esa combinación no vale: usa Ctrl, Alt o Mayús con otra tecla, una tecla F o una tecla multimedia.' }; next.keys[a] = c; }
+    }
+  }
+  saveSettings({ shortcuts: next });
+  applyShortcuts();
+  return shortcutView();
+});
+app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch { /* not ready */ } });
+
+// === Last.fm: what you listen to, scrobbled to your account ===
+// With your own free API account (last.fm/api/account/create): its key and
+// secret stay in this computer's settings; the page never gets the secret.
+const LASTFM_API = 'https://ws.audioscrobbler.com/2.0/';
+function lastfmSettings() {
+  const raw = getSettings().lastfm || {};
+  const hex32 = (v) => (/^[a-f0-9]{32}$/i.test(String(v || '')) ? String(v) : '');
+  return { enabled: raw.enabled === true, key: hex32(raw.key), secret: hex32(raw.secret), session: /^[A-Za-z0-9_-]{10,64}$/.test(String(raw.session || '')) ? raw.session : '', user: String(raw.user || '').slice(0, 64), token: /^[A-Za-z0-9_-]{10,64}$/.test(String(raw.token || '')) ? raw.token : '' };
+}
+const lastfmView = () => { const s = lastfmSettings(); return { enabled: s.enabled, key: s.key, hasSecret: Boolean(s.secret), connected: Boolean(s.session), user: s.user, waiting: Boolean(s.token) }; };
+async function lastfmCall(method, params, { post = false } = {}) {
+  const s = lastfmSettings();
+  const all = { ...params, method, api_key: s.key };
+  const sig = crypto.createHash('md5').update(Object.keys(all).sort().map((k) => `${k}${all[k]}`).join('') + s.secret, 'utf8').digest('hex');
+  const body = new URLSearchParams({ ...all, api_sig: sig, format: 'json' }).toString();
+  const res = await electronNet.fetch(post ? LASTFM_API : `${LASTFM_API}?${body}`, {
+    method: post ? 'POST' : 'GET', headers: post ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}, body: post ? body : undefined,
+    redirect: 'error', signal: AbortSignal.timeout(15000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (data.error) throw new Error(String(data.message || 'Last.fm respondió con un error').slice(0, 200));
+  return data;
+}
+const scrobbler = (() => {
+  let cur = null; // { key, artist, track, duration, startedAt, played, last, done, nowSent }
+  return {
+    onState(st) {
+      const s = lastfmSettings();
+      if (!s.enabled || !s.session || !s.key || !s.secret || !st.active) { cur = null; return; }
+      const artist = st.artist || '';
+      const track = st.track || st.title;
+      if (!artist || !track) return;
+      const key = `${artist}|${track}`;
+      if (!cur || cur.key !== key) cur = { key, artist, track, duration: st.duration, startedAt: Math.floor(Date.now() / 1000), played: 0, last: st.time, done: false, nowSent: false };
+      if (st.playing && !cur.nowSent) {
+        cur.nowSent = true;
+        lastfmCall('track.updateNowPlaying', { artist, track, sk: s.session, ...(st.duration ? { duration: String(Math.round(st.duration)) } : {}) }, { post: true }).catch(() => {});
+      }
+      // Count only real listening (not jumps), then scrobble at half or 4 minutes.
+      const step = st.time - cur.last;
+      if (st.playing && step > 0 && step < 5) cur.played += step;
+      cur.last = st.time;
+      cur.duration = st.duration || cur.duration;
+      if (!cur.done && cur.duration > 30 && cur.played >= Math.min(240, cur.duration / 2)) {
+        cur.done = true;
+        lastfmCall('track.scrobble', { artist, track, timestamp: String(cur.startedAt), sk: s.session, ...(cur.duration ? { duration: String(Math.round(cur.duration)) } : {}) }, { post: true }).catch((err) => console.warn('[Last.fm]', err.message));
+      }
+    },
+  };
+})();
+ipcMain.handle('desktop:getLastfm', (event) => (isTrustedSender(event) ? lastfmView() : null));
+ipcMain.handle('desktop:setLastfm', async (event, patch) => {
+  if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return null;
+  const s = { ...(getSettings().lastfm || {}) };
+  if (typeof patch.enabled === 'boolean') s.enabled = patch.enabled;
+  if (typeof patch.key === 'string') { if (patch.key && !/^[a-f0-9]{32}$/i.test(patch.key.trim())) return { ...lastfmView(), error: 'La clave (API key) son 32 letras y números.' }; s.key = patch.key.trim(); }
+  if (typeof patch.secret === 'string' && patch.secret.trim()) { if (!/^[a-f0-9]{32}$/i.test(patch.secret.trim())) return { ...lastfmView(), error: 'El secreto (shared secret) son 32 letras y números.' }; s.secret = patch.secret.trim(); }
+  if (patch.disconnect === true) { s.session = ''; s.user = ''; s.token = ''; }
+  saveSettings({ lastfm: s });
+  try {
+    if (patch.connect === true) {
+      // Step 1: a token, approved by you on last.fm in the browser.
+      const { token } = await lastfmCall('auth.getToken', {});
+      if (!/^[A-Za-z0-9_-]{10,64}$/.test(String(token || ''))) throw new Error('Last.fm no dio permiso.');
+      saveSettings({ lastfm: { ...s, token } });
+      shell.openExternal(`https://www.last.fm/api/auth/?api_key=${encodeURIComponent(lastfmSettings().key)}&token=${encodeURIComponent(token)}`);
+    } else if (patch.finish === true) {
+      // Step 2: once approved, the session that scrobbles.
+      const cur = lastfmSettings();
+      const data = await lastfmCall('auth.getSession', { token: cur.token });
+      const sk = data.session && data.session.key;
+      if (!/^[A-Za-z0-9_-]{10,64}$/.test(String(sk || ''))) throw new Error('Aún no lo has aceptado en last.fm.');
+      saveSettings({ lastfm: { ...getSettings().lastfm, session: sk, user: String(data.session.name || '').slice(0, 64), token: '', enabled: true } });
+    }
+  } catch (err) {
+    return { ...lastfmView(), error: err.message };
+  }
+  return lastfmView();
+});
+
+// === Discord: "Listening to …" on your profile ===
+// Discord's local connection (a named pipe), with the id of an application
+// of your own (discord.com/developers, free): only the song's title, artist
+// and time are sent, and only while it's on.
+const discord = (() => {
+  let sock = null;
+  let ready = false;
+  let connecting = false;
+  let lastTry = 0;
+  let lastSent = '';
+  const appId = () => { const d = getSettings().discord || {}; return d.enabled === true && /^\d{15,22}$/.test(String(d.appId || '')) ? String(d.appId) : null; };
+  function frame(op, obj) {
+    const json = Buffer.from(JSON.stringify(obj), 'utf8');
+    const head = Buffer.alloc(8);
+    head.writeInt32LE(op, 0);
+    head.writeInt32LE(json.length, 4);
+    return Buffer.concat([head, json]);
+  }
+  function close() { if (sock) { try { sock.destroy(); } catch { /* gone */ } } sock = null; ready = false; lastSent = ''; }
+  function connect(id, i = 0) {
+    if (connecting || process.platform !== 'win32' || Date.now() - lastTry < 15000) return;
+    connecting = true;
+    lastTry = Date.now();
+    const s = net.createConnection(`\\\\?\\pipe\\discord-ipc-${i}`);
+    s.once('connect', () => {
+      connecting = false;
+      sock = s;
+      s.write(frame(0, { v: 1, client_id: id }));
+    });
+    let buf = Buffer.alloc(0);
+    s.on('data', (d) => {
+      buf = Buffer.concat([buf, d]).subarray(-65536);
+      while (buf.length >= 8) {
+        const len = buf.readInt32LE(4);
+        if (len < 0 || len > 60000 || buf.length < 8 + len) break;
+        let msg = null;
+        try { msg = JSON.parse(buf.subarray(8, 8 + len).toString('utf8')); } catch { /* ignore */ }
+        buf = buf.subarray(8 + len);
+        if (msg && msg.evt === 'READY') { ready = true; push(playerNow, true); }
+      }
+    });
+    s.on('error', () => { connecting = false; if (sock === s) close(); else if (i < 9) { lastTry = 0; connect(id, i + 1); } });
+    s.on('close', () => { if (sock === s) close(); });
+  }
+  function push(st, force = false) {
+    const id = appId();
+    if (!id) { close(); return; }
+    if (!sock || !ready) { connect(id); return; }
+    const activity = st.active && st.playing ? {
+      type: 2,
+      details: (st.track || st.title).slice(0, 120),
+      ...(st.artist ? { state: st.artist.slice(0, 120) } : {}),
+      timestamps: st.duration ? { start: Math.round(Date.now() - st.time * 1000), end: Math.round(Date.now() + (st.duration - st.time) * 1000) } : { start: Math.round(Date.now() - st.time * 1000) },
+    } : null;
+    const sig = JSON.stringify(activity && { ...activity, timestamps: undefined, t: Math.round(st.time / 15) });
+    if (!force && sig === lastSent) return;
+    lastSent = sig;
+    try { sock.write(frame(1, { cmd: 'SET_ACTIVITY', args: { pid: process.pid, activity }, nonce: crypto.randomUUID() })); } catch { close(); }
+  }
+  return { onState: (st) => push(st), close };
+})();
+ipcMain.handle('desktop:getDiscord', (event) => { if (!isTrustedSender(event)) return null; const d = getSettings().discord || {}; return { enabled: d.enabled === true, appId: /^\d{15,22}$/.test(String(d.appId || '')) ? String(d.appId) : '' }; });
+ipcMain.handle('desktop:setDiscord', (event, patch) => {
+  if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return null;
+  const d = { ...(getSettings().discord || {}) };
+  if (typeof patch.enabled === 'boolean') d.enabled = patch.enabled;
+  if (typeof patch.appId === 'string') { if (patch.appId.trim() && !/^\d{15,22}$/.test(patch.appId.trim())) return { error: 'El ID de la aplicación son solo números (18 o 19 cifras).' }; d.appId = patch.appId.trim(); }
+  saveSettings({ discord: d });
+  discord.close();
+  if (d.enabled) discord.onState(playerNow);
+  return { enabled: d.enabled === true, appId: d.appId || '' };
+});
+
+// === Notifications with buttons: "Abrir" / "Mostrar en la carpeta" ===
+// The page says which job finished; the file is the one this app saved for it.
+ipcMain.on('desktop:notifyDone', (event, info) => {
+  if (!isTrustedSender(event) || !info || typeof info !== 'object' || !Notification.isSupported()) return;
+  const paths = savedFor(info.jobId);
+  if (!paths.length) return;
+  const text = (v, n) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, n);
+  const note = new Notification({
+    title: text(info.title, 120) || 'TubeGrab', body: text(info.body, 250), silent: false,
+    actions: [{ type: 'button', text: paths.length > 1 ? 'Abrir la carpeta' : 'Abrir' }, { type: 'button', text: 'Mostrar en la carpeta' }],
+  });
+  const open = () => { if (paths.length === 1) shell.openPath(paths[0]); else shell.openPath(path.dirname(paths[0])); };
+  note.on('action', (_e, index) => {
+    const i = typeof index === 'number' ? index : (_e && _e.actionIndex);
+    if (i === 0) open(); else if (i === 1) shell.showItemInFolder(paths[0]);
+  });
+  note.on('click', showWindow);
+  note.show();
+});
+
+// === Automatic backup: the same file as "Exportar", every week, into a folder you choose ===
+const AUTO_BACKUP_KEEP = 8;
+function autoBackupSettings() {
+  const raw = getSettings().autoBackup || {};
+  return { enabled: raw.enabled === true, dir: isLocalFolderPath(raw.dir) ? raw.dir : null, days: [1, 7, 30].includes(raw.days) ? raw.days : 7, last: Number(raw.last) || 0 };
+}
+ipcMain.handle('desktop:getAutoBackup', (event) => {
+  if (!isTrustedSender(event)) return null;
+  const s = autoBackupSettings();
+  return { ...s, due: s.enabled && Boolean(s.dir) && Date.now() - s.last >= s.days * 24 * 3600 * 1000 };
+});
+ipcMain.handle('desktop:setAutoBackup', async (event, patch) => {
+  if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return null;
+  const s = { ...(getSettings().autoBackup || {}) };
+  if (patch.choose === true) {
+    const result = await dialog.showOpenDialog(mainWindow, { title: 'Carpeta para las copias de seguridad', properties: ['openDirectory', 'createDirectory'] });
+    if (!result.canceled && result.filePaths[0] && isLocalFolderPath(result.filePaths[0])) s.dir = result.filePaths[0];
+  }
+  if (typeof patch.enabled === 'boolean') s.enabled = patch.enabled;
+  if ([1, 7, 30].includes(patch.days)) s.days = patch.days;
+  saveSettings({ autoBackup: s });
+  const v = autoBackupSettings();
+  return { ...v, due: v.enabled && Boolean(v.dir) && Date.now() - v.last >= v.days * 24 * 3600 * 1000 };
+});
+// The page builds the backup (it holds the history); only "TubeGrab-copia-*.json" files of ours are written or pruned.
+ipcMain.handle('desktop:writeAutoBackup', (event, text) => {
+  if (!isTrustedSender(event) || typeof text !== 'string' || Buffer.byteLength(text) > MAX_BACKUP_BYTES) return { ok: false };
+  const s = autoBackupSettings();
+  if (!s.enabled || !s.dir) return { ok: false };
+  try { JSON.parse(text); } catch { return { ok: false }; }
+  try {
+    fs.mkdirSync(s.dir, { recursive: true });
+    const stamp = new Date().toISOString().slice(0, 10);
+    fs.writeFileSync(path.join(s.dir, `TubeGrab-copia-${stamp}.json`), text, 'utf8');
+    const ours = fs.readdirSync(s.dir).filter((n) => /^TubeGrab-copia-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort();
+    for (const n of ours.slice(0, Math.max(0, ours.length - AUTO_BACKUP_KEEP))) fs.rmSync(path.join(s.dir, n), { force: true });
+    saveSettings({ autoBackup: { ...getSettings().autoBackup, last: Date.now() } });
+    return { ok: true, file: `TubeGrab-copia-${stamp}.json` };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// === Record the screen (or a window) straight into the Editor ===
+// The page lists what can be recorded, the user picks one here, and only that
+// pick (within 30 s, once) is handed to the page's getDisplayMedia request.
+let pendingCapture = null;
+ipcMain.handle('desktop:screenSources', async (event) => {
+  if (!isTrustedSender(event)) return null;
+  const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 } });
+  return sources.slice(0, 40).map((s) => ({ id: s.id, name: String(s.name || '').slice(0, 120), screen: s.id.startsWith('screen:'), thumb: s.thumbnail.isEmpty() ? null : s.thumbnail.toDataURL() }));
+});
+ipcMain.handle('desktop:pickScreenSource', (event, pick) => {
+  if (!isTrustedSender(event) || !pick || typeof pick !== 'object' || typeof pick.id !== 'string' || !/^(screen|window):[\w:.-]{1,60}$/.test(pick.id)) return false;
+  pendingCapture = { id: pick.id, audio: pick.audio === true, at: Date.now() };
+  return true;
+});
+function setupCapture(ses) {
+  ses.setDisplayMediaRequestHandler((request, callback) => {
+    const p = pendingCapture;
+    pendingCapture = null;
+    const from = (request.frame && request.frame.url) || request.securityOrigin || '';
+    if (!p || Date.now() - p.at > 30000 || !isAppOrigin(from)) { callback({}); return; }
+    desktopCapturer.getSources({ types: ['screen', 'window'] }).then((list) => {
+      const s = list.find((x) => x.id === p.id);
+      // The computer's own sound (loopback) only when asked for, and only with a whole screen.
+      if (!s) callback({}); else callback({ video: s, ...(p.audio && s.id.startsWith('screen:') ? { audio: 'loopback' } : {}) });
+    }, () => callback({}));
+  });
+}
+
+// === AcoustID's fpcalc (recognising songs by their sound), on demand ===
+const FPCALC = {
+  url: 'https://github.com/acoustid/chromaprint/releases/download/v1.6.1/chromaprint-fpcalc-1.6.1-windows-x86_64.zip',
+  sha256: '735d6182b38e9f364b84ce6f4ccd682c75e2851de89735711d6b762d12b92a4e',
+  exeSha256: '00dcc56d911f2dea84737aa9dc8e2d118c9eb7a037d815d1ed001d8593e8fbee',
+  dir: 'chromaprint-fpcalc-1.6.1-windows-x86_64',
+};
+const fpcalcPath = () => path.join(app.getPath('userData'), 'fpcalc', 'fpcalc.exe');
+let fpcalcBusy = false;
+ipcMain.handle('desktop:getFpcalc', (event) => (isTrustedSender(event) ? { installed: fs.existsSync(fpcalcPath()), busy: fpcalcBusy } : null));
+ipcMain.handle('desktop:installFpcalc', async (event) => {
+  if (!isTrustedSender(event) || fpcalcBusy || process.platform !== 'win32') return null;
+  fpcalcBusy = true;
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'tubegrab-fpcalc-'));
+  try {
+    const zip = path.join(work, 'fpcalc.zip');
+    const r = await downloadToFile(FPCALC.url, zip);
+    if (r.sha256 !== FPCALC.sha256) throw new Error('fpcalc descargado no coincide con su huella SHA-256');
+    const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+    await new Promise((resolve, reject) => execFile(tar, ['-xf', zip, '-C', work], { windowsHide: true }, (err) => (err ? reject(err) : resolve())));
+    const exe = path.join(work, FPCALC.dir, 'fpcalc.exe');
+    if (crypto.createHash('sha256').update(fs.readFileSync(exe)).digest('hex') !== FPCALC.exeSha256) throw new Error('fpcalc.exe no coincide con su huella SHA-256');
+    fs.mkdirSync(path.dirname(fpcalcPath()), { recursive: true });
+    fs.copyFileSync(exe, fpcalcPath());
+    return { installed: true, busy: false };
+  } catch (err) {
+    return { installed: fs.existsSync(fpcalcPath()), busy: false, error: friendlyNetError(err) };
+  } finally {
+    fpcalcBusy = false;
+    fs.rm(work, { recursive: true, force: true }, () => {});
+  }
 });
 
 // === Disk space: a warning, or the oldest files to the Recycle Bin ===
@@ -1133,6 +1583,10 @@ function setupTray() {
     { label: 'Pausar todo', click: () => sendToRenderer('desktop:trayAction', { action: 'pause' }) },
     { label: 'Reanudar todo', click: () => sendToRenderer('desktop:trayAction', { action: 'resume' }) },
     { type: 'separator' },
+    { label: 'Reproducir / pausa', click: () => sendToRenderer('player:command', { cmd: 'toggle' }) },
+    { label: 'Siguiente canción', click: () => sendToRenderer('player:command', { cmd: 'next' }) },
+    { label: 'Mini reproductor', click: openMini },
+    { type: 'separator' },
     { label: 'Salir', click: () => { quitting = true; app.quit(); } },
   ]));
   tray.on('click', showWindow);
@@ -1345,6 +1799,7 @@ function startServer(port, enginePath, retriesLeft = 2) {
         TUBEGRAB_DEFAULT_DOWNLOADS: path.join(app.getPath('downloads'), 'TubeGrab'),
         FFMPEG_BIN: ffmpegPathForServer(),
         TUBEGRAB_WHISPER_DIR: whisperDir(),
+        TUBEGRAB_FPCALC: fpcalcPath(),
         ...(enginePath ? { TUBEGRAB_YTDLP: enginePath } : {}),
       },
       windowsHide: true,
@@ -1458,6 +1913,9 @@ function createWindow() {
   setupDownloads();
   setupTray();
   applyClipboardWatch();
+  applyShortcuts();
+  // The taskbar buttons are lost when the window is hidden and shown again.
+  mainWindow.on('show', updateThumbar);
 
   // Start the Express server. windowsHide keeps this (and anything it in turn
   // spawns, like yt-dlp.exe/ffmpeg.exe) from ever flashing a console window.

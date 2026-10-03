@@ -39,7 +39,7 @@ test('parseDownloadOptions falls back to safe defaults for unknown values', () =
   });
   assert.deepEqual(o, {
     mode: 'audio', audioFormat: 'mp3', audioBitrate: '192', quality: '1080', container: 'mp4',
-    metadata: true, subtitles: false, subLangs: 'es,en', subMode: 'embed', sponsorblock: false, playlist: false,
+    metadata: true, subtitles: false, subLangs: 'es,en', subMode: 'embed', sponsorblock: false, sponsorMode: 'remove', playlist: false,
     music: false, lyrics: false, nameTemplate: null, chapters: false, sectionStart: null, sectionEnd: null, rateLimit: null,
     normalize: false, bpm: false, live: false, nfo: false,
   });

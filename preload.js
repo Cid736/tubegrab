@@ -69,4 +69,26 @@ contextBridge.exposeInMainWorld('desktop', {
   installCli: (on) => ipcRenderer.invoke('desktop:installCli', on),
   // Watch folder.
   chooseWatchFolder: () => ipcRenderer.invoke('desktop:chooseWatchFolder'),
+  // Mini player: dragged around by the page itself.
+  miniMove: (dx, dy) => ipcRenderer.send('mini:move', { dx, dy }),
+  // Keyboard shortcuts (also in the background).
+  getShortcuts: () => ipcRenderer.invoke('desktop:getShortcuts'),
+  setShortcuts: (patch) => ipcRenderer.invoke('desktop:setShortcuts', patch),
+  // Last.fm and Discord.
+  getLastfm: () => ipcRenderer.invoke('desktop:getLastfm'),
+  setLastfm: (patch) => ipcRenderer.invoke('desktop:setLastfm', patch),
+  getDiscord: () => ipcRenderer.invoke('desktop:getDiscord'),
+  setDiscord: (patch) => ipcRenderer.invoke('desktop:setDiscord', patch),
+  // A finished job's notification with "Abrir" / "Mostrar en la carpeta".
+  notifyDone: (info) => ipcRenderer.send('desktop:notifyDone', info),
+  // Automatic backup.
+  getAutoBackup: () => ipcRenderer.invoke('desktop:getAutoBackup'),
+  setAutoBackup: (patch) => ipcRenderer.invoke('desktop:setAutoBackup', patch),
+  writeAutoBackup: (text) => ipcRenderer.invoke('desktop:writeAutoBackup', text),
+  // Screen recording for the Editor.
+  screenSources: () => ipcRenderer.invoke('desktop:screenSources'),
+  pickScreenSource: (pick) => ipcRenderer.invoke('desktop:pickScreenSource', pick),
+  // AcoustID's fpcalc.
+  getFpcalc: () => ipcRenderer.invoke('desktop:getFpcalc'),
+  installFpcalc: () => ipcRenderer.invoke('desktop:installFpcalc'),
 });

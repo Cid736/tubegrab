@@ -23,11 +23,11 @@ test('parseSegments: speeds from the list only; joins only equal speeds', () => 
 test('parseTexts: up to 5 short texts, fixed positions and sizes, control characters removed', () => {
   assert.deepEqual(convert.parseTexts(''), []);
   const ok = JSON.stringify([{ text: ` Hola${String.fromCharCode(7)}\tmundo `, pos: 'top', size: 'l', from: 1, to: 3 }]);
-  assert.deepEqual(convert.parseTexts(ok), [{ text: 'Holamundo', pos: 'top', size: 'l', from: 1, to: 3 }]);
+  assert.deepEqual(convert.parseTexts(ok), [{ text: 'Holamundo', pos: 'top', size: 'l', from: 1, to: 3, anim: 'none' }]);
   assert.deepEqual(convert.parseTexts(JSON.stringify([{ text: '   ', pos: 'top', size: 'l' }])), [], 'empty texts are dropped');
   const t = (o) => JSON.stringify([{ text: 'x', pos: 'bottom', size: 'm', ...o }]);
   for (const bad of ['x', '{}', '[1]', '[[]]', t({ pos: 'left' }), t({ size: 'xl' }), t({ size: '__proto__' }), t({ from: -1 }), t({ from: 5, to: 5 }),
-    t({ to: '3' }), t({ text: 'a'.repeat(201) }), t({ text: 'a\nb\nc\nd' }), JSON.stringify(Array(6).fill({ text: 'x', pos: 'top', size: 's' }))]) {
+    t({ to: '3' }), t({ anim: 'spin' }), t({ anim: 'constructor' }), t({ text: 'a'.repeat(201) }), t({ text: 'a\nb\nc\nd' }), JSON.stringify(Array(6).fill({ text: 'x', pos: 'top', size: 's' }))]) {
     assert.equal(convert.parseTexts(bad), null, bad);
   }
 });

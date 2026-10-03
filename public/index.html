@@ -198,6 +198,10 @@
                 <p class="preview-title" id="previewTitle"></p>
                 <p class="preview-meta" id="previewMeta"></p>
                 <p class="preview-already hidden" id="previewAlready" role="status"></p>
+                <div class="preview-actions">
+                  <button class="link-btn" id="btnThumbOnly" type="button">Descargar solo la miniatura</button>
+                  <button class="link-btn" id="btnCopyPreview" type="button">Copiar el enlace</button>
+                </div>
               </div>
             </div>
             <!-- Playlist: pick which videos -->
@@ -210,6 +214,7 @@
                 <div class="row-actions">
                   <button class="link-btn" id="playlistAll" type="button">Todos</button>
                   <button class="link-btn" id="playlistNone" type="button">Ninguno</button>
+                  <button class="link-btn" id="playlistCopy" type="button">Copiar enlaces</button>
                 </div>
               </div>
               <ul class="pick-list" id="playlistList"></ul>
@@ -300,8 +305,14 @@
 
           <div class="group" id="downloadExtras">
             <label class="row switch"><span class="row-label">Portada y metadatos</span><input type="checkbox" id="optMetadata" checked><span class="switch-ui"></span></label>
-            <label class="row switch"><span class="row-label">Playlist completa</span><input type="checkbox" id="optPlaylist"><span class="switch-ui"></span></label>
-            <label class="row switch"><span class="row-label">Quitar patrocinios <small>SponsorBlock</small></span><input type="checkbox" id="optSponsorblock"><span class="switch-ui"></span></label>
+            <label class="row switch no-search"><span class="row-label">Playlist completa</span><input type="checkbox" id="optPlaylist"><span class="switch-ui"></span></label>
+            <label class="row switch"><span class="row-label">Patrocinios <small>SponsorBlock, en YouTube</small></span><input type="checkbox" id="optSponsorblock"><span class="switch-ui"></span></label>
+            <label class="row hidden" id="sponsorModeRow"><span class="row-label">Qué hacer con ellos</span>
+              <select id="sponsorMode">
+                <option value="remove" selected>Quitarlos</option>
+                <option value="mark">Marcarlos como capítulos</option>
+              </select>
+            </label>
             <label class="row switch"><span class="row-label">Audio y vídeo a la vez <small>descarga los dos, cada uno con su formato</small></span><input type="checkbox" id="optBoth"><span class="switch-ui"></span></label>
             <label class="row switch hidden" id="optLiveWrap"><span class="row-label">Grabar el directo desde el principio <small>sigue hasta que acabe, o páralo cuando quieras desde la cola</small></span><input type="checkbox" id="optLive"><span class="switch-ui"></span></label>
           </div>
@@ -341,6 +352,15 @@
                 </label>
               </div>
               <div class="group">
+                <label class="row"><span class="row-label">Prioridad en la cola</span>
+                  <select id="dlPriority">
+                    <option value="high">Urgente</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="low">Cuando haya tiempo</option>
+                  </select>
+                </label>
+              </div>
+              <div class="group no-search">
                 <div class="row"><span class="row-label">Descargar solo un tramo <small>opcional</small></span>
                   <div class="row-actions">
                     <input class="text-input small" type="text" id="dlStart" placeholder="Desde 0:00" autocomplete="off" aria-label="Desde">
@@ -355,9 +375,10 @@
                   </div>
                 </div>
               </div>
-              <p class="hint" id="dlMoreHint"></p>
+              <p class="hint no-search" id="dlMoreHint"></p>
             </div>
           </details>
+          <div id="dlOptionsHome" hidden></div>
 
           <!-- Convert settings -->
           <div class="group hidden" id="convertOptions">
@@ -451,6 +472,13 @@
               </div>
 
               <div class="group" id="convertCommon">
+                <label class="row" id="convertVoiceRow"><span class="row-label">Voz <small>aproximado: va mejor con canciones de estudio en estéreo</small></span>
+                  <select id="convertVoice">
+                    <option value="" selected>Tal cual</option>
+                    <option value="karaoke">Quitar la voz (karaoke)</option>
+                    <option value="vocals">Solo la voz</option>
+                  </select>
+                </label>
                 <label class="row"><span class="row-label">Velocidad</span>
                   <select id="convertSpeed">
                     <option value="0.5">0,5×</option>
@@ -487,13 +515,22 @@
             </div>
             <button class="btn btn-primary" id="btnSearch" type="submit">Buscar</button>
           </form>
-          <p class="hint" id="searchHint">Busca en YouTube sin tener el enlace. Se descargará con el formato elegido arriba (Audio o Vídeo) y en Descargar → Enlace.</p>
+          <p class="hint" id="searchHint">Busca en YouTube sin tener el enlace. Elige arriba Audio o Vídeo, y abajo el resto de opciones: son las mismas que en Descargar.</p>
+          <details class="more search-options" id="searchOptions">
+            <summary>
+              <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+              Opciones de descarga <span class="hint" id="searchOptionsSummary"></span>
+            </summary>
+            <div class="more-body" id="searchOptionsSlot"></div>
+          </details>
           <div class="picker-card hidden" id="searchResults">
             <div class="picker-head">
               <div class="picker-head-text"><strong id="searchCount"></strong><span id="searchFormat"></span></div>
               <div class="row-actions">
                 <button class="link-btn" id="searchAll" type="button">Todos</button>
                 <button class="link-btn" id="searchNone" type="button">Ninguno</button>
+                <button class="link-btn" id="searchCopy" type="button">Copiar enlaces</button>
+                <button class="link-btn" id="searchThumbs" type="button">Solo miniaturas</button>
               </div>
             </div>
             <ul class="pick-list" id="searchList"></ul>
@@ -545,6 +582,30 @@
               <div class="empty" id="subsEmpty"><p>Aún no sigues ningún canal. Lo nuevo que publiquen se descargará solo mientras TubeGrab esté abierto (también en la bandeja).</p></div>
               <ul class="sub-list" id="subsList"></ul>
             </div>
+
+            <div class="section-header"><h2>Podcasts</h2></div>
+            <div class="field">
+              <svg class="field-icon" viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="2"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input class="field-input" id="podUrl" type="url" placeholder="Dirección del feed (RSS) del podcast" aria-label="Dirección del feed (RSS) del podcast" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="group">
+              <label class="row"><span class="row-label">Al suscribirte, descargar ya</span>
+                <select id="podBackfill">
+                  <option value="0">Nada, solo lo nuevo</option>
+                  <option value="1" selected>El último episodio</option>
+                  <option value="3">Los 3 últimos</option>
+                  <option value="5">Los 5 últimos</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-footer">
+              <div class="status-message" id="podStatus" role="status"></div>
+              <button class="btn btn-primary" id="btnPodAdd" type="button">Suscribirse al podcast</button>
+            </div>
+            <div class="group list-group">
+              <div class="empty" id="podEmpty"><p>El enlace del feed suele estar en la web del podcast («RSS»). Cada episodio nuevo se guarda con su portada, su fecha y sus capítulos, en una carpeta con el nombre del podcast.</p></div>
+              <ul class="sub-list" id="podList"></ul>
+            </div>
           </div>
         </section>
 
@@ -556,6 +617,7 @@
             <span class="dropzone-title" id="editDropText">Arrastra un vídeo o un audio para editarlo</span>
             <span class="dropzone-hint">del segundo que quieras al que quieras, corta y quita partes</span>
           </label>
+          <div class="ed-rec-row desktop-only"><button class="btn" id="btnRecord" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>Grabar la pantalla…</button><span class="hint">o una ventana, o un trozo de la pantalla, directo al Editor</span></div>
           <div class="status-message" id="editLoadStatus" role="status"></div>
 
           <div class="editor hidden" id="editor">
@@ -792,6 +854,7 @@
               <button class="ed-tool" id="edCut" type="button" title="Corta el tramo en el cabezal (B)"><span class="ed-key">B</span>Cortar</button>
               <button class="ed-tool" id="edToggle" type="button" title="Quita o recupera el tramo seleccionado (Supr)"><span class="ed-key">Supr</span><span id="edToggleLabel">Quitar tramo</span></button>
               <button class="ed-tool" id="edSilence" type="button" title="Busca los silencios de más de un segundo y los quita (puedes deshacerlo)"><svg viewBox="0 0 24 24"><path d="M3 12h2M7 8v8M11 5v14M15 10v4M19 12h2"/></svg>Quitar silencios</button>
+              <button class="ed-tool" id="edMoments" type="button" title="Deja solo los tramos más movidos: para un resumen o un vídeo corto (puedes deshacerlo)"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>Mejores momentos</button>
               <button class="ed-tool" id="edScenes" type="button" title="Corta en cada cambio de plano (puedes deshacerlo)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="7" height="12" rx="1"/><rect x="14" y="6" width="7" height="12" rx="1"/><path d="M12 3v18"/></svg>Cortar en escenas</button>
               <button class="ed-tool ed-toggle active" id="edSnap" type="button" aria-pressed="true" title="Imán: el cabezal y los cortes se pegan a los cortes cercanos"><svg viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0 0 12 0V3h-4v8a2 2 0 0 1-4 0V3z"/><path d="M6 7h4M14 7h4"/></svg>Imán</button>
               <span class="ed-sep"></span>
@@ -1020,6 +1083,7 @@
                 <button class="btn" id="tgNumber" type="button">Numerar en orden</button>
                 <button class="btn" id="tgFromName" type="button">Título desde el nombre del archivo</button>
                 <button class="btn" id="tgDetect" type="button">Detectar BPM y tonalidad</button>
+                <button class="btn" id="tgMusicBrainz" type="button">Rellenar con MusicBrainz</button>
               </div>
             </div>
 
@@ -1112,6 +1176,12 @@
             </select>
             <select class="lib-select" id="libPlaylist" aria-label="Lista"></select>
             <label class="lib-group"><input type="checkbox" id="libGroup"> Agrupar por carpeta</label>
+            <label class="lib-group"><input type="checkbox" id="libInLyrics"> Buscar en las letras</label>
+            <div class="segmented segmented-small" id="libView" role="radiogroup" aria-label="Vista">
+              <button class="kind-btn active" data-view="list" type="button" role="radio" title="Lista" aria-label="Lista">☰</button>
+              <button class="kind-btn" data-view="grid" type="button" role="radio" title="Carátulas" aria-label="Carátulas">▦</button>
+            </div>
+            <button class="link-btn" id="libSendAll" type="button">Enviar lo que se ve al móvil</button>
             <button class="link-btn" id="libRefresh" type="button">Actualizar</button>
             <button class="link-btn" id="libDupes" type="button">Buscar duplicados</button>
           </div>
@@ -1120,6 +1190,7 @@
             <span class="ed-flex"></span>
             <button class="btn btn-primary" id="libPlPlay" type="button">Reproducir</button>
             <button class="link-btn" id="libPlExport" type="button">Guardar como .m3u8</button>
+            <button class="link-btn" id="libPlPhone" type="button">Enviar al móvil</button>
             <button class="link-btn" id="libPlRename" type="button">Renombrar</button>
             <button class="link-btn" id="libPlDelete" type="button">Borrar la lista</button>
           </div>
@@ -1282,6 +1353,9 @@
           </div>
           <div class="section-header"><h2>Descargas</h2></div>
           <div class="group">
+            <label class="row desktop-only"><span class="row-label">Proxy <small>si un sitio está bloqueado en tu red</small></span>
+              <input class="text-input" id="cfgProxy" type="text" maxlength="400" autocomplete="off" spellcheck="false" placeholder="http://servidor:8080 o socks5://servidor:1080">
+            </label>
             <label class="row"><span class="row-label">Límite de velocidad <small>por descarga</small></span>
               <select id="prefRateLimit">
                 <option value="">Sin límite</option>
@@ -1308,6 +1382,33 @@
               <div class="row-actions"><button class="btn" id="btnForgetSeen" type="button">Olvidarlo</button></div>
             </div>
           </div>
+
+          <div class="section-header desktop-only"><h2>Horario de descargas</h2></div>
+          <div class="group desktop-only">
+            <label class="row switch"><span class="row-label">Descargar solo a ciertas horas <small>lo que añadas fuera de ese horario espera en la cola</small></span><input type="checkbox" id="winEnabled"><span class="switch-ui"></span></label>
+            <div class="row"><span class="row-label">De</span>
+              <div class="row-actions"><input class="text-input small" type="time" id="winFrom" value="02:00" aria-label="Desde"> <span>a</span> <input class="text-input small" type="time" id="winTo" value="07:00" aria-label="Hasta"></div>
+            </div>
+          </div>
+          <div class="status-message" id="winStatus" role="status"></div>
+
+          <div class="section-header desktop-only"><h2>Tareas que se repiten</h2></div>
+          <div class="group desktop-only">
+            <div class="row rule-form rec-form">
+              <input class="text-input" id="recUrl" type="url" autocomplete="off" spellcheck="false" placeholder="Enlace (playlist, canal, vídeo…)" aria-label="Enlace">
+              <input class="text-input small" type="time" id="recTimeAt" value="03:00" aria-label="Hora">
+              <button class="btn" id="btnRecAdd" type="button">Añadir</button>
+            </div>
+            <div class="row rec-days" id="recDays" role="group" aria-label="Días">
+              <label><input type="checkbox" value="1" checked> L</label><label><input type="checkbox" value="2" checked> M</label><label><input type="checkbox" value="3" checked> X</label>
+              <label><input type="checkbox" value="4" checked> J</label><label><input type="checkbox" value="5" checked> V</label><label><input type="checkbox" value="6" checked> S</label><label><input type="checkbox" value="0" checked> D</label>
+            </div>
+          </div>
+          <div class="group list-group desktop-only">
+            <div class="empty" id="recEmpty"><p>Por ejemplo: la playlist «Novedades» cada día a las 3:00. Se descarga con las opciones que tengas en Descargar al añadir la tarea; si es una playlist, entera.</p></div>
+            <ul class="sub-list" id="recList"></ul>
+          </div>
+          <div class="status-message" id="recStatus" role="status"></div>
 
           <div class="section-header"><h2>Perfiles</h2></div>
           <div class="group list-group">
@@ -1424,6 +1525,19 @@
           </div>
           <div class="status-message" id="watchStatus" role="status"></div>
           <p class="footnote desktop-only">Los resultados se guardan en tu carpeta de descargas. Solo mira archivos de audio y vídeo, y solo los nuevos.</p>
+
+          <div class="section-header"><h2>Etiquetas automáticas (MusicBrainz)</h2></div>
+          <div class="group">
+            <label class="row desktop-only"><span class="row-label">Clave de AcoustID <small>gratis en acoustid.org/new-application: reconoce la canción por cómo suena</small></span>
+              <input class="text-input" id="cfgAcoustid" type="text" maxlength="40" autocomplete="off" spellcheck="false" placeholder="sin clave: por título y artista">
+            </label>
+            <div class="row desktop-only">
+              <div class="row-text"><span class="row-label">Herramienta de huellas (fpcalc)</span><span class="row-sub row-sub-wrap" id="fpcalcLabel">—</span></div>
+              <div class="row-actions"><button class="btn" id="btnFpcalc" type="button">Instalar</button></div>
+            </div>
+          </div>
+          <div class="status-message" id="mbStatus" role="status"></div>
+          <p class="footnote">En Convertir → Etiquetas, «Rellenar con MusicBrainz» busca artista, álbum, año, número de pista y la carátula. Sin clave, busca por el título y el artista que ya tengan las canciones.</p>
         </section>
 
         <!-- ===== Ajustes → Sistema ===== -->
@@ -1486,6 +1600,39 @@
           <p class="footnote desktop-only">Con "Detectar enlaces copiados", TubeGrab mira el portapapeles solo mientras está abierto y solo reacciona a enlaces de sitios compatibles. Nada sale de tu equipo.</p>
           <p class="footnote desktop-hide">Estos ajustes están en la app de escritorio.</p>
 
+          <div class="section-header desktop-only"><h2>Atajos del reproductor</h2></div>
+          <div class="group desktop-only">
+            <label class="row switch"><span class="row-label">Funcionan aunque TubeGrab no esté delante <small>también en el mini reproductor y con la ventana en la bandeja</small></span><input type="checkbox" id="keysGlobal"><span class="switch-ui"></span></label>
+            <div class="keys-editor" id="keysEditor"></div>
+            <div class="row"><span class="row-label">Pulsa en una casilla y luego la combinación de teclas. <small>Supr la deja vacía</small></span>
+              <div class="row-actions"><button class="btn" id="keysReset" type="button">Restablecer</button></div>
+            </div>
+          </div>
+          <div class="status-message" id="keysStatus" role="status"></div>
+
+          <div class="section-header desktop-only"><h2>Last.fm</h2></div>
+          <div class="group desktop-only">
+            <label class="row switch"><span class="row-label">Registrar lo que escuchas <small>«scrobbling» en tu cuenta de Last.fm</small></span><input type="checkbox" id="lfmEnabled"><span class="switch-ui"></span></label>
+            <label class="row"><span class="row-label">API key <small>gratis en last.fm/api/account/create</small></span><input class="text-input" id="lfmKey" maxlength="32" autocomplete="off" spellcheck="false"></label>
+            <label class="row"><span class="row-label">Shared secret</span><input class="text-input" id="lfmSecret" type="password" maxlength="32" autocomplete="off" spellcheck="false" placeholder="••••••••"></label>
+            <div class="row">
+              <div class="row-text"><span class="row-label">Cuenta</span><span class="row-sub" id="lfmLabel">Sin conectar</span></div>
+              <div class="row-actions">
+                <button class="btn" id="lfmConnect" type="button">Conectar…</button>
+                <button class="btn hidden" id="lfmFinish" type="button">Ya lo he aceptado</button>
+                <button class="link-btn hidden" id="lfmDisconnect" type="button">Desconectar</button>
+              </div>
+            </div>
+          </div>
+          <div class="status-message" id="lfmStatus" role="status"></div>
+
+          <div class="section-header desktop-only"><h2>Discord</h2></div>
+          <div class="group desktop-only">
+            <label class="row switch"><span class="row-label">Mostrar lo que escuchas en Discord <small>«Escuchando…» en tu perfil, con Discord abierto</small></span><input type="checkbox" id="dcEnabled"><span class="switch-ui"></span></label>
+            <label class="row"><span class="row-label">ID de la aplicación <small>crea una gratis en discord.com/developers; su nombre es lo que se verá</small></span><input class="text-input" id="dcAppId" maxlength="22" inputmode="numeric" autocomplete="off" spellcheck="false"></label>
+          </div>
+          <div class="status-message" id="dcStatus" role="status"></div>
+
           <div class="section-header desktop-only"><h2>Línea de comandos</h2></div>
           <div class="group desktop-only">
             <label class="row switch hidden" id="cliRow"><span class="row-label">Comando «tubegrab» <small>para descargar desde cualquier terminal</small></span><input type="checkbox" id="optCli"><span class="switch-ui"></span></label>
@@ -1528,6 +1675,16 @@
                 <button class="btn" id="btnBackupImport" type="button">Importar…</button>
               </div>
               <input type="file" id="backupInput" accept=".json,application/json" hidden>
+            </div>
+          </div>
+          <div class="group desktop-only">
+            <label class="row switch"><span class="row-label">Copia automática <small>en una carpeta tuya (OneDrive, un disco…); guarda las 8 últimas</small></span><input type="checkbox" id="abEnabled"><span class="switch-ui"></span></label>
+            <label class="row"><span class="row-label">Cada</span>
+              <select id="abDays"><option value="1">Día</option><option value="7" selected>Semana</option><option value="30">Mes</option></select>
+            </label>
+            <div class="row">
+              <div class="row-text"><span class="row-label">Carpeta</span><span class="row-sub" id="abDirLabel">Ninguna</span></div>
+              <div class="row-actions"><button class="btn" id="abChoose" type="button">Elegir…</button><button class="btn" id="abNow" type="button">Copiar ahora</button></div>
             </div>
           </div>
           <div class="status-message" id="backupStatus" role="status"></div>
@@ -1660,6 +1817,7 @@
               <button class="ed-btn ed-play" id="plPlay" type="button" title="Reproducir / pausa" aria-label="Reproducir / pausa"><svg class="ed-ico-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="ed-ico-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
               <button class="ed-btn" id="plNext" type="button" title="Siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></svg></button>
               <button class="ed-btn" id="plRepeat" type="button" title="Repetir" aria-label="Repetir" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
+            <button class="ed-btn" id="plRadio" type="button" title="Modo radio: al acabar, sigue con canciones parecidas" aria-label="Modo radio" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l10-5"/><circle cx="8" cy="14" r="2.2"/><path d="M14 12h4M14 16h4"/></svg></button>
             </div>
             <div class="player-seek">
               <span id="plTime">0:00</span>
@@ -1673,6 +1831,7 @@
             <button class="ed-btn" id="plCastBtn" type="button" title="Enviar a la tele" aria-label="Enviar a la tele"><svg viewBox="0 0 24 24"><path d="M2 16a6 6 0 0 1 6 6M2 12a10 10 0 0 1 10 10M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/></svg></button>
             <button class="ed-btn" id="plMiniBtn" type="button" title="Mini reproductor (siempre encima)" aria-label="Mini reproductor (siempre encima)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><rect x="12" y="12" width="7" height="6" rx="1"/></svg></button>
             <button class="ed-btn hidden" id="plExpand" type="button" title="Mostrar u ocultar el vídeo" aria-label="Mostrar u ocultar el vídeo"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg></button>
+            <button class="ed-btn hidden" id="plSubs" type="button" title="Subtítulos" aria-label="Subtítulos" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 13h4M13 13h4M7 16h7"/></svg></button>
             <button class="ed-btn hidden" id="plFull" type="button" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
             <svg class="player-vol-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>
             <input type="range" id="plVolume" min="0" max="1" step="0.05" value="1" aria-label="Volumen">
@@ -1732,6 +1891,25 @@
     </div>
   </div>
 
+  <div class="modal hidden" id="recModal" role="dialog" aria-modal="true" aria-labelledby="recTitle">
+    <div class="modal-card rec-card">
+      <h2 id="recTitle">Grabar la pantalla</h2>
+      <p class="hint" id="recHint"></p>
+      <ul class="rec-sources" id="recSources"></ul>
+      <div class="group">
+        <label class="row switch"><span class="row-label">Con el sonido del equipo <small>solo con una pantalla entera</small></span><input type="checkbox" id="recAudio"><span class="switch-ui"></span></label>
+        <label class="row switch"><span class="row-label">Solo un trozo <small>dibújalo arrastrando sobre la imagen</small></span><input type="checkbox" id="recRegion"><span class="switch-ui"></span></label>
+      </div>
+      <div class="rec-stage hidden" id="recStage"><div class="rec-stage-inner" id="recStageInner"><video id="recPreview" muted playsinline></video><div class="rec-box" id="recBox"></div></div></div>
+      <p class="footnote">La ventana de TubeGrab se minimiza al empezar; vuelve a ella y pulsa «Parar» para terminar.</p>
+      <div class="modal-actions">
+        <button class="btn" id="recCancel" type="button">Cancelar</button>
+        <button class="btn btn-primary" id="recStart" type="button" disabled>Empezar a grabar</button>
+      </div>
+    </div>
+  </div>
+  <div class="rec-bar hidden" id="recBar" role="status"><span class="rec-dot" aria-hidden="true"></span><span>Grabando</span><strong id="recTime">0:00</strong><button class="btn btn-primary" id="recStop" type="button">Parar</button></div>
+
   <div class="modal hidden" id="keysModal" role="dialog" aria-modal="true" aria-labelledby="keysTitle">
     <div class="modal-card keys-card">
       <h2 id="keysTitle">Atajos de teclado</h2>
@@ -1761,7 +1939,11 @@
         </dl>
         <h3>Reproductor</h3>
         <dl>
-          <dt>Teclas multimedia</dt><dd>Reproducir, pausa, anterior y siguiente</dd>
+          <dt>Teclas multimedia</dt><dd>Reproducir, pausa, anterior, siguiente y parar</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Volumen (<kbd>M</kbd>: silenciar)</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>←</kbd> <kbd>→</kbd></dt><dd>−10 s / +10 s</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>P</kbd></dt><dd>Mini reproductor</dd>
+          <dt></dt><dd>Todos se cambian en Ajustes → Sistema</dd>
         </dl>
       </div>
       <div class="modal-actions"><button class="btn btn-primary" id="keysClose" type="button">Cerrar</button></div>

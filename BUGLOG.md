@@ -527,3 +527,34 @@ Nuevo: en Buscar y en la lista de una playlist, al pasar el ratón por la miniat
 
 ### Revisado sin hallazgos
 HTML construido en la página (todo con `textContent` o escapado), procesos (ninguno con shell), rutas que manda la página (siempre por id o comprobadas dentro de la carpeta de descargas), teles (solo red local, mismo equipo que respondió), servidor de red local (tokens aleatorios, `Range` acotado), descargas de Whisper (SHA-256 fijado). `npm audit` → 0 vulnerabilidades. 211 pruebas.
+
+---
+
+## 2026-10-04 — Revisión 15 (v3.5.0): Spotify/Apple, podcasts, MusicBrainz, cola que sobrevive, atajos y más
+
+Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces; importar listas de Spotify y Apple Music; podcasts por RSS; solo la miniatura; SponsorBlock como capítulos; proxy; quitar la voz o quedarse con ella; Mejores momentos, textos animados y grabar la pantalla en el Editor; MusicBrainz/AcoustID en Etiquetas; la cola se guarda y vuelve tras un reinicio, con prioridades, horario de descargas y tareas que se repiten; en la Biblioteca, carátulas, listas inteligentes, búsqueda por letra, subtítulos .srt, modo radio y enviar una lista entera al móvil (página + .zip); atajos de teclado propios (también en segundo plano), botones en la miniatura de la barra de tareas, mini reproductor que se arrastra y recuerda su sitio; Last.fm y Discord; avisos con botones; copia de seguridad automática.
+
+### [MEDIUM] Conexiones a Internet: una dirección IPv6 podía esconder una IPv4 de la red local
+- **Riesgo:** los podcasts, las páginas de Spotify/Apple y MusicBrainz se piden desde el propio equipo. La comprobación de «solo direcciones públicas» reconocía `::ffff:127.0.0.1`, pero no la misma dirección escrita en hexadecimal (`::ffff:7f00:1`), ni `::7f00:1` o `2002:7f00:1::` (6to4). Un feed o un servidor DNS podía así apuntar a este equipo o al router.
+- **Fix:** las direcciones IPv6 se leen palabra por palabra; cualquier IPv4 dentro de una IPv6 (mapeada, compatible, 6to4 o NAT64) se comprueba como IPv4, y además se rechazan las locales únicas, de enlace y multicast. La comprobación la hace la conexión misma (consulta DNS propia), también tras cada redirección (probado).
+
+### [MEDIUM] fpcalc (AcoustID) abría directamente el archivo subido
+- **Riesgo:** fpcalc lleva su propio FFmpeg sin la lista blanca de formatos de TubeGrab: un archivo disfrazado (por ejemplo una lista HLS con extensión `.mp3`) podría hacerle leer otros archivos o pedir direcciones de red.
+- **Fix:** fpcalc nunca ve la subida: el ffmpeg de TubeGrab (solo formatos multimedia reales y solo archivos locales) saca los dos primeros minutos a un WAV, y fpcalc lee ese WAV (que se borra al terminar). La duración que se manda a AcoustID es la de la canción entera.
+
+### [LOW] MusicBrainz: la cola de peticiones no tenía tope
+- **Fix:** como mucho 40 búsquedas esperando su turno (una por segundo, como pide MusicBrainz); el resto recibe «ocupado» en vez de acumularse sin fin en una instancia compartida.
+
+### [LOW] Grabar la pantalla: Electron pedía el permiso `media`
+- **Fix:** solo se concede si no pide ni micrófono ni cámara, viene de la página de la app y el usuario acaba de elegir una pantalla o ventana (vale 30 s y una sola vez; probado que una segunda petición sin elegir se rechaza). El sonido del equipo solo con una pantalla entera.
+
+### Revisado sin hallazgos
+- **Importar:** solo se leen páginas fijas de `open.spotify.com` y `music.apple.com` (id validado, sin seguir otros dominios); cada canción llega a yt-dlp como `ytsearch1:Artista - Título` en texto plano, sin saltos de línea, detrás de `--`, nunca como playlist.
+- **Podcasts:** feed y episodios por la conexión de solo direcciones públicas, con topes de tamaño (feed 15 MB, episodio 2 GB, portada 8 MB); títulos limpiados antes de ser nombres de archivo o carpeta; etiquetas y capítulos en `ffmetadata` escapado (probado con `= ; # \` y saltos de línea); la portada entra en ffmpeg solo como imagen.
+- **Cola que sobrevive:** al leer `queue.json` cada trabajo vuelve a pasar por las mismas comprobaciones que una petición (probado con entradas manipuladas: sitio no soportado, `file://`, cliente falso).
+- **Proxy:** solo `http(s)://` o `socks4/5://` con servidor y puerto, sin espacios; validado al guardarlo y otra vez antes de yt-dlp (probado con `--exec`, saltos de línea y puertos imposibles). En una instancia web ni se puede cambiar ni se muestra.
+- **Enviar una lista al móvil:** solo archivos de la biblioteca por id; la página escapa nombres y título; los nombres dentro del .zip se limpian (sin carpetas ni `..`); enlace con token aleatorio que caduca en 1 h.
+- **Subtítulos y letras de la biblioteca:** solo archivos junto al vídeo con su mismo nombre, ≤ 2 MB, servidos como `text/vtt` con `nosniff`.
+- **Atajos, Last.fm, Discord, copia automática:** combinaciones de teclas de una lista fija; el secreto y la sesión de Last.fm nunca llegan a la página; a Discord solo título, artista y tiempo, y solo si se activa; la copia automática solo escribe y borra archivos `TubeGrab-copia-AAAA-MM-DD.json` en la carpeta elegida en el diálogo.
+- **Encontrado al probar en la app real:** las grabaciones de pantalla no traen su duración y el Editor no las abría (ahora se busca la duración, en la página y en ffmpeg); MusicBrainz descartaba canciones cuyo vídeo era más corto que la versión del disco; el mini reproductor no recordaba dónde lo dejaste.
+- `npm audit --omit=dev` (lo que va dentro de la app) → 0 vulnerabilidades. `npm audit` completo avisa de `http-cache-semantics` (aviso nuevo, GHSA-ch52-4w7c-c8xp), que solo usa electron-builder para descargar Electron al **construir** el .exe; no tiene versión corregida y no va dentro de la app. 224 pruebas.
