@@ -174,8 +174,8 @@ test('favourites and stars: kept by path, survive a restart, only sane values', 
   const { files } = lib.scan();
   const song = files.find((f) => f.name === 'canción.mp3');
   assert.deepEqual([song.fav, song.rating], [false, 0]);
-  assert.deepEqual(lib.setMeta(song.id, { fav: true, rating: 4 }), { fav: true, rating: 4 });
-  assert.deepEqual(lib.setMeta(song.id, { rating: 9, fav: 'yes' }), { fav: true, rating: 4 }, 'odd values ignored');
+  assert.deepEqual(lib.setMeta(song.id, { fav: true, rating: 4 }), { fav: true, rating: 4, plays: 0, lastPlayed: 0 });
+  assert.deepEqual(lib.setMeta(song.id, { rating: 9, fav: 'yes' }), { fav: true, rating: 4, plays: 0, lastPlayed: 0 }, 'odd values ignored');
   assert.equal(lib.setMeta('0'.repeat(32), { fav: true }), null, 'unknown id');
   assert.equal(lib.setMeta('../x', { fav: true }), null);
   const again = new Library({ rootFn: () => root, metaFile }).scan().files.find((f) => f.name === 'canción.mp3');

@@ -16,6 +16,13 @@ const tags = require('./lib/tags');
 const { Library, ShareServer } = require('./lib/library');
 const { isLocalFolderPath } = require('./lib/filenames');
 const { RemoteServer } = require('./lib/remote');
+const whisper = require('./lib/whisper');
+const { SeenIndex, keyFromUrl, keyFromMeta } = require('./lib/seen');
+const { ProfileStore } = require('./lib/profiles');
+const { CastManager } = require('./lib/cast');
+const { WatchFolder } = require('./lib/watch');
+const { lanAddress } = require('./lib/library');
+const { safeFolderName } = require('./lib/filenames');
 const http = require('http');
 const qrcode = require('qrcode-generator');
 const { EventEmitter } = require('events');
@@ -215,7 +222,7 @@ const hwFor = () => {
 
 app.get('/api/config', async (req, res) => {
   if (!gpuVendor) await detectGpu();
-  res.json({ ...config, gpu: gpuVendor, desktop: IS_DESKTOP });
+  res.json({ ...config, gpu: gpuVendor, desktop: IS_DESKTOP, whisper: whisper.status() });
 });
 
 app.post('/api/config', (req, res) => {
@@ -226,8 +233,29 @@ app.post('/api/config', (req, res) => {
   if (['auto', 'off'].includes(body.hwAccel)) config.hwAccel = body.hwAccel;
   applyConfig();
   try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2)); } catch { /* not fatal */ }
-  res.json({ ...config, gpu: gpuVendor, desktop: IS_DESKTOP });
+  res.json({ ...config, gpu: gpuVendor, desktop: IS_DESKTOP, whisper: whisper.status() });
 });
+
+// === "You already have it": what this client downloaded, by video id ===
+const seen = new SeenIndex({ file: IS_DESKTOP ? path.join(dataDir, 'downloaded.json') : null });
+const recorded = new Set();
+jobs.on('update', (clientId, job) => {
+  if (job.type !== 'download' || job.status !== 'done' || recorded.has(job.id)) return;
+  recorded.add(job.id);
+  if (recorded.size > 5000) recorded.delete(recorded.values().next().value);
+  const meta = job.meta || {};
+  const key = keyFromMeta(meta.extractor_key, meta.id) || keyFromUrl(job.source);
+  if (key) seen.add(clientId, key, { title: meta.title || job.title, mode: job.request && job.request.mode });
+});
+app.post('/api/seen', requireClient, (req, res) => {
+  const urls = Array.isArray((req.body || {}).urls) ? req.body.urls.slice(0, 500).filter((u) => typeof u === 'string' && u.length <= 2048) : [];
+  res.json({ found: seen.check(req.clientId, urls) });
+});
+app.delete('/api/seen', requireClient, (req, res) => {
+  seen.clear(req.clientId);
+  res.json({ ok: true });
+});
+const alreadyFor = (clientId, url) => (clientId ? seen.get(clientId, keyFromUrl(url)) : null);
 
 // === Media info preview (title, thumbnail, duration) ===
 app.post('/api/info', infoLimiter, (req, res) => {
@@ -248,15 +276,22 @@ app.post('/api/info', infoLimiter, (req, res) => {
       const data = JSON.parse(stdout);
       const thumbnail = typeof data.thumbnail === 'string' && data.thumbnail.startsWith('https://') ? data.thumbnail : null;
       const chapters = Array.isArray(data.chapters) ? data.chapters.length : 0;
+      const clientId = clientIdFrom(req);
+      const key = keyFromMeta(data.extractor_key, data.id);
+      const short = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 200) : null);
       return res.json({
         title: data.title || 'Sin título',
         thumbnail,
         duration: data.duration || null,
-        uploader: data.uploader || data.channel || null,
+        uploader: short(data.uploader) || short(data.channel) || null,
+        channel: short(data.channel) || null,
         site: data.extractor_key || null,
         chapters,
         isPlaylist: false,
+        // On air right now (or about to be): it can be recorded from the start.
+        isLive: data.is_live === true || data.live_status === 'is_live' || data.live_status === 'is_upcoming',
         sizes: download.formatSizes(data),
+        already: clientId && key ? seen.get(clientId, key) : null,
       });
     } catch {
       return res.status(500).json({ error: 'No se pudo obtener información del enlace.' });
@@ -272,7 +307,8 @@ app.post('/api/search', infoLimiter, async (req, res) => {
   try {
     const results = await download.search(query, ytEnv(), 15);
     if (!results) return res.status(502).json({ error: 'No se pudo buscar ahora mismo. Inténtalo de nuevo.' });
-    res.json({ results });
+    const clientId = clientIdFrom(req);
+    res.json({ results: results.map((e) => ({ ...e, already: alreadyFor(clientId, e.url) })) });
   } finally {
     infoSlots.release();
   }
@@ -286,7 +322,8 @@ app.post('/api/playlist', infoLimiter, async (req, res) => {
   try {
     const list = await download.expandPlaylist(url, ytEnv());
     if (!list || !list.entries.length) return res.status(404).json({ error: 'Ese enlace no es una playlist, o está vacía.' });
-    res.json(list);
+    const clientId = clientIdFrom(req);
+    res.json({ ...list, entries: list.entries.map((e) => ({ ...e, already: alreadyFor(clientId, e.url) })) });
   } finally {
     playlistSlots.release();
   }
@@ -318,17 +355,20 @@ app.get('/api/jobs/events', requireClient, (req, res) => {
   const onUpdate = (clientId, job) => { if (clientId === req.clientId) send('job', job); };
   const onRemoved = (clientId, id) => { if (clientId === req.clientId) send('removed', { id }); };
   const onSubs = (clientId) => { if (clientId === req.clientId) send('subscriptions', {}); };
+  const onMirror = (clientId, info) => { if (clientId === req.clientId) send('mirror', info); };
   const onHold = (until) => send('schedule', { until });
   if (IS_DESKTOP) jobs.on('hold', onHold);
   jobs.on('update', onUpdate);
   jobs.on('removed', onRemoved);
   events.on('subscriptions', onSubs);
+  events.on('mirror', onMirror);
   const heartbeat = setInterval(() => res.write(': ping\n\n'), 25_000);
   req.on('close', () => {
     clearInterval(heartbeat);
     jobs.off('update', onUpdate);
     jobs.off('removed', onRemoved);
     events.off('subscriptions', onSubs);
+    events.off('mirror', onMirror);
     jobs.off('hold', onHold);
     const left = (sseConnections.get(req.clientId) || 1) - 1;
     if (left > 0) sseConnections.set(req.clientId, left); else sseConnections.delete(req.clientId);
@@ -338,8 +378,11 @@ app.get('/api/jobs/events', requireClient, (req, res) => {
 
 const TOO_MANY_JOBS = { error: 'Hay demasiados trabajos en la cola. Elimina algunos terminados e inténtalo de nuevo.' };
 
-/** Queues one download job per item ({ url, title }) with validated options. */
-function queueDownloads(clientId, items, opts) {
+/**
+ * Queues one download job per item ({ url, title }) with validated options.
+ * `saveFolder`: one folder name inside the downloads folder (mirrored playlists).
+ */
+function queueDownloads(clientId, items, opts, { saveFolder = null } = {}) {
   const env = ytEnv();
   const detail = download.describeOptions(opts);
   for (const item of items) {
@@ -352,6 +395,8 @@ function queueDownloads(clientId, items, opts) {
       request: opts,
       run: download.runDownload(item.url, opts, env),
       retryable: true,
+      live: opts.live,
+      saveFolder,
     });
   }
 }
@@ -437,7 +482,7 @@ const uploader = (files, { imageFields = [] } = {}) => multer({
   },
 });
 const upload = uploader(1);
-const uploadEdit = uploader(2, { imageFields: ['logo'] }).fields([{ name: 'file', maxCount: 1 }, { name: 'logo', maxCount: 1 }]);
+const uploadEdit = uploader(3, { imageFields: ['logo'] }).fields([{ name: 'file', maxCount: 1 }, { name: 'logo', maxCount: 1 }, { name: 'music', maxCount: 1 }]);
 const MAX_TAG_FILES = IS_DESKTOP ? tags.MAX_FILES : 10;
 const uploadTagsRead = uploader(MAX_TAG_FILES).array('files', MAX_TAG_FILES);
 const uploadTags = uploader(MAX_TAG_FILES + 1, { imageFields: ['cover'] }).fields([{ name: 'files', maxCount: MAX_TAG_FILES }, { name: 'cover', maxCount: 1 }]);
@@ -517,6 +562,7 @@ app.post('/api/jobs/image', createLimiter, requireClient, upload.single('file'),
 app.post('/api/jobs/edit', createLimiter, requireClient, uploadEdit, (req, res) => {
   req.file = (req.files && req.files.file && req.files.file[0]) || null;
   const logo = (req.files && req.files.logo && req.files.logo[0]) || null;
+  const music = (req.files && req.files.music && req.files.music[0]) || null;
   const body = req.body || {};
   const targetFormat = String(body.targetFormat || '').toLowerCase();
   const mode = body.mode === 'fast' ? 'fast' : 'exact';
@@ -524,9 +570,12 @@ app.post('/api/jobs/edit', createLimiter, requireClient, uploadEdit, (req, res) 
   const fx = convert.parseEditEffects(body);
   const animated = Object.prototype.hasOwnProperty.call(convert.EDIT_ANIMATED, targetFormat) ? convert.EDIT_ANIMATED[targetFormat] : null;
   singleUpload(req, res, {
-    extraFiles: [logo],
+    extraFiles: [logo, music],
     check: () => {
       if (!segments) return 'Tramos no válidos.';
+      if (fx.music && !music) return 'Falta el archivo de la música de fondo.';
+      if (fx.captions && !whisper.status().available) return 'Para los subtítulos automáticos, instala primero el motor en Ajustes → Conversión.';
+      if (body.reframe && fx.aspect && !fx.reframe) return 'Encuadre no válido.';
       if (targetFormat !== 'original' && !animated && (!convert.formatFor(targetFormat) || targetFormat === 'gif')) return 'Formato de destino no soportado.';
       if (mode === 'fast' && targetFormat !== 'original') return 'El modo rápido solo funciona con el formato original.';
       if (!fx.texts) return 'Textos no válidos: hasta 5, de hasta 200 caracteres y 3 líneas.';
@@ -547,8 +596,11 @@ app.post('/api/jobs/edit', createLimiter, requireClient, uploadEdit, (req, res) 
         fx.denoise ? 'sin ruido' : '',
         fx.fade ? 'fundidos' : '',
         fx.volume === 0 ? 'sin sonido' : fx.volume !== null ? `volumen ${Math.round(fx.volume * 100)} %` : '',
-        fx.aspect || '',
+        fx.aspects.length ? fx.aspects.join(' + ') : (fx.aspect || ''),
+        fx.reframe ? 'encuadre automático' : '',
         fx.rotate ? 'girado' : '',
+        fx.music ? 'música de fondo' : '',
+        fx.captions ? 'subtítulos' : '',
         mode === 'fast' ? 'rápido' : '',
       ].filter(Boolean);
       return [`Editar · ${segments.length} ${segments.length === 1 ? 'tramo' : 'tramos'} · ${clock} · ${label}`, ...extras].join(' · ');
@@ -556,8 +608,61 @@ app.post('/api/jobs/edit', createLimiter, requireClient, uploadEdit, (req, res) 
     makeRun: (file, b) => convert.runEdit({
       inputPath: file.path, originalName: nameOf(file), segments, targetFormat, mode, body: b, ffmpegPath: currentFfmpegPath(), hw: hwFor(),
       logoPath: fx.logo && logo ? logo.path : null,
+      musicPath: fx.music && music ? music.path : null,
     }),
   });
+});
+
+// === Convertir → Subtítulos (Whisper, on this computer) ===
+app.post('/api/jobs/transcribe', createLimiter, requireClient, upload.single('file'), (req, res) => {
+  const LANG_NAMES = { auto: 'idioma automático', es: 'español', en: 'inglés' };
+  singleUpload(req, res, {
+    check: (body) => {
+      if (!whisper.status().available) return 'Instala primero el motor de subtítulos en Ajustes → Conversión.';
+      if (!whisper.OUTPUTS.includes(body.output)) return 'Elige qué quieres: .srt, texto o vídeo con subtítulos.';
+      return null;
+    },
+    detail: (body) => ['Subtítulos', LANG_NAMES[body.lang] || body.lang, { srt: '.srt', txt: 'texto', burn: 'en el vídeo', both: 'vídeo + .srt' }[body.output],
+      body.translate === 'true' ? 'traducidos al inglés' : ''].filter(Boolean).join(' · '),
+    makeRun: (file, body) => whisper.runTranscribe({ inputPath: file.path, originalName: nameOf(file), body, ffmpegPath: currentFfmpegPath(), hw: hwFor() }),
+  });
+});
+
+// === Editor helpers: scene changes, tempo and key (answered right away) ===
+const analyzeSlots = slots(IS_DESKTOP ? 2 : 1);
+app.post('/api/analyze/scenes', infoLimiter, requireClient, upload.single('file'), async (req, res) => {
+  const file = req.file;
+  const discard = () => { if (file) fs.unlink(file.path, () => {}); };
+  if (!file) return res.status(400).json({ error: 'No se recibió ningún archivo.' });
+  if (!analyzeSlots.take()) { discard(); return res.status(429).json(BUSY); }
+  let proc = null;
+  req.on('close', () => { if (!res.writableEnded && proc) proc.kill(); });
+  try {
+    const times = await convert.detectScenes(currentFfmpegPath(), file.path, { setProcess: (p) => { proc = p; } });
+    res.json({ times });
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  } finally {
+    analyzeSlots.release();
+    discard();
+  }
+});
+
+app.post('/api/tags/analyze', infoLimiter, requireClient, uploadTagsRead, async (req, res) => {
+  const files = req.files || [];
+  const discard = () => files.forEach((f) => fs.unlink(f.path, () => {}));
+  if (!files.length) return res.status(400).json({ error: 'No se recibió ningún archivo.' });
+  if (!analyzeSlots.take()) { discard(); return res.status(429).json(BUSY); }
+  try {
+    const out = [];
+    for (const f of files) {
+      try { out.push(await require('./lib/analysis').analyzeFile(currentFfmpegPath(), f.path)); } catch { out.push({ bpm: null, key: null, camelot: null }); }
+    }
+    res.json({ results: out });
+  } finally {
+    analyzeSlots.release();
+    discard();
+  }
 });
 
 // === Tag editor ===
@@ -636,7 +741,11 @@ function libraryRoot() {
   const fallback = process.env.TUBEGRAB_DEFAULT_DOWNLOADS;
   return isLocalFolderPath(fallback) ? fallback : null;
 }
-const library = new Library({ rootFn: libraryRoot, metaFile: IS_DESKTOP && process.env.TUBEGRAB_DATA_DIR ? path.join(process.env.TUBEGRAB_DATA_DIR, 'library.json') : null });
+const library = new Library({
+  rootFn: libraryRoot,
+  metaFile: IS_DESKTOP && process.env.TUBEGRAB_DATA_DIR ? path.join(process.env.TUBEGRAB_DATA_DIR, 'library.json') : null,
+  playlistsFile: IS_DESKTOP && process.env.TUBEGRAB_DATA_DIR ? path.join(process.env.TUBEGRAB_DATA_DIR, 'playlists.json') : null,
+});
 const shares = new ShareServer();
 const requireDesktop = (req, res, next) => (IS_DESKTOP ? next() : res.status(404).json({ error: 'Solo en la app de escritorio.' }));
 
@@ -647,9 +756,106 @@ app.get('/api/library', requireDesktop, requireClient, infoLimiter, (req, res) =
 
 app.post('/api/library/meta', requireDesktop, requireClient, createLimiter, (req, res) => {
   const body = req.body || {};
-  const meta = library.setMeta(body.id, { fav: body.fav, rating: body.rating });
+  const meta = library.setMeta(body.id, { fav: body.fav, rating: body.rating, played: body.played === true });
   if (!meta) return res.status(404).json({ error: 'No se encuentra el archivo.' });
   return res.json(meta);
+});
+
+// Lyrics for the player: the synced .lrc next to the song, else the words in its tags.
+app.get('/api/library/lyrics', requireDesktop, requireClient, infoLimiter, async (req, res) => {
+  const file = library.resolve(req.query.id);
+  if (!file) return res.status(404).json({ error: 'No se encuentra el archivo.' });
+  const synced = library.syncedLyrics(req.query.id);
+  if (synced && synced.length) return res.json({ synced, plain: null });
+  try {
+    const t = await tags.readTags(currentFfmpegPath(), file, path.basename(file));
+    return res.json({ synced: null, plain: t.tags.lyrics || null });
+  } catch {
+    return res.json({ synced: null, plain: null });
+  }
+});
+
+// Cover art of a song (its embedded picture), small, for the player.
+const covers = new Map(); // id -> Buffer | null
+app.get('/api/library/cover', requireDesktop, requireClient, async (req, res) => {
+  const id = String(req.query.id || '');
+  const file = library.resolve(id);
+  if (!file) return res.status(404).end();
+  let jpg = covers.get(id);
+  if (jpg === undefined) {
+    jpg = await new Promise((resolve) => {
+      const p = require('child_process').spawn(currentFfmpegPath(), ['-hide_banner', '-loglevel', 'error', '-protocol_whitelist', 'file', '-format_whitelist', convert.INPUT_DEMUXERS,
+        '-i', file, '-map', '0:v:0', '-frames:v', '1', '-vf', "scale='min(400,iw)':-2", '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', '4', 'pipe:1'], { windowsHide: true });
+      const chunks = [];
+      let size = 0;
+      p.stdout.on('data', (c) => { size += c.length; if (size < 2 * 1024 * 1024) chunks.push(c); });
+      p.stderr.resume();
+      const timer = setTimeout(() => p.kill(), 15000);
+      p.on('error', () => { clearTimeout(timer); resolve(null); });
+      p.on('close', (code) => { clearTimeout(timer); resolve(code === 0 && size && size < 2 * 1024 * 1024 ? Buffer.concat(chunks) : null); });
+    });
+    covers.set(id, jpg);
+    if (covers.size > 300) covers.delete(covers.keys().next().value);
+  }
+  if (!jpg) return res.status(404).end();
+  res.set({ 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' });
+  return res.end(jpg);
+});
+
+app.get('/api/library/duplicates', requireDesktop, requireClient, infoLimiter, (req, res) => {
+  library.scan();
+  res.json({ groups: library.duplicates() });
+});
+
+// Own playlists.
+const PL_ID = /^[a-f0-9]{16}$/;
+app.get('/api/library/playlists', requireDesktop, requireClient, (req, res) => res.json({ playlists: library.listPlaylists() }));
+app.post('/api/library/playlists', requireDesktop, requireClient, createLimiter, (req, res) => {
+  try {
+    const p = library.createPlaylist((req.body || {}).name);
+    const add = (req.body || {}).add;
+    if (Array.isArray(add)) library.updatePlaylist(p.id, { add });
+    res.json({ playlists: library.listPlaylists(), id: p.id });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.patch('/api/library/playlists/:id', requireDesktop, requireClient, createLimiter, (req, res) => {
+  if (!PL_ID.test(req.params.id) || !library.updatePlaylist(req.params.id, req.body || {})) return res.status(404).json({ error: 'No se encuentra esa lista.' });
+  res.json({ playlists: library.listPlaylists() });
+});
+app.delete('/api/library/playlists/:id', requireDesktop, requireClient, (req, res) => {
+  library.removePlaylist(String(req.params.id));
+  res.json({ playlists: library.listPlaylists() });
+});
+app.post('/api/library/playlists/:id/export', requireDesktop, requireClient, createLimiter, (req, res) => {
+  const name = PL_ID.test(req.params.id) ? library.exportPlaylist(req.params.id) : null;
+  if (!name) return res.status(404).json({ error: 'No se encuentra esa lista.' });
+  res.json({ file: name });
+});
+
+// === Play on the TV (Chromecast / DLNA), from the library ===
+const caster = IS_DESKTOP ? new CastManager({
+  lanAddressFn: lanAddress,
+  share: (file, name) => shares.share(file, path.basename(file), { stream: true }).then((s) => ({ ...s, name })),
+  unshare: (token) => shares.unshare(token),
+}) : null;
+app.get('/api/cast', requireDesktop, requireClient, (req, res) => res.json(caster.state()));
+app.post('/api/cast/devices', requireDesktop, requireClient, infoLimiter, async (req, res) => {
+  try { res.json({ devices: await caster.discover() }); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.post('/api/cast/play', requireDesktop, requireClient, createLimiter, async (req, res) => {
+  const body = req.body || {};
+  const file = library.resolve(body.id);
+  if (!file) return res.status(404).json({ error: 'No se encuentra el archivo.' });
+  try {
+    res.json(await caster.play(body.device, file, path.basename(file).replace(/\.[^.]+$/, '')));
+  } catch (err) {
+    res.status(502).json({ error: err && err.message && err.message.length < 200 ? err.message : 'La tele no respondió.' });
+  }
+});
+app.post('/api/cast/control', requireDesktop, requireClient, async (req, res) => {
+  const { action, value } = req.body || {};
+  if (!['pause', 'resume', 'stop', 'seek'].includes(action)) return res.status(400).json({ error: 'Acción no válida.' });
+  try { res.json(await caster.control(action, Number(value))); } catch (err) { res.status(409).json({ error: err.message }); }
 });
 
 app.get('/api/library/file', requireDesktop, requireClient, (req, res) => {
@@ -682,12 +888,80 @@ app.delete('/api/library/share/:token', requireDesktop, requireClient, (req, res
   return res.json({ ok: true });
 });
 
+// === Download profiles and rules (kept on disk by the desktop app; in
+// memory, per visitor, on a web instance) ===
+const profiles = new ProfileStore({ file: IS_DESKTOP ? path.join(dataDir, 'profiles.json') : null });
+const PROFILE_ID = /^[a-f0-9]{16}$/;
+app.get('/api/profiles', requireClient, (req, res) => res.json(profiles.list(req.clientId)));
+app.post('/api/profiles', createLimiter, requireClient, (req, res) => {
+  try { profiles.saveProfile(req.clientId, req.body || {}); res.json(profiles.list(req.clientId)); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.delete('/api/profiles/:id', requireClient, (req, res) => {
+  if (PROFILE_ID.test(req.params.id)) profiles.removeProfile(req.clientId, req.params.id);
+  res.json(profiles.list(req.clientId));
+});
+app.post('/api/rules', createLimiter, requireClient, (req, res) => {
+  try { profiles.saveRule(req.clientId, req.body || {}); res.json(profiles.list(req.clientId)); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.delete('/api/rules/:id', requireClient, (req, res) => {
+  if (PROFILE_ID.test(req.params.id)) profiles.removeRule(req.clientId, req.params.id);
+  res.json(profiles.list(req.clientId));
+});
+
+// === Watch folder (desktop app): new files in it are converted by themselves ===
+// The folder itself is only ever chosen in the app's own folder dialog (the
+// main process writes it and tells us to reload); the page sends the rest.
+const watcher = IS_DESKTOP ? new WatchFolder({
+  configFile: path.join(dataDir, 'watch.json'),
+  enqueue: (clientId, file, fields) => {
+    const targetFormat = String(fields.targetFormat || '').toLowerCase();
+    const format = convert.formatFor(targetFormat);
+    if (!format || !jobs.canCreate(clientId)) return false;
+    const body = Object.fromEntries(Object.entries(fields).filter(([, v]) => typeof v === 'string' && v.length <= 20));
+    const job = jobs.create({
+      clientId,
+      type: 'convert',
+      title: file.name,
+      detail: `${convert.describeConvert(format.kind, format.config, body)} · carpeta vigilada`,
+      // The original is read in place and never deleted.
+      run: convert.runConvert({ inputPath: file.path, originalName: file.name, targetFormat, body, ffmpegPath: currentFfmpegPath(), hw: hwFor() }),
+    });
+    const onDone = (cid, j) => {
+      if (j.id !== job.id || !['done', 'error', 'canceled'].includes(j.status)) return;
+      jobs.off('update', onDone);
+      if (j.status === 'done') watcher.finished(file.path);
+    };
+    jobs.on('update', onDone);
+    return true;
+  },
+}) : null;
+app.get('/api/watch', requireDesktop, requireClient, (req, res) => res.json(watcher.view()));
+app.post('/api/watch', requireDesktop, requireClient, (req, res) => {
+  const body = req.body || {};
+  const fields = body.fields && typeof body.fields === 'object' && !Array.isArray(body.fields) ? body.fields : undefined;
+  if (fields && !convert.formatFor(String(fields.targetFormat || '').toLowerCase())) return res.status(400).json({ error: 'Formato de destino no soportado.' });
+  try {
+    res.json(watcher.set({ enabled: body.enabled, clientId: req.clientId, fields, moveOriginals: body.moveOriginals }));
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+// From the main process: the folder was chosen in its dialog.
+process.on('message', (msg) => {
+  if (msg && msg.type === 'watch-reload' && watcher) {
+    const enabled = watcher.config.enabled;
+    watcher.config = watcher.load();
+    watcher.config.enabled = enabled && Boolean(watcher.config.dir && watcher.config.fields && watcher.config.clientId);
+    watcher.save();
+    if (watcher.config.enabled) watcher.start(); else watcher.stop();
+  }
+});
+
 // === Control from the phone (desktop app only) ===
 // The phone's page sends links here; they go through the very same download
 // API (and its checks) as the app's own requests, for the app's client id.
-function addDownloadsFromPhone(clientId, urls, { mode, audioFormat, quality }) {
+/** One request to our own download API, for the app's client id. */
+function postDownload(clientId, payload) {
   return new Promise((resolve) => {
-    const body = JSON.stringify({ urls, mode, audioFormat, quality });
+    const body = JSON.stringify(payload);
     const req = http.request({
       host: '127.0.0.1', port: PORT, path: '/api/jobs/download', method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'x-client-id': clientId, Host: `localhost:${PORT}` },
@@ -700,10 +974,19 @@ function addDownloadsFromPhone(clientId, urls, { mode, audioFormat, quality }) {
     req.end(body);
   });
 }
+async function addDownloadsFromPhone(clientId, urls, { mode, audioFormat, quality, profile = null }) {
+  // A profile of the app's own: its options (and "audio and video at once").
+  const p = profile ? profiles.profile(clientId, profile) : null;
+  if (!p) return postDownload(clientId, { urls, mode, audioFormat, quality });
+  const first = await postDownload(clientId, { ...p.options, urls });
+  if (first !== 'ok' || !p.both) return first;
+  return postDownload(clientId, { ...p.options, mode: p.options.mode === 'audio' ? 'video' : 'audio', urls });
+}
 const remote = IS_DESKTOP ? new RemoteServer({
   file: path.join(process.env.TUBEGRAB_DATA_DIR || jobs.dir, 'remote.json'),
   addDownloads: addDownloadsFromPhone,
   listJobs: (clientId) => jobs.listFor(clientId),
+  listProfiles: (clientId) => profiles.list(clientId).profiles.map((p) => ({ id: p.id, name: p.name })),
 }) : null;
 async function remoteView(state) {
   if (!state.pairUrl) return state;
@@ -761,6 +1044,12 @@ app.post('/api/jobs/:id/cancel', requireClient, requireJob, (req, res) => {
 
 app.post('/api/jobs/:id/retry', createLimiter, requireClient, requireJob, (req, res) => {
   if (!jobs.retry(req.job)) return res.status(409).json({ error: 'Este trabajo no se puede reintentar ahora.' });
+  res.json({ ok: true });
+});
+
+// A live recording: stop now and keep what was recorded.
+app.post('/api/jobs/:id/stop', requireClient, requireJob, (req, res) => {
+  if (!jobs.stop(req.job)) return res.status(409).json({ error: 'Esta descarga no es una grabación en curso.' });
   res.json({ ok: true });
 });
 
@@ -823,15 +1112,27 @@ app.get('/api/jobs/:id/file', requireClient, requireJob, (req, res) => {
 });
 
 // === Subscriptions (desktop app only: they need the app running to check) ===
+// A mirrored playlist is saved in a folder of its own, each file named with
+// its video id, so the app can tell which files left the playlist.
+const MIRROR_TEMPLATE = '{title} [{id}]';
 const subscriptions = IS_DESKTOP ? new Subscriptions({
   file: path.join(dataDir, 'subscriptions.json'),
   latest: (url) => download.latestEntries(url, ytEnv(), 30),
+  full: (url) => download.expandPlaylist(url, ytEnv()),
   enqueue: (sub, entries) => {
-    const opts = download.parseDownloadOptions(sub.options || {});
+    const opts = download.parseDownloadOptions({ ...(sub.options || {}), ...(sub.mirror ? { nameTemplate: MIRROR_TEMPLATE } : {}) });
     const items = entries.map((e) => ({ url: e.url, title: e.title }));
-    if (jobs.canCreate(sub.clientId, items.length)) queueDownloads(sub.clientId, items, opts);
+    const room = Math.max(0, jobs.maxPerClient - jobs.countFor(sub.clientId));
+    const take = items.slice(0, Math.min(items.length, room));
+    if (take.length) queueDownloads(sub.clientId, take, opts, { saveFolder: sub.mirror ? safeFolderName(sub.title) : null });
     events.emit('subscriptions', sub.clientId);
   },
+  // The page asks the app to bring the folder in line (and write the .m3u8).
+  onMirror: (sub, entries) => events.emit('mirror', sub.clientId, {
+    folder: safeFolderName(sub.title),
+    title: sub.title,
+    ids: entries.map((e) => e.id).filter((id) => /^[\w-]{1,100}$/.test(id)),
+  }),
 }) : null;
 
 function requireSubs(req, res, next) {
@@ -856,8 +1157,8 @@ app.post('/api/subscriptions', createLimiter, requireSubs, requireClient, async 
   if (!playlistSlots.take()) return res.status(429).json(BUSY);
   try {
     const sub = await subscriptions.add({
-      clientId: req.clientId, url, options: opts, detail: download.describeOptions(opts),
-      interval: body.interval, backfill: body.backfill,
+      clientId: req.clientId, url, options: opts, detail: `${download.describeOptions(opts)}${body.mirror === true ? ' · espejo' : ''}`,
+      interval: body.interval, backfill: body.backfill, mirror: body.mirror === true,
     });
     res.json(sub);
   } catch (err) {

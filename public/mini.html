@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>TubeGrab · mini</title>
+  <link rel="stylesheet" href="mini.css">
+</head>
+<body>
+  <div class="mini" id="mini">
+    <div class="cover" id="cover" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+    </div>
+    <div class="body">
+      <div class="top">
+        <div class="text">
+          <span class="title" id="title">TubeGrab</span>
+          <span class="sub" id="sub">Nada sonando</span>
+        </div>
+        <button class="icon" id="open" type="button" title="Abrir TubeGrab" aria-label="Abrir TubeGrab"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></button>
+        <button class="icon" id="close" type="button" title="Cerrar" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="controls">
+        <button class="icon" id="prev" type="button" title="Anterior" aria-label="Anterior"><svg viewBox="0 0 24 24"><path d="M6 5v14M19 5l-9 7 9 7z"/></svg></button>
+        <button class="icon play" id="play" type="button" title="Reproducir / pausa" aria-label="Reproducir / pausa"><svg class="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
+        <button class="icon" id="next" type="button" title="Siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></svg></button>
+        <input type="range" id="seek" min="0" max="1" step="0.1" value="0" aria-label="Posición">
+      </div>
+    </div>
+  </div>
+  <script src="mini.js"></script>
+</body>
+</html>

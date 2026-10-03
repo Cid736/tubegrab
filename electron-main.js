@@ -65,9 +65,14 @@ function isTrustedSender(event) {
   return typeof url === 'string' && url.startsWith(`${APP_ORIGIN}/`);
 }
 
-function assertAllowedUrl(rawUrl) {
+// Hosts allowed for one download: GitHub by default; the subtitles models
+// also come from Hugging Face (and its CDN), each file checked by SHA-256.
+const githubOnly = (host) => ALLOWED_UPDATE_HOSTS.has(host);
+const githubOrHuggingFace = (host) => githubOnly(host) || host === 'huggingface.co' || host.endsWith('.huggingface.co') || host.endsWith('.hf.co');
+
+function assertAllowedUrl(rawUrl, allow = githubOnly) {
   const url = new URL(rawUrl);
-  if (url.protocol !== 'https:' || !ALLOWED_UPDATE_HOSTS.has(url.hostname)) {
+  if (url.protocol !== 'https:' || !allow(url.hostname)) {
     throw new Error(`Origen de actualización no permitido: ${url.hostname}`);
   }
   return url;
@@ -91,9 +96,9 @@ function friendlyNetError(err) {
  * works behind antivirus HTTPS scanning and corporate networks just like the
  * browser does. Every redirect hop is checked against the GitHub allowlist.
  */
-function httpsGet(rawUrl, redirectsLeft, onResponse, onError) {
+function httpsGet(rawUrl, redirectsLeft, onResponse, onError, allow = githubOnly) {
   let url;
-  try { url = assertAllowedUrl(rawUrl); } catch (err) { onError(err); return; }
+  try { url = assertAllowedUrl(rawUrl, allow); } catch (err) { onError(err); return; }
   let settled = false;
   const fail = (err) => {
     if (settled) return;
@@ -111,7 +116,7 @@ function httpsGet(rawUrl, redirectsLeft, onResponse, onError) {
   request.setHeader('Accept', 'application/json, application/octet-stream');
   request.on('redirect', (statusCode, method, redirectUrl) => {
     if (redirectsLeft <= 0) return fail(new Error('Demasiadas redirecciones'));
-    try { assertAllowedUrl(redirectUrl); } catch (err) { return fail(err); }
+    try { assertAllowedUrl(redirectUrl, allow); } catch (err) { return fail(err); }
     redirectsLeft -= 1;
     touch();
     request.followRedirect();
@@ -147,7 +152,7 @@ function httpJson(url) {
 }
 
 /** Streams to destPath and resolves with the file's sha256 (hex) and byte count. */
-function downloadToFile(url, destPath, onProgress) {
+function downloadToFile(url, destPath, onProgress, allow = githubOnly) {
   return new Promise((resolve, reject) => {
     httpsGet(url, MAX_REDIRECTS, (res) => {
       const total = parseInt(res.headers['content-length'] || '0', 10);
@@ -164,7 +169,7 @@ function downloadToFile(url, destPath, onProgress) {
       res.pipe(file);
       file.on('finish', () => file.close(() => resolve({ sha256: hash.digest('hex'), size: downloaded })));
       file.on('error', reject);
-    }, reject);
+    }, reject, allow);
   });
 }
 
@@ -494,6 +499,60 @@ async function maintainEngine(force) {
 ipcMain.handle('engine:getState', (event) => (isTrustedSender(event) ? engineState : null));
 ipcMain.on('engine:update', (event) => { if (isTrustedSender(event)) maintainEngine(true); });
 
+// === Automatic subtitles: the Whisper engine and its models, on demand ===
+// whisper.cpp's Windows build (from its GitHub releases) and one or more
+// models (from Hugging Face), each pinned by SHA-256, into userData/whisper.
+const whisperInfo = require('./lib/whisper');
+const whisperDir = () => path.join(app.getPath('userData'), 'whisper');
+let whisperState = { busy: false, progress: null, error: null, what: null };
+function setWhisperState(patch) {
+  whisperState = { ...whisperState, ...patch };
+  sendToRenderer('whisper:state', { ...whisperState, ...whisperInfo.status(whisperDir()) });
+}
+async function installWhisper(model) {
+  if (whisperState.busy || !Object.prototype.hasOwnProperty.call(whisperInfo.MODELS, model)) return;
+  const dir = whisperDir();
+  setWhisperState({ busy: true, progress: 0, error: null, what: model });
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'tubegrab-whisper-'));
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const have = whisperInfo.status(dir);
+    const needEngine = !have.engine;
+    const m = whisperInfo.MODELS[model];
+    const share = needEngine ? 0.1 : 0;
+    if (needEngine) {
+      const zip = path.join(work, 'whisper.zip');
+      const r = await downloadToFile(whisperInfo.ENGINE.url, zip, (p) => setWhisperState({ progress: Math.round(p * share) }));
+      if (r.sha256 !== whisperInfo.ENGINE.sha256) throw new Error('el motor descargado no coincide con su huella SHA-256');
+      const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+      await new Promise((resolve, reject) => execFile(tar, ['-xf', zip, '-C', work], { windowsHide: true }, (err) => (err ? reject(err) : resolve())));
+      const src = path.join(work, 'Release');
+      // Only the program and its libraries (the zip has many other tools).
+      for (const name of fs.readdirSync(src)) if (whisperInfo.ENGINE.files.test(name)) fs.copyFileSync(path.join(src, name), path.join(dir, name));
+    }
+    if (!have.models.includes(model)) {
+      const tmp = path.join(work, m.file);
+      const r = await downloadToFile(whisperInfo.modelUrl(model), tmp, (p) => setWhisperState({ progress: Math.round(share * 100 + p * (1 - share)) }), githubOrHuggingFace);
+      if (r.sha256 !== m.sha256 || r.size !== m.size) throw new Error('el modelo descargado no coincide con su huella SHA-256');
+      fs.copyFileSync(tmp, path.join(dir, m.file));
+    }
+    setWhisperState({ busy: false, progress: 100, what: null });
+  } catch (err) {
+    console.error('[Whisper] install failed:', err.message);
+    setWhisperState({ busy: false, progress: null, error: friendlyNetError(err), what: null });
+  } finally {
+    fs.rm(work, { recursive: true, force: true }, () => {});
+  }
+}
+ipcMain.handle('whisper:getState', (event) => (isTrustedSender(event) ? { ...whisperState, ...whisperInfo.status(whisperDir()) } : null));
+ipcMain.on('whisper:install', (event, model) => { if (isTrustedSender(event)) installWhisper(String(model)); });
+ipcMain.handle('whisper:remove', (event, model) => {
+  if (!isTrustedSender(event) || whisperState.busy) return null;
+  if (model === 'all') fs.rmSync(whisperDir(), { recursive: true, force: true });
+  else if (Object.prototype.hasOwnProperty.call(whisperInfo.MODELS, model)) fs.rmSync(path.join(whisperDir(), whisperInfo.MODELS[model].file), { force: true });
+  return { ...whisperState, ...whisperInfo.status(whisperDir()) };
+});
+
 // === Saving finished jobs straight into the chosen folder ===
 const jobFileMatch = (url) => new RegExp(`^${APP_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/jobs/([a-f0-9]{32})/file\\?client=[a-f0-9]{32}&n=(\\d{1,4})$`).exec(url);
 
@@ -570,6 +629,7 @@ function setupDownloads() {
       if (pending.paths.length) rememberSaved(jobId, pending.paths);
       if (!pending.failed) {
         sendToRenderer('desktop:saved', { jobId, ok: true, count: pending.paths.length });
+        checkSpace().catch(() => {});
       } else {
         sendToRenderer('desktop:saved', { jobId, ok: false, error: pending.failed === 'cancelled' ? 'Guardado cancelado' : 'No se pudo guardar el archivo' });
       }
@@ -579,6 +639,250 @@ function setupDownloads() {
 
 
 const { normalizeMediaUrl } = require('./lib/download');
+
+// === A media file of the download folder, from a path relative to it ===
+// Only a real file (links resolved) that is inside the folder and has a
+// media extension; null otherwise.
+function libraryFile(rel) {
+  if (typeof rel !== 'string' || !rel || rel.length > 2000 || rel.includes('\0')) return null;
+  try {
+    const root = fs.realpathSync(getSettings().downloadDir);
+    const real = fs.realpathSync(path.resolve(root, rel));
+    const ext = path.extname(real).slice(1).toLowerCase();
+    if (real.startsWith(root + path.sep) && fs.statSync(real).isFile() && SAVE_EXTENSIONS.has(ext)) return real;
+  } catch { /* gone */ }
+  return null;
+}
+
+// Duplicates: the chosen copy goes to the Recycle Bin (it can be restored).
+ipcMain.handle('desktop:trashLibraryFile', async (event, rel) => {
+  if (!isTrustedSender(event)) return { ok: false };
+  const file = libraryFile(rel);
+  if (!file) return { ok: false };
+  try { await shell.trashItem(file); return { ok: true }; } catch { return { ok: false }; }
+});
+
+// === Mirrored playlists: the folder follows the playlist ===
+// Files are named "<title> [<id>].<ext>" inside one folder per playlist. Files
+// whose id left the playlist go to the Recycle Bin (never more than half the
+// folder at once: a short or failed list must not empty it), and a .m3u8 in
+// the playlist's order is written next to them.
+const MEDIA_EXT = new Set(['mp3', 'm4a', 'aac', 'opus', 'ogg', 'flac', 'wav', 'webm', 'mp4', 'mkv', 'mov']);
+ipcMain.handle('desktop:syncMirror', async (event, info) => {
+  if (!isTrustedSender(event) || !info || typeof info !== 'object' || !Array.isArray(info.ids)) return null;
+  const ids = info.ids.filter((id) => typeof id === 'string' && /^[\w-]{1,100}$/.test(id)).slice(0, 5000);
+  if (!ids.length) return null;
+  const dir = path.join(getSettings().downloadDir, safeFolderName(String(info.folder || '')));
+  let names = [];
+  try { names = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && !e.isSymbolicLink()).map((e) => e.name); } catch { return { removed: 0, kept: 0 }; }
+  const byId = new Map();
+  for (const n of names) {
+    const m = /\[([\w-]{1,100})\]\.([a-z0-9]{2,4})$/i.exec(n);
+    if (m && MEDIA_EXT.has(m[2].toLowerCase())) byId.set(m[1], [...(byId.get(m[1]) || []), n]);
+  }
+  const wanted = new Set(ids);
+  const gone = [...byId.keys()].filter((id) => !wanted.has(id));
+  let removed = 0;
+  if (gone.length && gone.length <= Math.max(1, Math.floor(byId.size / 2))) {
+    for (const id of gone) {
+      for (const n of byId.get(id)) {
+        try { await shell.trashItem(path.join(dir, n)); removed += 1; } catch { /* in use */ }
+        // Its lyrics / sheet / poster go with it.
+        const base = n.replace(/\.[^.]+$/, '');
+        for (const extra of [`${base}.lrc`, `${base}.nfo`, `${base}-poster.jpg`]) if (fs.existsSync(path.join(dir, extra))) shell.trashItem(path.join(dir, extra)).catch(() => {});
+      }
+      byId.delete(id);
+    }
+  }
+  const lines = ['#EXTM3U', `#PLAYLIST:${String(info.title || info.folder || '').replace(/[\r\n]/g, ' ').slice(0, 200)}`, '#EXTENC:UTF-8', '# TubeGrab'];
+  for (const id of ids) {
+    const n = (byId.get(id) || [])[0];
+    if (n) lines.push(`#EXTINF:-1,${n.replace(/\s*\[[\w-]+\]\.[^.]+$/, '')}`, n);
+  }
+  try { fs.writeFileSync(path.join(dir, `${safeFolderName(String(info.folder || 'playlist'))}.m3u8`), `${lines.join('\n')}\n`, 'utf8'); } catch { /* not fatal */ }
+  return { removed, kept: byId.size, skipped: gone.length > removed ? gone.length - removed : 0 };
+});
+
+// === Mini player: a small window on top of the others ===
+let miniWindow = null;
+ipcMain.on('desktop:openMini', (event) => {
+  if (!isTrustedSender(event) || event.sender !== (mainWindow && mainWindow.webContents)) return;
+  if (miniWindow && !miniWindow.isDestroyed()) { miniWindow.show(); miniWindow.focus(); return; }
+  const { workArea } = screen.getPrimaryDisplay();
+  miniWindow = new BrowserWindow({
+    width: 360, height: 128, x: workArea.x + workArea.width - 380, y: workArea.y + workArea.height - 148,
+    frame: false, resizable: false, alwaysOnTop: true, skipTaskbar: false, maximizable: false, fullscreenable: false,
+    title: 'TubeGrab', icon: path.join(__dirname, 'build', 'icon.ico'), backgroundColor: '#1c1c1e',
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
+  });
+  miniWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  miniWindow.webContents.on('will-navigate', (e) => e.preventDefault());
+  miniWindow.webContents.on('will-attach-webview', (e) => e.preventDefault());
+  miniWindow.loadURL(`${APP_ORIGIN}/mini.html`);
+  miniWindow.on('closed', () => { miniWindow = null; });
+});
+// The main page's player → the mini window; the mini window's buttons → the main page.
+ipcMain.on('player:state', (event, state) => {
+  if (!isTrustedSender(event) || !mainWindow || event.sender !== mainWindow.webContents || !state || typeof state !== 'object' || !miniWindow || miniWindow.isDestroyed()) return;
+  const clean = {
+    title: String(state.title || '').slice(0, 300), sub: String(state.sub || '').slice(0, 300),
+    playing: state.playing === true, time: Number(state.time) || 0, duration: Number(state.duration) || 0,
+    cover: typeof state.cover === 'string' && /^\/api\/library\/cover\?client=[a-f0-9]{32}&id=[a-f0-9]{32}$/.test(state.cover) ? state.cover : null,
+  };
+  miniWindow.webContents.send('player:state', clean);
+});
+ipcMain.on('player:command', (event, cmd) => {
+  if (!isTrustedSender(event) || !miniWindow || event.sender !== miniWindow.webContents) return;
+  if (cmd === 'close') { miniWindow.close(); return; }
+  if (cmd === 'open') { showWindow(); return; }
+  if (['toggle', 'next', 'prev', 'hello'].includes(cmd)) sendToRenderer('player:command', { cmd });
+  else if (cmd && typeof cmd === 'object' && cmd.cmd === 'seek' && Number.isFinite(cmd.value)) sendToRenderer('player:command', { cmd: 'seek', value: cmd.value });
+});
+
+// === Disk space: a warning, or the oldest files to the Recycle Bin ===
+const SPACE_DEFAULTS = { minFreeGb: 0, maxFolderGb: 0, policy: 'warn' };
+const GB = 1024 ** 3;
+function spaceSettings() {
+  const raw = getSettings().space || {};
+  const n = (v, max) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.min(max, Math.round(Number(v) * 10) / 10) : 0);
+  return { minFreeGb: n(raw.minFreeGb, 10000), maxFolderGb: n(raw.maxFolderGb, 100000), policy: raw.policy === 'trash' ? 'trash' : 'warn' };
+}
+function folderFiles(root) {
+  const out = [];
+  const walk = (dir, depth) => {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (out.length > 20000 || e.name.startsWith('.') || e.isSymbolicLink()) continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { if (depth < 5) walk(full, depth + 1); continue; }
+      if (!e.isFile()) continue;
+      try { const st = fs.statSync(full); out.push({ path: full, size: st.size, mtime: st.mtimeMs }); } catch { /* gone */ }
+    }
+  };
+  walk(root, 0);
+  return out;
+}
+function favouritePaths(root) {
+  // The library's favourites and stars (kept by the server in the same data folder).
+  try {
+    const meta = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'library.json'), 'utf8'));
+    return new Set(Object.entries(meta).filter(([, m]) => m && (m.fav === true || m.rating >= 4)).map(([rel]) => path.join(root, ...rel.split('/')).toLowerCase()));
+  } catch { return new Set(); }
+}
+let spaceBusy = false;
+async function checkSpace({ notify = true } = {}) {
+  if (spaceBusy) return null;
+  spaceBusy = true;
+  try {
+    const s = spaceSettings();
+    const root = getSettings().downloadDir;
+    let free = null;
+    try { const st = fs.statfsSync(fs.existsSync(root) ? root : path.parse(root).root); free = st.bavail * st.bsize; } catch { /* unknown */ }
+    const files = s.maxFolderGb || notify ? folderFiles(root) : [];
+    let used = files.reduce((a, f) => a + f.size, 0);
+    let removed = 0;
+    const over = s.maxFolderGb > 0 && used > s.maxFolderGb * GB;
+    if (over && s.policy === 'trash') {
+      // Oldest first; never favourites, 4–5 stars, or anything from the last week.
+      const keep = favouritePaths(root);
+      const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+      const media = files.filter((f) => SAVE_EXTENSIONS.has(path.extname(f.path).slice(1).toLowerCase()) && f.mtime < weekAgo && !keep.has(f.path.toLowerCase()))
+        .sort((a, b) => a.mtime - b.mtime);
+      for (const f of media) {
+        if (used <= s.maxFolderGb * GB) break;
+        try { await shell.trashItem(f.path); used -= f.size; removed += 1; } catch { /* in use */ }
+      }
+    }
+    const state = {
+      ...s, freeGb: free === null ? null : Math.round((free / GB) * 10) / 10, folderGb: Math.round((used / GB) * 100) / 100,
+      lowFree: s.minFreeGb > 0 && free !== null && free < s.minFreeGb * GB, overFolder: s.maxFolderGb > 0 && used > s.maxFolderGb * GB, removed,
+    };
+    if (notify && (state.lowFree || state.overFolder || removed)) {
+      sendToRenderer('desktop:space', state);
+      if (Notification.isSupported() && (!mainWindow || !mainWindow.isFocused())) {
+        const body = removed ? `Se han movido ${removed} archivos antiguos a la papelera para no pasar de ${s.maxFolderGb} GB.`
+          : state.lowFree ? `Quedan ${state.freeGb} GB libres en el disco de tus descargas.` : `Tu carpeta de descargas ocupa ${state.folderGb} GB (límite: ${s.maxFolderGb} GB).`;
+        new Notification({ title: 'TubeGrab · espacio', body, silent: true }).show();
+      }
+    }
+    return state;
+  } finally {
+    spaceBusy = false;
+  }
+}
+ipcMain.handle('desktop:getSpace', (event) => (isTrustedSender(event) ? checkSpace({ notify: false }) : null));
+ipcMain.handle('desktop:setSpace', (event, patch) => {
+  if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return null;
+  const cur = spaceSettings();
+  const next = { ...cur };
+  for (const k of ['minFreeGb', 'maxFolderGb']) if (Number.isFinite(Number(patch[k])) && Number(patch[k]) >= 0) next[k] = Number(patch[k]);
+  if (['warn', 'trash'].includes(patch.policy)) next.policy = patch.policy;
+  saveSettings({ space: next });
+  return checkSpace({ notify: false });
+});
+
+// === Command line: "TubeGrab.exe --download <link> [--audio[=mp3]] [--video[=1080]] [--profile=Name]" ===
+// The link goes to the open app (or the one starting), which queues it with
+// those choices; only links to supported sites, and only these options.
+function cliRequestFrom(argv) {
+  const i = argv.indexOf('--download');
+  if (i === -1) return null;
+  const url = normalizeMediaUrl(argv[i + 1] || '');
+  if (!url) return null;
+  const req = { url, mode: null, format: null, quality: null, profile: null };
+  for (const a of argv.slice(i + 2)) {
+    const m = /^--(audio|video|mp3|m4a|opus|flac|wav|mp4|mkv|webm|profile)(?:=(.{1,60}))?$/.exec(a);
+    if (!m) continue;
+    if (m[1] === 'profile') req.profile = m[2] || null;
+    else if (m[1] === 'audio' || m[1] === 'video') { req.mode = m[1]; if (m[2]) req[m[1] === 'audio' ? 'format' : 'quality'] = m[2]; }
+    else if (['mp3', 'm4a', 'opus', 'flac', 'wav'].includes(m[1])) { req.mode = 'audio'; req.format = m[1]; }
+    else { req.mode = 'video'; req.container = m[1]; }
+  }
+  return req;
+}
+let pendingCli = cliRequestFrom(process.argv);
+function deliverCli(req) {
+  sendToRenderer('desktop:cliDownload', req);
+}
+
+// "tubegrab" in any terminal: a small .cmd in the user's WindowsApps folder
+// (already on PATH). The installed app runs its own command-line tool (with
+// progress in the terminal); the portable one hands the link to the app.
+const cliCmdPath = () => path.join(process.env.LOCALAPPDATA || app.getPath('appData'), 'Microsoft', 'WindowsApps', 'tubegrab.cmd');
+ipcMain.handle('desktop:getCli', (event) => (isTrustedSender(event) ? { available: app.isPackaged && process.platform === 'win32', installed: fs.existsSync(cliCmdPath()), portable: IS_PORTABLE } : null));
+ipcMain.handle('desktop:installCli', (event, on) => {
+  if (!isTrustedSender(event) || !app.isPackaged || process.platform !== 'win32') return null;
+  const file = cliCmdPath();
+  try {
+    if (on === false) { fs.rmSync(file, { force: true }); return { available: true, installed: false, portable: IS_PORTABLE }; }
+    const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+    if (/["%\r\n]/.test(exe) || /["%\r\n]/.test(__dirname)) throw new Error('ruta no válida');
+    const script = IS_PORTABLE
+      ? ['@echo off', 'if "%~1"=="" (echo Uso: tubegrab "enlace" [--mp3^|--flac^|--video=1080^|--profile=Nombre] & exit /b 1)', `start "" "${exe}" --download %*`]
+      : ['@echo off', 'setlocal', 'set ELECTRON_RUN_AS_NODE=1', `"${exe}" "${path.join(__dirname, 'cli.js')}" %*`];
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${script.join('\r\n')}\r\n`);
+    return { available: true, installed: true, portable: IS_PORTABLE };
+  } catch (err) {
+    return { available: true, installed: fs.existsSync(file), portable: IS_PORTABLE, error: err.message };
+  }
+});
+
+// === Watch folder: chosen here (never a path from the page) ===
+ipcMain.handle('desktop:chooseWatchFolder', async (event) => {
+  if (!isTrustedSender(event)) return null;
+  const result = await dialog.showOpenDialog(mainWindow, { title: 'Carpeta que TubeGrab vigila', properties: ['openDirectory', 'createDirectory'] });
+  if (result.canceled || !result.filePaths[0] || !isLocalFolderPath(result.filePaths[0])) return { dir: null, canceled: true };
+  const file = path.join(app.getPath('userData'), 'watch.json');
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* first time */ }
+  cfg.dir = result.filePaths[0];
+  cfg.done = [];
+  fs.writeFileSync(file, JSON.stringify(cfg, null, 2));
+  if (serverProcess && serverProcess.connected) serverProcess.send({ type: 'watch-reload' });
+  return { dir: cfg.dir };
+});
 
 // === Start with Windows (in the tray) ===
 // Registered for this user; the login launch passes --hidden so the window
@@ -944,6 +1248,10 @@ ipcMain.on('desktop:saveJob', (event, payload) => {
   // Several files (chapters, video + subtitles) go together in a subfolder
   // named after the job, unless the page says they belong side by side
   // (a song and its .lrc lyrics).
+  // A folder of its own for this job (a mirrored playlist, a channel rule):
+  // one name, inside the downloads folder, never a path.
+  const into = typeof payload.into === 'string' && payload.into.trim() ? payload.into.trim().slice(0, 100) : '';
+  if (into) base = path.join(getSettings().downloadDir, safeFolderName(into));
   const folder = typeof payload.folder === 'string' ? payload.folder : '';
   const dir = count > 1 && folder ? uniquePath(base, safeFolderName(folder)) : base;
   pendingSaves.set(jobId, { dir, total: count, paths: [], failed: false });
@@ -1030,6 +1338,7 @@ function startServer(port, enginePath, retriesLeft = 2) {
         // Where downloads go when the user hasn't picked a folder (the library reads it).
         TUBEGRAB_DEFAULT_DOWNLOADS: path.join(app.getPath('downloads'), 'TubeGrab'),
         FFMPEG_BIN: ffmpegPathForServer(),
+        TUBEGRAB_WHISPER_DIR: whisperDir(),
         ...(enginePath ? { TUBEGRAB_YTDLP: enginePath } : {}),
       },
       windowsHide: true,
@@ -1154,6 +1463,8 @@ function createWindow() {
       // A tubegrab:// link that launched the app (browser extension): hand it
       // over once the page is there to receive it.
       if (pendingProtocolUrl) mainWindow.webContents.once('did-finish-load', () => { deliverProtocolUrl(pendingProtocolUrl); pendingProtocolUrl = null; });
+      if (pendingCli) mainWindow.webContents.once('did-finish-load', () => { setTimeout(() => { deliverCli(pendingCli); pendingCli = null; }, 1500); });
+      mainWindow.webContents.once('did-finish-load', () => setTimeout(() => checkSpace().catch(() => {}), 10000));
     }
     checkForUpdates().finally(() => { if (updateState.status !== 'error') scheduleUpdateCheck(UPDATE_PERIOD_MS); });
     // Light build: fetch ffmpeg / yt-dlp first if they're not there yet.
@@ -1177,6 +1488,9 @@ if (!app.requestSingleInstanceLock()) {
   // (It may be hidden in the tray.) A tubegrab:// link opened while running
   // arrives here too.
   app.on('second-instance', (_event, argv) => {
+    const cli = cliRequestFrom(argv);
+    // From the command line: queued without bringing the window forward.
+    if (cli) { deliverCli(cli); return; }
     showWindow();
     const url = protocolUrlFrom(argv);
     if (url) deliverProtocolUrl(url);

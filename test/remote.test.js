@@ -80,9 +80,9 @@ test('pairing, cookie, form and the attacks around them', async () => {
     const sent = await request(port, 'POST', '/add', { headers: form_, body: form('https://youtu.be/abc\nhttps://youtu.be/def') });
     assert.equal(sent.status, 303);
     assert.equal(sent.headers.location, '/?m=ok');
-    assert.deepEqual(calls.at(-1), { clientId: CLIENT, urls: ['https://youtu.be/abc', 'https://youtu.be/def'], mode: 'video', audioFormat: 'mp3', quality: '1080' });
+    assert.deepEqual(calls.at(-1), { clientId: CLIENT, urls: ['https://youtu.be/abc', 'https://youtu.be/def'], mode: 'video', audioFormat: 'mp3', quality: '1080', profile: null });
     await request(port, 'POST', '/add', { headers: form_, body: new URLSearchParams({ urls: 'https://youtu.be/q', mode: 'audio', audioFormat: 'flac', quality: '720' }).toString() });
-    assert.deepEqual(calls.at(-1), { clientId: CLIENT, urls: ['https://youtu.be/q'], mode: 'audio', audioFormat: 'flac', quality: '720' });
+    assert.deepEqual(calls.at(-1), { clientId: CLIENT, urls: ['https://youtu.be/q'], mode: 'audio', audioFormat: 'flac', quality: '720', profile: null });
     await request(port, 'POST', '/add', { headers: form_, body: new URLSearchParams({ urls: 'https://youtu.be/q', audioFormat: 'exe;rm', quality: '99999' }).toString() });
     assert.deepEqual([calls.at(-1).audioFormat, calls.at(-1).quality], ['mp3', '1080'], 'unknown choices fall back');
     const en = await request(port, 'GET', '/', { headers: { ...jar, 'Accept-Language': 'en-GB,en;q=0.9' } });

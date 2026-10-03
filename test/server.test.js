@@ -600,3 +600,20 @@ test('"start now" and library marks are desktop-only (a web visitor can\'t skip 
   assert.equal((await api(`/api/jobs/${id}/now`, json({}))).status, 404);
   assert.equal((await api('/api/library/meta', json({ id, fav: true }))).status, 404);
 });
+
+test('v3.4.0 on the web: profiles and "already have it" per visitor; desktop-only parts absent', async () => {
+  const seen = await (await api('/api/seen', json({ urls: ['https://youtu.be/dQw4w9WgXcQ'] }))).json();
+  assert.deepEqual(seen.found, {});
+  const saved = await (await api('/api/profiles', json({ name: 'Mío', options: { mode: 'video', quality: '720' } }))).json();
+  assert.equal(saved.profiles[0].options.quality, '720');
+  const other = await (await fetch(`${BASE}/api/profiles`, { headers: { 'x-client-id': OTHER } })).json();
+  assert.deepEqual(other.profiles, [], 'another visitor sees none of them');
+  assert.equal((await api('/api/rules', json({ match: 'x' }))).status, 400);
+  for (const p of ['/api/library/playlists', '/api/library/duplicates', '/api/cast', '/api/watch', `/api/library/lyrics?id=${'a'.repeat(32)}`]) {
+    assert.equal((await api(p)).status, 404, p);
+  }
+  assert.equal((await api('/api/cast/devices', json({}))).status, 404);
+  const tr = await api('/api/jobs/transcribe', { method: 'POST' });
+  assert.equal(tr.status, 400, 'no engine here: refused');
+  assert.equal((await api(`/api/jobs/${'a'.repeat(32)}/stop`, json({}))).status, 404);
+});

@@ -88,14 +88,15 @@ test('tag editor with real ffmpeg', { skip: !ffmpeg && 'ffmpeg not found', timeo
   };
   const cover = path.join(work, 'cover.png');
   execFileSync(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=64x64:d=1', '-frames:v', '1', cover]);
-  const tricky = { title: 'Título = raro; #1 \\ fin', artist: 'Ñandú & Co', album: 'Álbum', album_artist: 'Varios', track: '7/12', date: '2024', genre: 'Pop', lyrics: 'Línea uno\nLínea = dos; #3 \\' };
+  const tricky = { title: 'Título = raro; #1 \\ fin', artist: 'Ñandú & Co', album: 'Álbum', album_artist: 'Varios', track: '7/12', date: '2024', genre: 'Pop', lyrics: 'Línea uno\nLínea = dos; #3 \\', bpm: '128', key: 'F#m' };
 
   for (const ext of ['mp3', 'm4a', 'flac', 'opus']) {
     await t.test(`${ext}: every field round-trips exactly`, async () => {
       const out = path.join(work, `out.${ext}`);
       await tags.writeTags({ ffmpegPath: ffmpeg, inputPath: song(ext), ext, tags: tricky, coverPath: cover, out });
       const read = await tags.readTags(ffmpeg, out, `out.${ext}`);
-      assert.deepEqual(read.tags, { ...tricky, disc: '' });
+      // MP4 has no tempo/key tags ffmpeg can write.
+      assert.deepEqual(read.tags, { ...tricky, disc: '', ...(ext === 'm4a' ? { bpm: '', key: '' } : {}) });
       assert.equal(read.hasCover, ext !== 'opus', 'cover only where the format supports it');
     });
   }

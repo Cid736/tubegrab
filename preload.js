@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld('desktop', {
   getSettings: () => ipcRenderer.invoke('desktop:getSettings'),
   chooseFolder: () => ipcRenderer.invoke('desktop:chooseFolder'),
   openFolder: () => ipcRenderer.send('desktop:openFolder'),
-  saveJob: (jobId, clientId, count, folder, artist, album) => ipcRenderer.send('desktop:saveJob', { jobId, clientId, count, folder, artist, album }),
+  saveJob: (jobId, clientId, count, folder, artist, album, into) => ipcRenderer.send('desktop:saveJob', { jobId, clientId, count, folder, artist, album, into }),
   showInFolder: (jobId) => ipcRenderer.send('desktop:showInFolder', jobId),
   openSaved: (jobId) => ipcRenderer.send('desktop:openSaved', jobId),
   savedExists: (ids) => ipcRenderer.invoke('desktop:savedExists', ids),
@@ -45,4 +45,28 @@ contextBridge.exposeInMainWorld('desktop', {
   onTrayAction: (cb) => ipcRenderer.on('desktop:trayAction', (_e, info) => cb(info)),
   getStartup: () => ipcRenderer.invoke('desktop:getStartup'),
   setStartup: (enabled) => ipcRenderer.invoke('desktop:setStartup', enabled),
+  // Automatic subtitles: the Whisper engine and models.
+  getWhisper: () => ipcRenderer.invoke('whisper:getState'),
+  installWhisper: (model) => ipcRenderer.send('whisper:install', model),
+  removeWhisper: (model) => ipcRenderer.invoke('whisper:remove', model),
+  onWhisper: (cb) => ipcRenderer.on('whisper:state', (_e, state) => cb(state)),
+  // Library: duplicates to the Recycle Bin; mirrored playlists.
+  trashLibraryFile: (rel) => ipcRenderer.invoke('desktop:trashLibraryFile', rel),
+  syncMirror: (info) => ipcRenderer.invoke('desktop:syncMirror', info),
+  // Mini player (both windows use these).
+  openMini: () => ipcRenderer.send('desktop:openMini'),
+  playerState: (state) => ipcRenderer.send('player:state', state),
+  onPlayerCommand: (cb) => ipcRenderer.on('player:command', (_e, cmd) => cb(cmd)),
+  miniCommand: (cmd) => ipcRenderer.send('player:command', cmd),
+  onPlayerState: (cb) => ipcRenderer.on('player:state', (_e, state) => cb(state)),
+  // Disk space.
+  getSpace: () => ipcRenderer.invoke('desktop:getSpace'),
+  setSpace: (patch) => ipcRenderer.invoke('desktop:setSpace', patch),
+  onSpace: (cb) => ipcRenderer.on('desktop:space', (_e, state) => cb(state)),
+  // Command line.
+  onCliDownload: (cb) => ipcRenderer.on('desktop:cliDownload', (_e, req) => cb(req)),
+  getCli: () => ipcRenderer.invoke('desktop:getCli'),
+  installCli: (on) => ipcRenderer.invoke('desktop:installCli', on),
+  // Watch folder.
+  chooseWatchFolder: () => ipcRenderer.invoke('desktop:chooseWatchFolder'),
 });

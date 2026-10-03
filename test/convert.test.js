@@ -240,9 +240,10 @@ test('editor keeps only the chosen parts', { skip: !ffmpeg && 'ffmpeg not found'
 
 test('editor adjustments: only fixed values, and they need exact cuts', () => {
   const fx = convert.parseEditEffects({ fade: '1', volume: 'mute', aspect: '9:16', rotate: '90', separate: 'true' });
-  assert.deepEqual(fx, { fade: 1, volume: 0, aspect: '9:16', rotate: '90', denoise: null, logo: null, texts: [], separate: true });
+  const NEW = { aspects: [], music: null, reframe: null, captions: null };
+  assert.deepEqual(fx, { fade: 1, volume: 0, aspect: '9:16', rotate: '90', denoise: null, logo: null, texts: [], separate: true, ...NEW });
   const evil = convert.parseEditEffects({ fade: '1;x', volume: '99', aspect: '__proto__', rotate: 'toString', separate: 'yes' });
-  assert.deepEqual(evil, { fade: 0, volume: null, aspect: null, rotate: null, denoise: null, logo: null, texts: [], separate: false });
+  assert.deepEqual(evil, { fade: 0, volume: null, aspect: null, rotate: null, denoise: null, logo: null, texts: [], separate: false, ...NEW });
   assert.equal(convert.needsEncoding(evil), false);
   assert.equal(convert.needsEncoding({ ...evil, separate: true }), false, 'separate files work with fast cuts');
   assert.equal(convert.needsEncoding(fx), true);

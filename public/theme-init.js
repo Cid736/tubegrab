@@ -11,6 +11,7 @@
   var DEFAULTS = {
     uiDefault: 'windows', lang: 'es', rateLimit: '', theme: 'auto', accent: 'blue', wall: 'aurora', glass: 'tinted', size: 'medium',
     remember: true, notify: true, sound: false, onboarded: false, accentColor: '#0a84ff', highContrast: false, reduceMotion: false, nameTemplate: '',
+    warnDuplicates: true,
   };
   // "#rrggbb" only: it ends up in a CSS variable.
   var HEX_RE = /^#[0-9a-fA-F]{6}$/;

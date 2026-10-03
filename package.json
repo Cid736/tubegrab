@@ -1,6 +1,6 @@
 {
   "name": "tubegrab",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "main": "electron-main.js",
   "scripts": {
     "start": "node server.js",
@@ -8,7 +8,8 @@
     "postinstall": "node scripts/postinstall.js",
     "build": "electron-builder",
     "test": "node --test --test-concurrency=1 \"test/*.test.js\"",
-    "build:lite": "electron-builder --config electron-builder.lite.js"
+    "build:lite": "electron-builder --config electron-builder.lite.js",
+    "cli": "node cli.js"
   },
   "engines": {
     "node": ">=22"
@@ -31,6 +32,7 @@
       "electron-main.js",
       "preload.js",
       "server.js",
+      "cli.js",
       "package.json",
       "lib/**/*",
       "public/**/*",
@@ -67,5 +69,8 @@
   "devDependencies": {
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3"
+  },
+  "bin": {
+    "tubegrab": "cli.js"
   }
 }

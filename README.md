@@ -12,7 +12,7 @@ Local video/audio downloader **and** format converter with a job queue. Runs ent
 
 ## Features
 
-Every page is always visible in the sidebar, with no drop-down menus: **Download**, **Search**, **Subscriptions**, **Convert**, **Editor**, **Merge**, **Compress**, **Image**, **Queue**, **History** and **Settings** (with tabs: Appearance · Downloads · Conversion · System · About).
+Every page is always visible in the sidebar, with no drop-down menus: **Download**, **Search**, **Subscriptions**, **Convert**, **Editor**, **Subtitles**, **Merge**, **Compress**, **Image**, **Tags**, **Queue**, **History**, **Library**, **Statistics** and **Settings** (with tabs: Appearance · Downloads · Conversion · System · About).
 
 **Download**
 - YouTube and 20+ sites: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
@@ -30,6 +30,14 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - **Start now** (desktop): a queued download starts at once, without waiting for its turn
 - **Start with Windows** (desktop): in the tray, so subscriptions and scheduled downloads keep working
 - Cover art, metadata and chapters; subtitles in 9 languages, embedded or as a separate **.srt**; SponsorBlock
+- **Profiles**: save your options under a name ("FLAC music", "Video for the phone"…) and pick them with one click — also on the phone page
+- **Rules**: "from this channel → this profile, into this folder"
+- **"You already have it"**: before downloading something again (by the video's own id), you're asked whether to skip it; search and playlist results show a badge
+- **Even out the volume** (EBU R128, two passes) so every song plays equally loud
+- **BPM and key** written into the tags (MP3, FLAC, OGG, OPUS), with the Camelot code, for DJs
+- **Record live streams from the start** (YouTube), and **stop and save** whenever you like from the queue
+- **Mirror a playlist** (subscription): all of it in its own folder, kept the same — what's removed from the playlist goes to the Recycle Bin, and an `.m3u8` in its order
+- **Sheet for Jellyfin / Kodi / Plex**: an `.nfo` and the poster next to the video
 
 **Convert**
 - 11 audio and 12 video formats, batch, presets (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiobook…), speed, rotate, resolution…
@@ -39,16 +47,26 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
   - Output adjustments: **vertical 9:16 / square / 4:5** centre crop (with a live frame on the viewer), **fade in/out**, **volume** or mute, **rotate/mirror**, and **each clip as its own file**
   - **Titles** (up to 5, with position, size and when they show), a **logo/watermark** in any corner, **background-noise removal**, **slow motion / fast forward per clip** (0.25×–4×), all previewed live on the viewer
   - Export as **animated GIF**, **WhatsApp sticker** (animated WebP 512×512) or **Telegram sticker** (WebM, up to 3 s)
+  - **Automatic subtitles** burnt into the video (classic, or big word-by-word "TikTok" style with the word being said lit), **background music** that lowers by itself while someone speaks, **several shapes at once** (9:16 + 1:1 + 16:9, one file each), a frame that **follows the movement** (or that you drag by hand), and **cut at every change of shot**
+- **Subtitles** with **Whisper** (whisper.cpp), on your computer and offline once installed: an `.srt`, the plain transcript, or the video with the subtitles in it; 15 languages or detected, and translation into English
 - **Merge** several audio or video files into one (clips of other sizes are letterboxed)
 - **Compress to a size** (e.g. 8 MB for Discord, 16 MB for WhatsApp): TubeGrab works out the quality, two-pass
 - **Image**: a frame at any moment (with a slider) or the embedded cover art, as JPG/PNG/WEBP
-- **Tags**: edit title, artist, album, album artist, track, year, genre and **cover art** of many songs at once (MP3, M4A, FLAC, OGG, OPUS), number tracks in order, take titles from file names, rename to "Artist - Title" and add lyrics — audio is copied, never re-encoded
+- **Tags**: edit title, artist, album, album artist, track, year, genre, **BPM, key** and **cover art** of many songs at once (MP3, M4A, FLAC, OGG, OPUS), number tracks in order, take titles from file names, **detect BPM and key**, rename to "Artist - Title" and add lyrics — audio is copied, never re-encoded
+- **Watch folder** (desktop): every audio or video file you drop into a folder is converted by itself with a preset
 - **Graphics card acceleration** (NVIDIA NVENC, Intel Quick Sync, AMD AMF) for H.264/H.265, with automatic CPU fallback
 
 **Queue, history and desktop app**
 - Real progress, speed and time left; **pause/resume** downloads (they continue where they stopped), **reorder** what's waiting, cancel, retry (temporary errors retry by themselves once); downloads/conversions at once and a **speed limit** are configurable
 - **History with search**: open the file, show it in its folder, or download it again with the same options
 - **Library and player** (desktop): everything in your download folder, searchable, with favourites, star ratings, sorting and folder groups, with a player bar that keeps playing across pages (shuffle, repeat, media keys, videos too)
+  - **Synced lyrics** while the song plays (from its `.lrc`), cover art, an **equalizer** with presets and **crossfade** between songs
+  - **Your own playlists** (reorder, play, export as `.m3u8`), **find duplicates** (exact copies and same names) and send the extra ones to the Recycle Bin, sort by **most played**
+  - **Play on the TV**: Chromecast and DLNA/UPnP TVs and speakers on your WiFi (play, pause, seek, next)
+  - **Mini player**: a small window that stays on top of the others
+- **Statistics**: downloads and conversions per month, top channels and artists, most played, library size
+- **Disk space** (desktop): a warning when the disk runs low, and an optional limit for the downloads folder (warn, or move the oldest files to the Recycle Bin — never favourites)
+- **Command line**: `tubegrab "link" --mp3` (Settings → System installs the command); also `node cli.js` / `npm run cli` from the repository
 - **Send to phone**: a QR code with a link on your WiFi that expires in 30 minutes — no cables, no cloud
 - **Browser extension** (Chrome, Edge, Brave, Opera): a button on YouTube and "Download with TubeGrab" in the right-click menu open the link in the app (see `extension/README.md`)
 - **Backup**: export settings, history and subscriptions to a file and import them on another PC
@@ -127,8 +145,17 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 │   ├── subscriptions.js   # Channel/playlist subscriptions (desktop)
 │   ├── auth.js            # Optional login for a private self-hosted instance (TUBEGRAB_USERS)
 │   ├── filenames.js       # Safe names for files and folders saved to the user's folder
-│   └── ffmpeg-release.js  # Pinned ffmpeg build (version, URL, SHA-256)
-├── electron-main.js       # Desktop app: window, updater (3 kinds), components, tray, clipboard, save-to-folder
+│   ├── ffmpeg-release.js  # Pinned ffmpeg build (version, URL, SHA-256)
+│   ├── library.js         # Library, own playlists, duplicates, lyrics, LAN sharing (phone, and seekable for the TV)
+│   ├── whisper.js         # Automatic subtitles (whisper.cpp, pinned): .srt, transcript, burnt-in captions
+│   ├── analysis.js        # Tempo (BPM) and key, worked out from the sound
+│   ├── loudness.js        # Same loudness for every file (EBU R128, two passes)
+│   ├── cast.js            # Chromecast (CASTV2) and DLNA/UPnP on the local network
+│   ├── seen.js            # "You already have it": downloads by video id
+│   ├── profiles.js        # Download profiles and channel rules
+│   └── watch.js           # Watch folder (desktop)
+├── cli.js                 # Command line: tubegrab <link> --mp3 …
+├── electron-main.js       # Desktop app: window, updater (3 kinds), components, tray, clipboard, save-to-folder, mini player, disk space
 ├── preload.js             # Minimal bridge exposed to the page
 ├── electron-builder.lite.js  # Light portable build
 ├── scripts/
@@ -197,7 +224,7 @@ Descargador de vídeo/audio **y** conversor de formatos con cola de trabajos. Fu
 
 ## Características
 
-Todas las páginas están siempre a la vista en la barra lateral, sin menús desplegables: **Descargar**, **Buscar**, **Suscripciones**, **Convertir**, **Editor**, **Unir**, **Comprimir**, **Imagen**, **Cola**, **Historial** y **Ajustes** (con pestañas: Apariencia · Descargas · Conversión · Sistema · Acerca de).
+Todas las páginas están siempre a la vista en la barra lateral, sin menús desplegables: **Descargar**, **Buscar**, **Suscripciones**, **Convertir**, **Editor**, **Subtítulos**, **Unir**, **Comprimir**, **Imagen**, **Etiquetas**, **Cola**, **Historial**, **Biblioteca**, **Estadísticas** y **Ajustes** (con pestañas: Apariencia · Descargas · Conversión · Sistema · Acerca de).
 
 **Descargar**
 - YouTube y más de 20 sitios: Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp, Mixcloud, Bilibili…
@@ -215,6 +242,14 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - **Empezar ya** (escritorio): una descarga en cola arranca al momento, sin esperar turno
 - **Iniciar con Windows** (escritorio): en la bandeja, para que las suscripciones y lo programado sigan funcionando
 - Portada, metadatos y capítulos; subtítulos en 9 idiomas, dentro del vídeo o como **.srt** aparte; SponsorBlock
+- **Perfiles**: guarda tus opciones con un nombre («Música FLAC», «Vídeo para el móvil»…) y elígelas con un clic, también desde la página del móvil
+- **Reglas**: «lo de este canal → con este perfil y en esta carpeta»
+- **«Ya lo tienes»**: antes de bajar algo otra vez (por el id del vídeo) te pregunta si saltarlo; en las búsquedas y playlists sale marcado
+- **Igualar el volumen** (EBU R128, en dos pasadas) para que todo suene igual de fuerte
+- **BPM y tonalidad** en las etiquetas (MP3, FLAC, OGG, OPUS), con el código Camelot, para DJs
+- **Grabar directos desde el principio** (YouTube), y **parar y guardar** cuando quieras desde la cola
+- **Espejo de una playlist** (suscripción): entera, en su carpeta y siempre igual; lo que quiten de la playlist va a la papelera, y un `.m3u8` en su orden
+- **Ficha para Jellyfin / Kodi / Plex**: un `.nfo` y la portada junto al vídeo
 
 **Convertir**
 - 11 formatos de audio y 12 de vídeo, por lotes, preajustes (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiolibro…), velocidad, girar, resolución…
@@ -224,16 +259,26 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
   - Ajustes del resultado: recorte **vertical 9:16 / cuadrado / 4:5** al centro (con el marco en el visor), **fundidos**, **volumen** o sin sonido, **girar/espejo** y **cada tramo en un archivo aparte**
   - **Textos** (hasta 5, con posición, tamaño y cuándo salen), **logo o marca de agua** en cualquier esquina, **quitar ruido de fondo**, **cámara lenta o rápida por tramo** (0,25×–4×), todo con vista previa en el visor
   - Exporta como **GIF animado**, **sticker de WhatsApp** (WebP animado 512×512) o **sticker de Telegram** (WebM, hasta 3 s)
+  - **Subtítulos automáticos** dentro del vídeo (clásicos, o grandes palabra a palabra estilo TikTok con la palabra que se dice resaltada), **música de fondo** que baja sola cuando hablan, **varios formatos a la vez** (9:16 + 1:1 + 16:9, un archivo cada uno), un encuadre que **sigue el movimiento** (o que mueves a mano) y **cortar en cada cambio de plano**
+- **Subtítulos** con **Whisper** (whisper.cpp), en tu equipo y sin Internet una vez instalado: un `.srt`, el texto o el vídeo con los subtítulos puestos; 15 idiomas o detectarlo solo, y traducir al inglés
 - **Unir** varios audios o vídeos en uno (los clips de otro tamaño se encajan con bandas negras)
 - **Comprimir a un tamaño** (p. ej. 8 MB para Discord, 16 MB para WhatsApp): TubeGrab calcula la calidad, en dos pasadas
 - **Imagen**: un fotograma en cualquier momento (con deslizador) o la carátula incrustada, en JPG/PNG/WEBP
-- **Etiquetas**: cambia título, artista, álbum, artista del álbum, pista, año, género y **carátula** de muchas canciones a la vez (MP3, M4A, FLAC, OGG, OPUS), numera las pistas en orden, saca títulos del nombre del archivo, renombra a "Artista - Título" y añade letras; el audio se copia, nunca se recodifica
+- **Etiquetas**: cambia título, artista, álbum, artista del álbum, pista, año, género, **BPM, tono** y **carátula** de muchas canciones a la vez (MP3, M4A, FLAC, OGG, OPUS), numera las pistas en orden, saca títulos del nombre del archivo, **detecta BPM y tonalidad**, renombra a "Artista - Título" y añade letras; el audio se copia, nunca se recodifica
+- **Carpeta vigilada** (escritorio): cada audio o vídeo que dejes en una carpeta se convierte solo con un preajuste
 - **Aceleración por tarjeta gráfica** (NVIDIA NVENC, Intel Quick Sync, AMD AMF) para H.264/H.265, con vuelta automática al procesador
 
 **Cola, historial y app de escritorio**
 - Progreso real, velocidad y tiempo restante; **pausar/reanudar** descargas (siguen donde se quedaron), **reordenar** lo que espera, cancelar, reintentar (los errores temporales se reintentan solos una vez); descargas/conversiones a la vez y **límite de velocidad** configurables
 - **Historial con búsqueda**: abrir el archivo, mostrarlo en su carpeta o volver a descargarlo con las mismas opciones
 - **Biblioteca y reproductor** (escritorio): todo lo de tu carpeta de descargas, con búsqueda, favoritos, estrellas, orden y grupos por carpeta, y una barra de reproducción que sigue sonando al cambiar de página (aleatorio, repetir, teclas multimedia, también vídeos)
+  - **Letras sincronizadas** mientras suena la canción (de su `.lrc`), carátula, **ecualizador** con estilos y **fundido entre canciones**
+  - **Listas propias** (ordenar, reproducir, guardar como `.m3u8`), **buscar duplicados** (copias exactas y mismo nombre) y mandar los que sobran a la papelera, ordenar por **más escuchado**
+  - **Enviar a la tele**: Chromecast y teles o altavoces DLNA/UPnP de tu WiFi (reproducir, pausa, saltar, siguiente)
+  - **Mini reproductor**: una ventanita que se queda encima de las demás
+- **Estadísticas**: descargas y conversiones por mes, canales y artistas que más, lo más escuchado y el tamaño de la biblioteca
+- **Espacio en disco** (escritorio): aviso cuando queda poco y un límite opcional para la carpeta de descargas (avisar, o mover lo más antiguo a la papelera; nunca los favoritos)
+- **Línea de comandos**: `tubegrab "enlace" --mp3` (Ajustes → Sistema instala el comando); también `node cli.js` / `npm run cli` desde el repositorio
 - **Enviar al móvil**: un código QR con un enlace en tu WiFi que caduca en 30 minutos, sin cables ni nube
 - **Extensión del navegador** (Chrome, Edge, Brave, Opera): un botón en YouTube y «Descargar con TubeGrab» en el menú del botón derecho abren el enlace en la app (ver `extension/README.md`)
 - **Copia de seguridad**: exporta ajustes, historial y suscripciones a un archivo e impórtalos en otro PC

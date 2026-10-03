@@ -20,6 +20,10 @@ const optMusic = $('optMusic');
 const optLyrics = $('optLyrics');
 const optBoth = $('optBoth');
 const optChapters = $('optChapters');
+const optNormalize = $('optNormalize');
+const optBpm = $('optBpm');
+const optNfo = $('optNfo');
+const optLive = $('optLive');
 const subLangs = $('subLangs');
 const subMode = $('subMode');
 const dlStart = $('dlStart');
@@ -572,7 +576,7 @@ function playDoneSound() {
 
 // Remember the last download options (restored on next launch).
 const REMEMBERED_SELECTS = { audioFormat, audioBitrate, videoQuality, videoContainer, subLangs, subMode };
-const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, lyrics: optLyrics, both: optBoth };
+const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, lyrics: optLyrics, both: optBoth, normalize: optNormalize, bpm: optBpm, nfo: optNfo };
 
 function saveLastOptions() {
   if (!prefsApi.get().remember) return;
@@ -603,6 +607,8 @@ function restoreLastOptions() {
 const GPU_NAMES = { nvidia: 'NVIDIA (NVENC)', intel: 'Intel (Quick Sync)', amd: 'AMD (AMF)' };
 function renderConfig(cfg) {
   if (!cfg) return;
+  // Automatic subtitles: available here when the server has the engine.
+  if (cfg.whisper) whisperStatus.fromServer(cfg.whisper);
   $('cfgDownloadConcurrency').value = String(cfg.downloadConcurrency);
   $('cfgConvertConcurrency').value = String(cfg.convertConcurrency);
   $('hwPicker').querySelectorAll('[data-value]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === cfg.hwAccel)));
@@ -632,12 +638,14 @@ const VIEWS = {
   'cv-format': { group: 'convert', title: 'Convertir', sub: '23 formatos de audio y vídeo', tab: 'Formato' },
   'cv-edit': { group: 'convert', title: 'Editor', sub: 'Recorta del segundo que quieras al que quieras, corta y quita partes', tab: 'Editor' },
   'cv-tags': { group: 'convert', title: 'Etiquetas', sub: 'Artista, álbum, carátula y letras de tus canciones', tab: 'Etiquetas' },
+  'cv-subs': { group: 'convert', title: 'Subtítulos', sub: 'Lo que se dice, escrito por Whisper en tu equipo', tab: 'Subtítulos' },
   'cv-merge': { group: 'convert', title: 'Unir archivos', sub: 'Varios audios o vídeos en uno solo', tab: 'Unir' },
   'cv-compress': { group: 'convert', title: 'Comprimir', sub: 'Que pese lo que tú digas', tab: 'Comprimir' },
   'cv-image': { group: 'convert', title: 'Imagen', sub: 'Un fotograma o la carátula como imagen', tab: 'Imagen' },
   queue: { group: null, title: 'Cola', sub: 'Descargas y conversiones en curso' },
   history: { group: null, title: 'Historial', sub: 'Lo que has terminado en este equipo' },
   library: { group: null, title: 'Biblioteca', sub: 'Escucha y mira lo que has descargado', desktop: true },
+  stats: { group: null, title: 'Estadísticas', sub: 'Lo que has descargado, convertido y escuchado' },
   'set-appearance': { group: 'settings', title: 'Apariencia', sub: 'Idioma, interfaz, colores y tamaño', tab: 'Apariencia' },
   'set-downloads': { group: 'settings', title: 'Descargas', sub: 'Carpeta, velocidad y cookies', tab: 'Descargas' },
   'set-convert': { group: 'settings', title: 'Conversión', sub: 'Tarjeta gráfica y conversiones a la vez', tab: 'Conversión' },
@@ -681,6 +689,8 @@ function setView(view) {
   if (view === 'dl-search') { refreshSearchFormat(); setTimeout(() => $('searchInput').focus(), 0); }
   if (view === 'dl-subs') { refreshSubFormat(); loadSubscriptions(); }
   if (view.startsWith('set-')) loadConfig();
+  if (view === 'stats') stats.render();
+  if (view === 'cv-subs') transcribeUi.refresh();
   document.dispatchEvent(new CustomEvent('tg:view', { detail: view }));
   try { localStorage.setItem(VIEW_KEY, view); } catch { /* storage unavailable */ }
   $('scroll').scrollTop = 0;
@@ -746,6 +756,8 @@ function applyMode() {
   $('dlMoreOptions').classList.toggle('hidden', isConvert);
   $('optMusicWrap').classList.toggle('hidden', currentMode !== 'audio');
   $('optLyricsWrap').classList.toggle('hidden', currentMode !== 'audio');
+  $('optBpmWrap').classList.toggle('hidden', currentMode !== 'audio');
+  $('optNfoWrap').classList.toggle('hidden', currentMode !== 'video');
   $('optSubtitlesWrap').classList.toggle('hidden', currentMode !== 'video');
   refreshSubtitleRows();
   $('convertOptions').classList.toggle('hidden', !isConvert);
@@ -807,10 +819,169 @@ function downloadOptions(mode = downloadMode) {
     sponsorblock: optSponsorblock.checked,
     music: optMusic.checked,
     lyrics: optLyrics.checked,
+    normalize: optNormalize.checked,
+    bpm: optBpm.checked,
+    nfo: optNfo.checked,
     rateLimit: prefsApi.get().rateLimit,
   };
 }
 
+// === Download profiles and rules ===
+// A profile fills in the download form; a rule picks a profile (and/or a
+// folder) for one channel. Kept by the server (on disk in the desktop app).
+const profilesUi = (() => {
+  let data = { profiles: [], rules: [] };
+  const sel = $('dlProfile');
+  const SAVE = '__save';
+  const fold = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const SWITCHES = { metadata: optMetadata, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, lyrics: optLyrics, normalize: optNormalize, bpm: optBpm, nfo: optNfo };
+  const SELECTS = { audioFormat, audioBitrate, quality: videoQuality, container: videoContainer, subLangs, subMode };
+
+  function describe(p) {
+    const o = p.options;
+    const audio = `${t(AUDIO_DL_LABELS[o.audioFormat] || 'MP3')}${LOSSLESS_DL.has(o.audioFormat) ? '' : ` ${o.audioBitrate} kbps`}`;
+    const video = `${String(o.container || 'mp4').toUpperCase()} ${o.quality === 'best' ? t('mejor calidad') : `${o.quality}p`}`;
+    const main = p.both ? `${audio} + ${video}` : o.mode === 'audio' ? audio : video;
+    const extras = [o.music && t('modo música'), o.lyrics && t('letras'), o.normalize && t('volumen igualado'), o.bpm && 'BPM', o.subtitles && t('subtítulos'), o.sponsorblock && 'SponsorBlock', o.nfo && 'NFO'].filter(Boolean);
+    return [main, ...extras].join(' · ');
+  }
+
+  function render() {
+    const cur = sel.value;
+    sel.innerHTML = '';
+    const add = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; sel.appendChild(o); };
+    add('', t('Ninguno: las opciones de abajo'));
+    for (const p of data.profiles) add(p.id, p.name);
+    add(SAVE, t('Guardar estas opciones como perfil…'));
+    sel.value = data.profiles.some((p) => p.id === cur) ? cur : '';
+
+    const list = $('profilesList');
+    list.innerHTML = '';
+    $('profilesEmpty').classList.toggle('hidden', data.profiles.length > 0);
+    for (const p of data.profiles) {
+      const li = document.createElement('li');
+      li.className = 'sub-item';
+      li.innerHTML = '<div class="sub-text"><span class="sub-title"></span><span class="sub-meta"></span></div><div class="queue-actions"></div>';
+      li.querySelector('.sub-title').textContent = p.name;
+      li.querySelector('.sub-meta').textContent = describe(p);
+      const actions = li.querySelector('.queue-actions');
+      const rename = document.createElement('button');
+      rename.type = 'button';
+      rename.className = 'link-btn';
+      rename.textContent = t('Renombrar');
+      rename.addEventListener('click', async () => {
+        const r = await ask({ title: t('Nombre del perfil'), input: p.name, buttons: [{ label: t('Cancelar'), value: null }, { label: t('Guardar'), value: 'ok', primary: true }] });
+        if (r && r.text) { try { data = await postJson('/api/profiles', { ...p, name: r.text }); render(); } catch (err) { showToast(err.message); } }
+      });
+      actions.append(rename, iconButton('remove', t('Borrar el perfil'), async () => { data = await api(`/api/profiles/${p.id}`, { method: 'DELETE' }); render(); }));
+      list.appendChild(li);
+    }
+
+    const rp = $('ruleProfile');
+    rp.innerHTML = '';
+    const opt = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; rp.appendChild(o); };
+    opt('', t('Sin perfil'));
+    for (const p of data.profiles) opt(p.id, p.name);
+    const rules = $('rulesList');
+    rules.innerHTML = '';
+    $('rulesEmpty').classList.toggle('hidden', data.rules.length > 0);
+    for (const r of data.rules) {
+      const li = document.createElement('li');
+      li.className = 'sub-item';
+      li.innerHTML = '<div class="sub-text"><span class="sub-title"></span><span class="sub-meta"></span></div><div class="queue-actions"></div>';
+      li.querySelector('.sub-title').textContent = t('Si contiene «{m}»', { m: r.match });
+      const prof = data.profiles.find((p) => p.id === r.profile);
+      li.querySelector('.sub-meta').textContent = [prof ? t('perfil {p}', { p: prof.name }) : '', r.folder ? t('carpeta {f}', { f: r.folder }) : ''].filter(Boolean).join(' · ');
+      li.querySelector('.queue-actions').appendChild(iconButton('remove', t('Borrar la regla'), async () => { data = await api(`/api/rules/${r.id}`, { method: 'DELETE' }); render(); }));
+      rules.appendChild(li);
+    }
+  }
+
+  async function load() {
+    try { data = await api('/api/profiles'); } catch { /* server not ready */ }
+    render();
+  }
+
+  /** Fills the form with a profile's options. */
+  function apply(p) {
+    if (!p) return;
+    const o = p.options;
+    for (const [k, el] of Object.entries(SELECTS)) if (o[k] !== undefined && [...el.options].some((x) => x.value === String(o[k]))) el.value = String(o[k]);
+    for (const [k, el] of Object.entries(SWITCHES)) if (typeof o[k] === 'boolean') el.checked = o[k];
+    optBoth.checked = p.both === true;
+    audioBitrate.disabled = LOSSLESS_DL.has(audioFormat.value);
+    if (o.mode === 'audio' || o.mode === 'video') setMode(o.mode);
+    refreshSubtitleRows();
+    refreshButton();
+    refreshEstimate();
+    saveLastOptions();
+  }
+
+  sel.addEventListener('change', async () => {
+    if (sel.value === SAVE) {
+      sel.value = '';
+      const r = await ask({ title: t('Guardar como perfil'), text: describe({ options: downloadOptions(), both: optBoth.checked }), input: '',
+        buttons: [{ label: t('Cancelar'), value: null }, { label: t('Guardar'), value: 'ok', primary: true }] });
+      if (!r || !r.text) return;
+      try {
+        data = await postJson('/api/profiles', { name: r.text, options: downloadOptions(), both: optBoth.checked });
+        render();
+        const made = data.profiles.find((p) => p.name === r.text.slice(0, 60));
+        if (made) sel.value = made.id;
+        showStatus(t('Perfil «{n}» guardado', { n: r.text }), 'success');
+      } catch (err) { showStatus(err.message, 'error'); }
+      return;
+    }
+    apply(data.profiles.find((p) => p.id === sel.value));
+  });
+
+  // Any change by hand: no longer exactly that profile.
+  [...Object.values(SELECTS), ...Object.values(SWITCHES), optBoth].forEach((el) => el.addEventListener('change', () => { if (sel.value && sel.value !== SAVE) sel.value = ''; }));
+
+  $('btnAddRule').addEventListener('click', async () => {
+    const status = $('rulesStatus');
+    try {
+      data = await postJson('/api/rules', { match: $('ruleMatch').value, profile: $('ruleProfile').value, folder: $('ruleFolder').value });
+      $('ruleMatch').value = '';
+      $('ruleFolder').value = '';
+      setStatusEl(status, t('Regla añadida'), 'success');
+      render();
+    } catch (err) { setStatusEl(status, err.message, 'error'); }
+  });
+
+  function ruleFor({ channel = '', uploader = '', url = '' } = {}) {
+    const hay = [channel, uploader, url].map(fold);
+    return data.rules.find((r) => hay.some((h) => h && h.includes(fold(r.match)))) || null;
+  }
+
+  return {
+    load,
+    render,
+    describe,
+    /** A rule for this link/channel picks its profile in the form. */
+    applyRuleFor(info) {
+      const r = ruleFor(info);
+      const p = r && r.profile ? data.profiles.find((x) => x.id === r.profile) : null;
+      if (!p || sel.value === p.id) return;
+      sel.value = p.id;
+      apply(p);
+      showStatus(t('Regla «{m}»: perfil {p}', { m: r.match, p: p.name }), 'success');
+    },
+    /** The folder a rule saves this finished download into ('' if none). */
+    folderFor(job) {
+      const m = job.meta || {};
+      const r = ruleFor({ channel: m.channel, uploader: m.uploader || m.artist, url: job.source });
+      return r ? r.folder : '';
+    },
+    /** For a subscription: the profile of the rule matching its link, or null. */
+    profileForUrl(url) {
+      const r = ruleFor({ url });
+      return r && r.profile ? data.profiles.find((x) => x.id === r.profile) || null : null;
+    },
+    byName: (name) => data.profiles.find((p) => fold(p.name) === fold(name)) || null,
+    get data() { return data; },
+  };
+})();
 // === URLs ===
 function parseUrls(text) {
   return String(text || '').split(/[\s,]+/).map((s) => s.trim()).filter((s) => /^(https?:\/\/)?[\w-]+(\.[\w-]+)+\/?\S*$/i.test(s));
@@ -826,6 +997,7 @@ function autoGrow() {
 let previewDebounce = null;
 let previewRequestId = 0;
 let previewDuration = null;
+let lastPreview = null;
 
 function updateUrlState() {
   const urls = parseUrls(urlInput.value);
@@ -876,6 +1048,7 @@ async function fetchPreview(url) {
     $('previewThumb').src = data.thumbnail || '';
     $('previewThumb').style.visibility = data.thumbnail ? 'visible' : 'hidden';
     $('previewTitle').textContent = data.title;
+    lastPreview = { url, already: data.already || null };
     const chapters = data.chapters > 1 ? t('{n} capítulos', { n: data.chapters }) : '';
     $('previewMeta').textContent = [data.site, data.uploader, formatDuration(data.duration), chapters].filter(Boolean).join(' · ');
     previewCard.classList.remove('hidden');
@@ -884,9 +1057,24 @@ async function fetchPreview(url) {
     dlRange.setDuration(previewDuration);
     syncDlRange();
     refreshEstimate();
+    // Already downloaded before? (by the video's own id)
+    const already = $('previewAlready');
+    already.textContent = data.already && prefsApi.get().warnDuplicates ? describeAlready(data.already) : '';
+    already.classList.toggle('hidden', !already.textContent);
+    // On air: it can be recorded from the start.
+    $('optLiveWrap').classList.toggle('hidden', !data.isLive);
+    if (!data.isLive) optLive.checked = false;
+    // A rule for this channel picks its profile.
+    profilesUi.applyRuleFor({ channel: data.channel, uploader: data.uploader, url });
   } catch {
     if (requestId === previewRequestId) hidePreview();
   }
+}
+
+/** "You downloaded it on 3 Oct (as audio)". */
+function describeAlready(rec) {
+  const as = rec.modes && rec.modes.length === 1 ? (rec.modes[0] === 'audio' ? t('como audio') : t('como vídeo')) : rec.modes && rec.modes.length > 1 ? t('como audio y como vídeo') : '';
+  return t('Ya lo descargaste el {d} {as}', { d: formatDate(rec.at), as }).trim();
 }
 
 function hidePreview() {
@@ -898,6 +1086,9 @@ function hidePreview() {
   previewDuration = null;
   dlRange.setDuration(null);
   $('dlRangeRow').classList.add('hidden');
+  $('previewAlready').classList.add('hidden');
+  $('optLiveWrap').classList.add('hidden');
+  optLive.checked = false;
 }
 
 // === Playlist picker ===
@@ -936,8 +1127,77 @@ $('btnPlaylistDownload').addEventListener('click', async () => {
   await queueItems(items, $('playlistHint'));
 });
 
+/**
+ * Before downloading: links this client already downloaded (by video id).
+ * Resolves with the links to go ahead with, or null if the user cancelled.
+ */
+async function skipAlready(urls, known = {}) {
+  if (!prefsApi.get().warnDuplicates || !urls.length) return urls;
+  let found = { ...known };
+  try { Object.assign(found, (await postJson('/api/seen', { urls })).found || {}); } catch { /* can't check: go ahead */ }
+  const have = urls.filter((u) => found[u]);
+  if (!have.length) return urls;
+  const fresh = urls.filter((u) => !found[u]);
+  const one = urls.length === 1;
+  const choice = await ask({
+    title: one ? t('Ya lo tienes') : t('Ya tienes {n} de estos', { n: have.length }),
+    text: one ? `${describeAlready(found[have[0]])}. ${t('¿Descargarlo otra vez?')}` : t('{n} ya los descargaste antes. ¿Qué hago con ellos?', { n: have.length }),
+    buttons: [
+      { label: t('Cancelar'), value: null },
+      ...(fresh.length ? [{ label: t('Solo los nuevos ({n})', { n: fresh.length }), value: 'fresh' }] : []),
+      { label: one ? t('Descargarlo otra vez') : t('Todos'), value: 'all', primary: true },
+    ],
+  });
+  return choice === 'all' ? urls : choice === 'fresh' ? fresh : null;
+}
+
+/**
+ * A small dialog: a question, an optional text box, and buttons. Resolves
+ * with the chosen button's value (and the text, when there's a box), or
+ * null when closed. (Electron has no window.prompt.)
+ */
+function ask({ title, text = '', input = null, buttons }) {
+  return new Promise((resolve) => {
+    const modal = $('askModal');
+    $('askTitle').textContent = title;
+    $('askText').textContent = text;
+    $('askText').classList.toggle('hidden', !text);
+    const box = $('askInput');
+    box.classList.toggle('hidden', input === null);
+    box.value = input === null ? '' : input;
+    const actions = $('askActions');
+    actions.innerHTML = '';
+    const done = (value) => {
+      modal.classList.add('hidden');
+      document.removeEventListener('keydown', onKey, true);
+      resolve(input === null ? value : (value === null ? null : { value, text: box.value.trim() }));
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); done(null); }
+      if (e.key === 'Enter' && input !== null && document.activeElement === box) { const p = buttons.find((b) => b.primary); if (p) done(p.value); }
+    };
+    for (const b of buttons) {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = `btn${b.primary ? ' btn-primary' : ''}`;
+      el.textContent = b.label;
+      el.addEventListener('click', () => done(b.value));
+      actions.appendChild(el);
+    }
+    document.addEventListener('keydown', onKey, true);
+    modal.onclick = (e) => { if (e.target === modal) done(null); };
+    modal.classList.remove('hidden');
+    (input !== null ? box : actions.lastElementChild).focus();
+  });
+}
+
 /** Queues picked search/playlist results with the current options. */
 async function queueItems(items, statusEl) {
+  const known = Object.fromEntries(items.filter((i) => i.already).map((i) => [i.url, i.already]));
+  const keep = await skipAlready(items.map((i) => i.url), known);
+  if (!keep) return false;
+  items = items.filter((i) => keep.includes(i.url));
+  if (!items.length) { statusEl.textContent = t('Nada nuevo que descargar.'); return false; }
   const opts = downloadOptions();
   try {
     const payload = { items: items.map((i) => ({ url: i.url, title: i.title })) };
@@ -986,6 +1246,13 @@ function createPickList(ul, onChange, { quick } = {}) {
       meta.className = 'pick-meta';
       meta.textContent = [item.channel, formatDuration(item.duration)].filter(Boolean).join(' · ');
       text.append(title, meta);
+      if (item.already && prefsApi.get().warnDuplicates) {
+        const badge = document.createElement('span');
+        badge.className = 'pick-already';
+        badge.textContent = t('Ya lo tienes');
+        badge.title = describeAlready(item.already);
+        text.appendChild(badge);
+      }
       label.append(box, img, text);
       li.appendChild(label);
       if (quick) {
@@ -1227,7 +1494,12 @@ $('btnSubscribe').addEventListener('click', async () => {
   status.textContent = t('Leyendo el canal…');
   status.className = 'status-message';
   try {
-    const sub = await postJson('/api/subscriptions', { url, options: downloadOptions(), interval: Number($('subInterval').value), backfill: Number($('subBackfill').value) });
+    // A rule for this channel gives its profile's options.
+    const ruled = profilesUi.profileForUrl(url);
+    const sub = await postJson('/api/subscriptions', {
+      url, options: ruled ? ruled.options : downloadOptions(), interval: Number($('subInterval').value), backfill: Number($('subBackfill').value),
+      mirror: $('subMirror').checked,
+    });
     status.textContent = t('Suscrito a {t}', { t: sub.title });
     status.className = 'status-message success';
     $('subUrl').value = '';
@@ -1497,10 +1769,19 @@ async function submitDownload() {
   if (urls.length === 1 && isPlaylistUrl(urls[0]) && playlistPicker.selected().length && !optPlaylist.checked) {
     return queueItems(playlistPicker.selected(), statusMessage);
   }
+  let wanted = urls;
+  if (!optPlaylist.checked) {
+    const known = urls.length === 1 && lastPreview && lastPreview.url === urls[0] && lastPreview.already ? { [urls[0]]: lastPreview.already } : {};
+    wanted = await skipAlready(urls, known);
+    if (!wanted) return;
+    if (!wanted.length) { showStatus(t('Nada nuevo que descargar.'), 'success'); return; }
+  }
+  const live = optLive.checked && !$('optLiveWrap').classList.contains('hidden');
   setBusy(true, optPlaylist.checked ? t('Leyendo playlist…') : t('Añadiendo…'));
   try {
     const extra = {
-      urls,
+      urls: wanted,
+      live,
       playlist: optPlaylist.checked,
       chapters: optChapters.checked,
       sectionStart: dlStart.value.trim(),
@@ -1966,11 +2247,12 @@ const editor = (() => {
     }
     updateTime();
     draw();
+    if (reframeMode && reframePts.length > 1) updatePreview();
     if (!video.paused) raf = requestAnimationFrame(tick);
   }
   video.addEventListener('play', () => { $('edPlay').classList.add('playing'); if (!raf) raf = requestAnimationFrame(tick); });
   video.addEventListener('pause', () => { $('edPlay').classList.remove('playing'); draw(); updateTime(); });
-  video.addEventListener('seeked', () => { draw(); updateTime(); });
+  video.addEventListener('seeked', () => { draw(); updateTime(); if (reframeMode) updatePreview(); });
 
   function updateTime() {
     $('edTime').textContent = tc(now());
@@ -2185,6 +2467,9 @@ const editor = (() => {
     url = URL.createObjectURL(file);
     video.src = url;
     thumbVideo.src = url;
+    reframePts = [];
+    reframeMode = '';
+    $('edReframe').value = '';
     $('edAudioName').textContent = file.name;
     loadPeaks(file);
   }
@@ -2223,6 +2508,7 @@ const editor = (() => {
     sizeCanvas();
     timeline.scrollLeft = 0;
     changed();
+    refreshReframeUI();
     requestAnimationFrame(updatePreview);
   });
   video.addEventListener('error', () => {
@@ -2367,6 +2653,199 @@ const editor = (() => {
     changed();
   }
 
+  // ---- cut at every change of shot (ffmpeg's scene detector, on the server) ----
+  async function cutAtScenes() {
+    const status = $('editStatus');
+    if (!file || !duration) return;
+    if (!hasVideo) { setStatusEl(status, t('Este archivo no tiene imagen: no hay escenas que buscar.'), 'error'); return; }
+    const btn = $('edScenes');
+    btn.disabled = true;
+    try {
+      setStatusEl(status, t('Buscando los cambios de plano…'), '');
+      const res = await uploadTo('/api/analyze/scenes', 'file', [file], {}, (pct) => setStatusEl(status, `${t('Subiendo')} ${pct}%`, ''));
+      setStatusEl(status, t('Buscando los cambios de plano…'), '');
+      const times = (res.times || []).filter((x) => x > 0.3 && x < duration - 0.3);
+      if (!times.length) { setStatusEl(status, t('No se han encontrado cambios de plano.'), 'success'); return; }
+      commit();
+      let n = 0;
+      for (const at of times) if (splitAt(at)) n += 1;
+      if (!n) undoStack.pop();
+      setStatusEl(status, t('{n} cortes en los cambios de plano. Quita los tramos que no quieras (Supr); Ctrl+Z para deshacer.', { n }), 'success');
+      changed();
+    } catch (err) {
+      setStatusEl(status, err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---- reframe: the crop follows the subject (automatic) or your hand (manual) ----
+  let reframeMode = '';
+  let reframePts = [];           // [[source seconds, centre 0–1]]
+  let analyzing = false;
+  const multiAspects = () => [...$('edMulti').querySelectorAll('.chip.active')].map((c) => c.dataset.aspect);
+  const activeAspect = () => multiAspects()[0] || $('edAspect').value;
+  /** The crop's centre (0–1 of the picture's width) at `sec`, or null when centred. */
+  function reframeAt(sec) {
+    if (!reframeMode || !reframePts.length) return null;
+    if (sec <= reframePts[0][0]) return reframePts[0][1];
+    for (let i = 0; i < reframePts.length - 1; i++) {
+      const [a, xa] = reframePts[i];
+      const [b, xb] = reframePts[i + 1];
+      if (sec < b) return xa + ((xb - xa) * (sec - a)) / (b - a);
+    }
+    return reframePts[reframePts.length - 1][1];
+  }
+  /**
+   * Where the subject is: frames sampled every so often from the kept parts,
+   * each scored by what moved since the last one and by skin-coloured
+   * pixels, column by column; the centre of the strongest columns, smoothed.
+   */
+  async function analyzeMotion() {
+    if (analyzing || !url || !hasVideo) return;
+    analyzing = true;
+    const status = $('editStatus');
+    const v = document.createElement('video');
+    v.muted = true;
+    v.preload = 'auto';
+    v.src = url;
+    try {
+      await new Promise((resolve, reject) => { v.onloadeddata = resolve; v.onerror = () => reject(new Error(t('No se pudo leer el vídeo.'))); });
+      const W = 64;
+      const H = Math.max(8, Math.round((W * v.videoHeight) / v.videoWidth));
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      const parts = kept().length ? kept() : [{ s: 0, e: duration }];
+      const total = parts.reduce((a, p) => a + (p.e - p.s), 0);
+      const step = Math.max(0.5, total / 240);
+      const times = [];
+      for (const p of parts) for (let x = p.s; x < p.e; x += step) times.push(x);
+      let prev = null;
+      let centre = 0.5;
+      const raw = [];
+      for (let i = 0; i < times.length; i++) {
+        await new Promise((resolve) => { v.onseeked = resolve; v.currentTime = Math.min(duration - 0.05, times[i]); });
+        g.drawImage(v, 0, 0, W, H);
+        const px = g.getImageData(0, 0, W, H).data;
+        const cols = new Float32Array(W);
+        const luma = new Float32Array(W * H);
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const k = (y * W + x) * 4;
+            const r = px[k]; const gg = px[k + 1]; const b = px[k + 2];
+            const l = 0.299 * r + 0.587 * gg + 0.114 * b;
+            luma[y * W + x] = l;
+            const skin = r > 95 && gg > 40 && b > 20 && r > gg && r > b && r - Math.min(gg, b) > 15 && Math.abs(r - gg) > 15;
+            cols[x] += (prev ? Math.abs(l - prev[y * W + x]) / 255 : 0) + (skin ? 0.6 : 0);
+          }
+        }
+        prev = luma;
+        let sum = 0; let wsum = 0;
+        const peak = Math.max(...cols);
+        for (let x = 0; x < W; x++) { const w = cols[x] >= peak * 0.5 ? cols[x] ** 2 : 0; sum += w * (x + 0.5) / W; wsum += w; }
+        if (wsum > 0.5) centre = sum / wsum;
+        raw.push([times[i], centre]);
+        if (i % 10 === 0) setStatusEl(status, t('Siguiendo el movimiento… {p}%', { p: Math.round((i / times.length) * 100) }), '');
+      }
+      // Smooth (a camera that glides, not one that jumps).
+      const smooth = raw.map(([tt], i) => {
+        let s = 0; let n = 0;
+        for (let j = Math.max(0, i - 3); j <= Math.min(raw.length - 1, i + 3); j++) { s += raw[j][1]; n += 1; }
+        return [tt, Math.min(1, Math.max(0, s / n))];
+      });
+      const every = Math.max(1, Math.ceil(smooth.length / 200));
+      reframePts = smooth.filter((_, i) => i % every === 0).map(([tt, x]) => [Number(tt.toFixed(2)), Number(x.toFixed(3))]);
+      setStatusEl(status, t('Listo: el encuadre sigue el movimiento. Arrástralo en el visor para corregirlo.'), 'success');
+    } catch (err) {
+      setStatusEl(status, err.message, 'error');
+    } finally {
+      v.removeAttribute('src');
+      v.load();
+      analyzing = false;
+      updatePreview();
+    }
+  }
+  function refreshReframeUI() {
+    const shape = activeAspect();
+    const quarter = ['90', '270'].includes($('edRotate').value);
+    $('edReframeRow').classList.toggle('hidden', !shape || !hasVideo);
+    $('edReframe').disabled = quarter;
+    $('edReframeHint').textContent = quarter ? t('no con el vídeo girado 90°') : reframeMode ? t('arrastra el marco en el visor para moverlo') : t('el marco queda en el centro');
+    $('edCrop').classList.toggle('draggable', Boolean(reframeMode) && !quarter);
+  }
+  $('edReframe').addEventListener('change', () => {
+    reframeMode = $('edReframe').value;
+    if (reframeMode === 'manual' && !reframePts.length) reframePts = [[0, 0.5]];
+    if (reframeMode === 'auto') analyzeMotion();
+    refreshReframeUI();
+    updatePreview();
+    refreshExportUI();
+  });
+  $('edMulti').addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    chip.classList.toggle('active');
+    chip.setAttribute('aria-pressed', String(chip.classList.contains('active')));
+    $('edAspect').disabled = multiAspects().length > 0;
+    refreshReframeUI();
+    updatePreview();
+    refreshExportUI();
+  });
+  // Manual reframe: drag the frame sideways; a point is set at the playhead.
+  $('edCrop').addEventListener('pointerdown', (e) => {
+    if (!reframeMode || !frameRect) return;
+    e.preventDefault();
+    const crop = $('edCrop');
+    crop.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startCentre = reframeAt(now()) ?? 0.5;
+    const box = pictureBox();
+    const move = (ev) => {
+      if (!box) return;
+      const x = Math.min(1, Math.max(0, startCentre + (ev.clientX - startX) / box.w));
+      const at = now();
+      reframePts = reframePts.filter(([tt]) => Math.abs(tt - at) > 0.3);
+      reframePts.push([Number(at.toFixed(2)), Number(x.toFixed(3))]);
+      reframePts.sort((a, b) => a[0] - b[0]);
+      if (reframePts.length > 300) reframePts.splice(1, 1);
+      updatePreview();
+    };
+    const up = () => { crop.removeEventListener('pointermove', move); crop.removeEventListener('pointerup', up); };
+    crop.addEventListener('pointermove', move);
+    crop.addEventListener('pointerup', up);
+  });
+
+  // ---- background music and automatic subtitles ----
+  let musicFile = null;
+  function setMusic(f) {
+    musicFile = null;
+    if (f) {
+      if (!/^audio\//.test(f.type) && !/\.(mp3|m4a|aac|ogg|opus|flac|wav)$/i.test(f.name)) setStatusEl($('editStatus'), t('La música tiene que ser un archivo de audio.'), 'error');
+      else musicFile = f;
+    }
+    $('edMusicName').textContent = musicFile ? musicFile.name : t('MP3, M4A, WAV…');
+    $('edMusicRemove').classList.toggle('hidden', !musicFile);
+    document.querySelectorAll('.ed-music-opt').forEach((el) => el.classList.toggle('hidden', !musicFile));
+    refreshExportUI();
+  }
+  $('edMusicPick').addEventListener('click', () => $('edMusicInput').click());
+  $('edMusicInput').addEventListener('change', (e) => { setMusic(e.target.files[0] || null); e.target.value = ''; });
+  $('edMusicRemove').addEventListener('click', () => setMusic(null));
+  $('edCaptions').addEventListener('change', () => {
+    $('edCaptionsLangRow').classList.toggle('hidden', !$('edCaptions').value);
+    refreshExportUI();
+  });
+  let captionsAvailable = false;
+  function setCaptionsAvailable(on) {
+    captionsAvailable = Boolean(on);
+    $('edCaptions').disabled = !captionsAvailable;
+    if (!captionsAvailable) $('edCaptions').value = '';
+    $('edCaptionsLangRow').classList.toggle('hidden', !$('edCaptions').value);
+    $('edCaptionsHint').classList.toggle('hidden', captionsAvailable);
+  }
+  setCaptionsAvailable(false);
+
   // ---- clip list ----
   function renderClips() {
     const list = $('edClips');
@@ -2396,9 +2875,19 @@ const editor = (() => {
   }
 
   // ---- live preview of the shape, rotation and volume ----
+  /** The picture as shown in the viewer (after rotation): its centre and size. */
+  function pictureBox() {
+    if (!hasVideo || !video.videoWidth) return null;
+    const box = video.getBoundingClientRect();
+    const fit = Math.min(box.width / video.videoWidth, box.height / video.videoHeight);
+    let w = video.videoWidth * fit;
+    let h = video.videoHeight * fit;
+    if (['90', '270'].includes($('edRotate').value)) { const k = Math.min(box.width / h, box.height / w); [w, h] = [h * k, w * k]; }
+    return { w, h };
+  }
   function updatePreview() {
     const frame = $('edCrop');
-    const aspect = $('edAspect').value;
+    const aspect = activeAspect();
     const rotate = $('edRotate').value;
     const vol = $('edVolume').value;
     video.muted = vol === 'mute';
@@ -2425,18 +2914,21 @@ const editor = (() => {
     const r = rw / rh;
     const w = cw / ch > r ? ch * r : cw;
     const h = cw / ch > r ? ch : cw / r;
-    frameRect = { left: cx - w / 2, top: cy - h / 2, w, h };
+    // Reframed: the frame slides sideways inside the picture.
+    const centre = reframeAt(now());
+    const shift = centre === null ? 0 : Math.min(cw - w, Math.max(0, centre * cw - w / 2)) - (cw - w) / 2;
+    frameRect = { left: cx - w / 2 + shift, top: cy - h / 2, w, h };
     updateOverlay();
     // Centred in the viewer (the video element is centred and not moved by the transform).
     frame.style.width = `${w}px`;
     frame.style.height = `${h}px`;
-    frame.style.left = `${video.offsetLeft + (video.offsetWidth - w) / 2}px`;
+    frame.style.left = `${video.offsetLeft + (video.offsetWidth - w) / 2 + shift}px`;
     frame.style.top = `${video.offsetTop + (video.offsetHeight - h) / 2}px`;
     $('edCropLabel').textContent = aspect;
     frame.classList.remove('hidden');
   }
   new ResizeObserver(() => updatePreview()).observe($('edViewer'));
-  ['edAspect', 'edRotate', 'edVolume', 'edFade', 'edSeparate', 'edDenoise'].forEach((id) => $(id).addEventListener('change', () => { updatePreview(); refreshExportUI(); }));
+  ['edAspect', 'edRotate', 'edVolume', 'edFade', 'edSeparate', 'edDenoise'].forEach((id) => $(id).addEventListener('change', () => { refreshReframeUI(); updatePreview(); refreshExportUI(); }));
 
   // ---- titles and logo: edited in the inspector, previewed on the viewer ----
   // Same proportions as the server: text height = picture height / n.
@@ -2565,6 +3057,7 @@ const editor = (() => {
   $('edPrevCut').addEventListener('click', () => jumpCut(-1));
   $('edNextCut').addEventListener('click', () => jumpCut(1));
   $('edSilence').addEventListener('click', removeSilences);
+  $('edScenes').addEventListener('click', cutAtScenes);
   $('edSnap').addEventListener('click', () => {
     snap = !snap;
     $('edSnap').classList.toggle('active', snap);
@@ -2638,7 +3131,8 @@ const editor = (() => {
   // ---- export ----
   const ANIMATED = ['gif', 'sticker', 'tgsticker'];
   const hasEffects = () => Boolean($('edAspect').value || $('edFade').value || $('edVolume').value || $('edRotate').value
-    || $('edDenoise').value || logoFile || texts.some((tx) => tx.text.trim()) || segs.some((g) => !g.off && (g.speed || 1) !== 1));
+    || $('edDenoise').value || logoFile || texts.some((tx) => tx.text.trim()) || segs.some((g) => !g.off && (g.speed || 1) !== 1)
+    || musicFile || $('edCaptions').value || multiAspects().length);
   function refreshExportUI() {
     const format = $('edFormat').value;
     const fastOk = format === 'original' && !hasEffects();
@@ -2692,6 +3186,10 @@ const editor = (() => {
           from: tx.from === null ? null : Number(tx.from.toFixed(3)), to: tx.to === null ? null : Number(tx.to.toFixed(3)),
         }))),
         ...(logoFile ? { logo: logoFile, logoPos: $('edLogoPos').value, logoSize: $('edLogoSize').value, logoOpacity: $('edLogoOpacity').value } : {}),
+        aspects: multiAspects().join(','),
+        ...(reframeMode && reframePts.length && activeAspect() ? { reframe: JSON.stringify(reframePts) } : {}),
+        ...($('edCaptions').value ? { captions: $('edCaptions').value, captionsLang: $('edCaptionsLang').value } : {}),
+        ...(musicFile ? { music: musicFile, musicVolume: $('edMusicVolume').value, musicDuck: String($('edMusicDuck').checked) } : {}),
       }, (pct) => { btn.textContent = `${t('Subiendo')} ${pct}%`; });
       setStatusEl(status, t('Añadido a la cola'), 'success');
     } catch (err) {
@@ -2713,7 +3211,7 @@ const editor = (() => {
   // Theme / accent changes: re-read the colours on the next draw.
   new MutationObserver(() => { colors = null; draw(); }).observe(document.documentElement, { attributes: true });
 
-  return { load };
+  return { load, setCaptionsAvailable };
 })();
 
 // === Scheduled downloads (desktop): the queue waits until a time ===
@@ -2768,7 +3266,8 @@ const tagEditor = (() => {
   let rows = [];           // [{ name, tags: {…}, hasCover, coverOk }]
   let cover = null;
   let coverUrl = null;
-  const COLS = ['track', 'title', 'artist', 'album'];
+  const COLS = ['track', 'title', 'artist', 'album', 'bpm', 'key'];
+  const COL_NAMES = { track: 'Nº', title: 'Título', artist: 'Artista', album: 'Álbum', bpm: 'BPM', key: 'Tono' };
 
   function render() {
     $('tagsEditor').classList.toggle('hidden', !rows.length);
@@ -2782,8 +3281,8 @@ const tagEditor = (() => {
         const input = document.createElement('input');
         input.className = `text-input tags-cell tags-${key}`;
         input.value = row.tags[key] || '';
-        input.maxLength = key === 'track' ? 7 : 300;
-        input.setAttribute('aria-label', `${t({ track: 'Nº', title: 'Título', artist: 'Artista', album: 'Álbum' }[key])} · ${row.name}`);
+        input.maxLength = key === 'track' ? 7 : key === 'bpm' || key === 'key' ? 3 : 300;
+        input.setAttribute('aria-label', `${t(COL_NAMES[key])} · ${row.name}`);
         input.addEventListener('input', () => { row.tags[key] = input.value; });
         td.appendChild(input);
         tr.appendChild(td);
@@ -2865,11 +3364,36 @@ const tagEditor = (() => {
     });
     render();
   });
+  // Tempo and key, worked out from the sound (on the server, nothing is kept).
+  $('tgDetect').addEventListener('click', async () => {
+    const status = $('tagsStatus');
+    if (!files.length) { setStatusEl(status, t('Elige uno o varios archivos primero'), 'error'); return; }
+    const btn = $('tgDetect');
+    btn.disabled = true;
+    try {
+      const res = await uploadTo('/api/tags/analyze', 'files', files, {}, (pct) => setStatusEl(status, `${t('Subiendo')} ${pct}%`, ''));
+      setStatusEl(status, '', '');
+      let found = 0;
+      (res.results || []).forEach((r, i) => {
+        if (!rows[i]) return;
+        if (r.bpm) { rows[i].tags.bpm = String(r.bpm); found += 1; }
+        if (r.key) rows[i].tags.key = r.key;
+      });
+      render();
+      setStatusEl(status, found ? t('BPM y tonalidad de {n} canciones. Revisa y pulsa «Guardar etiquetas».', { n: found }) : t('No se ha encontrado un ritmo claro.'), found ? 'success' : 'error');
+    } catch (err) {
+      setStatusEl(status, err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
   $('btnTags').addEventListener('click', async () => {
     const status = $('tagsStatus');
     if (!files.length || !rows.length) { setStatusEl(status, t('Elige uno o varios archivos primero'), 'error'); return; }
     const bad = rows.find((r) => (r.tags.track && !/^\d{1,3}(\/\d{1,3})?$/.test(r.tags.track.trim())) || (r.tags.date && !/^\d{4}(-\d{2}(-\d{2})?)?$/.test(r.tags.date.trim())));
     if (bad) { setStatusEl(status, t('Revisa «{name}»: el número va como 3 o 3/12 y el año como 2024.', { name: bad.name }), 'error'); return; }
+    const badBpm = rows.find((r) => (r.tags.bpm && !/^\d{2,3}$/.test(r.tags.bpm.trim())) || (r.tags.key && !/^[A-G][b#]?m?$/.test(r.tags.key.trim())));
+    if (badBpm) { setStatusEl(status, t('Revisa «{name}»: el BPM va como 128 y el tono como Am, C o F#m.', { name: badBpm.name }), 'error'); return; }
     const btn = $('btnTags');
     btn.disabled = true;
     try {
@@ -2910,6 +3434,7 @@ function connectEvents() {
   es.addEventListener('removed', (e) => { removeRow(JSON.parse(e.data).id); renderQueueMeta(); });
   es.addEventListener('subscriptions', () => { if (currentView === 'dl-subs') loadSubscriptions(); });
   es.addEventListener('schedule', (e) => scheduleBar.show(JSON.parse(e.data).until));
+  es.addEventListener('mirror', (e) => mirrorSync.update(JSON.parse(e.data)));
 }
 
 function onJob(job, live) {
@@ -2937,10 +3462,13 @@ function autoSave(job) {
   const count = (job.files || []).length || 1;
   if (desktopApi) {
     saved.set(job.id, 'saving');
-    // Lyrics (.lrc) belong next to their song, not in a subfolder of their own.
-    const media = (job.files || []).filter((f) => !/\.lrc$/i.test(f.name)).length;
+    // Lyrics (.lrc), the media-server sheet (.nfo) and its poster belong next
+    // to their song or video, not in a subfolder of their own.
+    const media = (job.files || []).filter((f) => !/\.(lrc|nfo)$/i.test(f.name) && !/-poster\.jpg$/i.test(f.name)).length;
     const meta = job.type === 'download' && job.meta ? job.meta : {};
-    desktopApi.saveJob(job.id, CLIENT_ID, count, media > 1 ? job.title : '', meta.artist || meta.uploader || '', meta.album || '');
+    // A folder of its own: a mirrored playlist's, or a channel rule's.
+    const into = job.saveFolder || (job.type === 'download' ? profilesUi.folderFor(job) : '');
+    desktopApi.saveJob(job.id, CLIENT_ID, count, media > 1 ? job.title : '', meta.artist || meta.uploader || '', meta.album || '', into);
   } else {
     for (let n = 0; n < count; n++) {
       const a = document.createElement('a');
@@ -2960,6 +3488,8 @@ if (desktopApi) {
     if (ok) {
       // The files now live in the user's folder; free the temp copies.
       api(`/api/jobs/${jobId}/file`, { method: 'DELETE' }).catch(() => {});
+      const j = jobs.get(jobId);
+      if (j && j.saveFolder) mirrorSync.saved(j.saveFolder);
     } else if (error) {
       showStatus(ts(error), 'error');
     }
@@ -2968,6 +3498,28 @@ if (desktopApi) {
     renderHistory();
   });
 }
+
+// Mirrored playlists: after each check (and as their files arrive) the app
+// brings the folder in line with the playlist and rewrites its .m3u8.
+const mirrorSync = (() => {
+  const last = new Map(); // folder -> { folder, title, ids }
+  const timers = new Map();
+  function run(info) {
+    if (!desktopApi || !desktopApi.syncMirror) return;
+    desktopApi.syncMirror(info).then((r) => {
+      if (r && r.removed) showToast(t('{n} archivos que ya no están en «{p}» se han movido a la papelera', { n: r.removed, p: info.title }));
+    }).catch(() => {});
+  }
+  return {
+    update(info) { last.set(info.folder, info); run(info); },
+    saved(folder) {
+      const info = last.get(folder);
+      if (!info) return;
+      clearTimeout(timers.get(folder));
+      timers.set(folder, setTimeout(() => run(info), 3000));
+    },
+  };
+})();
 
 function notify(job) {
   if (!isElectronApp || !prefsApi.get().notify || document.hasFocus() || typeof Notification === 'undefined') return;
@@ -3036,6 +3588,7 @@ const ICONS = {
   down: svg('<path d="M12 5v14m0 0l-6-6m6 6l6-6"/>'),
   top: svg('<path d="M5 4h14"/><path d="M12 20V8m0 0l-5 5m5-5l5 5"/>'),
   now: svg('<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>'),
+  stopSave: svg('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 13l2 2 4-4"/>'),
 };
 
 function iconButton(icon, label, onClick, cls = '') {
@@ -3094,6 +3647,8 @@ function renderRow(job) {
     add('up', t('Subir en la cola'), () => jobAction(job, 'move', { where: 'up' }), 'queue-only-btn');
     add('down', t('Bajar en la cola'), () => jobAction(job, 'move', { where: 'down' }), 'queue-only-btn');
   }
+  // A live recording: stop it now and keep what was recorded.
+  if (job.stoppable) add('stopSave', t('Parar y guardar la grabación'), () => jobAction(job, 'stop'), 'primary');
   if (job.status === 'paused') add('play', t('Reanudar'), () => jobAction(job, 'resume'), 'primary');
   else if (job.pausable && job.status !== 'queued') add('pause', t('Pausar'), () => jobAction(job, 'pause'));
   if (ACTIVE.has(job.status) || job.status === 'paused') {
@@ -3180,22 +3735,37 @@ $('btnResumeAll').addEventListener('click', () => postJson('/api/jobs/pause-all'
 ICONS.phone = svg('<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>');
 ICONS.music = svg('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>');
 ICONS.video = svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/>');
+ICONS.addList = svg('<path d="M4 6h11M4 12h11M4 18h7M18 15v6M15 18h6"/>');
 
 const library = (() => {
   const MAX_ROWS = 400;
+  const NEW_LIST = '__new';
   let files = [];
   let kind = '';
   let loaded = false;
+  let playlists = [];
+  let current = '';              // the playlist shown ('' = everything)
   const libUrl = (f) => `/api/library/file?client=${CLIENT_ID}&id=${f.id}`;
+  const coverUrl = (f) => `/api/library/cover?client=${CLIENT_ID}&id=${f.id}`;
+  const relOf = (f) => (f.folder ? `${f.folder}/${f.name}` : f.name);
 
   function visible() {
     const q = $('libSearch').value.trim().toLowerCase();
-    const list = files.filter((f) => (!kind || (kind === 'fav' ? f.fav : f.kind === kind)) && (!q || `${f.folder} ${f.name}`.toLowerCase().includes(q)));
+    const match = (f) => !q || `${f.folder} ${f.name}`.toLowerCase().includes(q);
+    if (current) {
+      const pl = playlists.find((p) => p.id === current);
+      if (!pl) return [];
+      const byId = new Map(files.map((f) => [f.id, f]));
+      // In the list's own order; files that are gone are skipped.
+      return pl.items.map((id, i) => (id && byId.has(id) ? { ...byId.get(id), _index: i } : null)).filter((f) => f && match(f));
+    }
+    const list = files.filter((f) => (!kind || (kind === 'fav' ? f.fav : f.kind === kind)) && match(f));
     const sort = $('libSort').value;
     const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
     if (sort === 'name') list.sort(byName);
     else if (sort === 'rating') list.sort((a, b) => b.rating - a.rating || Number(b.fav) - Number(a.fav) || b.mtime - a.mtime);
     else if (sort === 'size') list.sort((a, b) => b.size - a.size);
+    else if (sort === 'plays') list.sort((a, b) => (b.plays || 0) - (a.plays || 0) || (b.lastPlayed || 0) - (a.lastPlayed || 0));
     else list.sort((a, b) => b.mtime - a.mtime);
     // Grouped: folders together (keeping the order inside each).
     if ($('libGroup').checked) list.sort((a, b) => a.folder.localeCompare(b.folder, undefined, { sensitivity: 'base' }));
@@ -3204,8 +3774,8 @@ const library = (() => {
   async function setMeta(f, patch) {
     try {
       const m = await postJson('/api/library/meta', { id: f.id, ...patch });
-      f.fav = m.fav;
-      f.rating = m.rating;
+      const real = files.find((x) => x.id === f.id) || f;
+      Object.assign(real, { fav: m.fav, rating: m.rating, plays: m.plays, lastPlayed: m.lastPlayed });
       render();
     } catch (err) { showToast(err.message); }
   }
@@ -3240,19 +3810,94 @@ const library = (() => {
     return box;
   }
 
+  // ---- own playlists ----
+  function renderLists() {
+    const sel = $('libPlaylist');
+    sel.innerHTML = '';
+    const add = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; sel.appendChild(o); };
+    add('', t('Todo'));
+    for (const p of playlists) add(p.id, `♫ ${p.name} (${p.items.filter(Boolean).length})`);
+    add(NEW_LIST, t('+ Lista nueva…'));
+    if (!playlists.some((p) => p.id === current)) current = '';
+    sel.value = current;
+    const pl = playlists.find((p) => p.id === current);
+    $('libPlBar').classList.toggle('hidden', !pl);
+    if (pl) $('libPlName').textContent = pl.name;
+    $('libFilter').classList.toggle('hidden', Boolean(pl));
+    $('libSort').classList.toggle('hidden', Boolean(pl));
+  }
+  async function loadLists() {
+    try { playlists = (await api('/api/library/playlists')).playlists || []; } catch { playlists = []; }
+    renderLists();
+  }
+  async function newList(add = []) {
+    const r = await ask({ title: t('Lista nueva'), input: '', buttons: [{ label: t('Cancelar'), value: null }, { label: t('Crear'), value: 'ok', primary: true }] });
+    if (!r || !r.text) return null;
+    try {
+      const res = await postJson('/api/library/playlists', { name: r.text, add });
+      playlists = res.playlists;
+      return res.id;
+    } catch (err) { showToast(err.message); return null; }
+  }
+  const patchList = async (id, patch) => {
+    try {
+      playlists = (await api(`/api/library/playlists/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })).playlists;
+    } catch (err) { showToast(err.message); }
+    renderLists();
+    render();
+  };
+  async function addToList(f) {
+    const choice = await ask({
+      title: t('Añadir a una lista'), text: f.name.replace(/\.[^.]+$/, ''),
+      buttons: [{ label: t('Cancelar'), value: null }, ...playlists.slice(0, 8).map((p) => ({ label: p.name, value: p.id })), { label: t('Lista nueva…'), value: NEW_LIST, primary: true }],
+    });
+    if (!choice) return;
+    if (choice === NEW_LIST) { if (await newList([f.id])) { renderLists(); showToast(t('Añadido a la lista')); } return; }
+    await patchList(choice, { add: [f.id] });
+    showToast(t('Añadido a la lista'));
+  }
+  $('libPlaylist').addEventListener('change', async () => {
+    const v = $('libPlaylist').value;
+    if (v === NEW_LIST) {
+      const id = await newList();
+      current = id || current;
+    } else current = v;
+    renderLists();
+    render();
+  });
+  $('libPlPlay').addEventListener('click', () => { const shown = visible(); if (shown.length) player.play(shown, 0); });
+  $('libPlExport').addEventListener('click', async () => {
+    try { const r = await postJson(`/api/library/playlists/${current}/export`, {}); showToast(t('Guardada como «{f}» en tu carpeta de descargas', { f: r.file })); } catch (err) { showToast(err.message); }
+  });
+  $('libPlRename').addEventListener('click', async () => {
+    const pl = playlists.find((p) => p.id === current);
+    const r = pl && await ask({ title: t('Nombre de la lista'), input: pl.name, buttons: [{ label: t('Cancelar'), value: null }, { label: t('Guardar'), value: 'ok', primary: true }] });
+    if (r && r.text) patchList(current, { name: r.text });
+  });
+  $('libPlDelete').addEventListener('click', async () => {
+    const pl = playlists.find((p) => p.id === current);
+    const ok = pl && await ask({ title: t('¿Borrar la lista «{n}»?', { n: pl.name }), text: t('Las canciones no se borran, solo la lista.'), buttons: [{ label: t('Cancelar'), value: null }, { label: t('Borrar'), value: true, primary: true }] });
+    if (!ok) return;
+    try { playlists = (await api(`/api/library/playlists/${current}`, { method: 'DELETE' })).playlists; } catch { /* ignore */ }
+    current = '';
+    renderLists();
+    render();
+  });
+
   function render() {
     const list = $('libList');
     const shown = visible();
     list.innerHTML = '';
     $('libEmpty').classList.toggle('hidden', shown.length > 0 || !loaded);
-    $('libEmptyText').textContent = files.length ? t('Nada coincide con la búsqueda.') : t('Aún no hay nada en tu carpeta de descargas.');
+    $('libEmptyText').textContent = current ? t('Esta lista está vacía: añade canciones con el botón ＋ de cada una.')
+      : files.length ? t('Nada coincide con la búsqueda.') : t('Aún no hay nada en tu carpeta de descargas.');
     list.parentElement.classList.toggle('hidden', !shown.length);
     $('libCount').textContent = !loaded ? t('Cargando…')
       : shown.length > MAX_ROWS ? t('{n} archivos · se muestran {m}; busca para encontrar el resto', { n: shown.length, m: MAX_ROWS })
         : t('{n} archivos', { n: shown.length });
     let lastFolder = null;
     for (const f of shown.slice(0, MAX_ROWS)) {
-      if ($('libGroup').checked && f.folder !== lastFolder) {
+      if (!current && $('libGroup').checked && f.folder !== lastFolder) {
         lastFolder = f.folder;
         const h = document.createElement('li');
         h.className = 'lib-group-head';
@@ -3266,15 +3911,24 @@ const library = (() => {
       main.className = 'lib-main';
       main.innerHTML = `<span class="lib-icon">${ICONS[f.kind === 'video' ? 'video' : 'music']}</span><span class="lib-text"><span class="lib-name"></span><span class="lib-sub"></span></span>`;
       main.querySelector('.lib-name').textContent = f.name.replace(/\.[^.]+$/, '');
-      main.querySelector('.lib-sub').textContent = [f.folder, formatBytes(f.size), formatDate(f.mtime)].filter(Boolean).join(' · ');
-      main.title = f.folder ? `${f.folder}/${f.name}` : f.name;
+      main.querySelector('.lib-sub').textContent = [f.folder, formatBytes(f.size), formatDate(f.mtime), f.plays ? (f.plays === 1 ? t('1 vez') : t('{n} veces', { n: f.plays })) : '', f.lrc ? t('con letra') : ''].filter(Boolean).join(' · ');
+      main.title = relOf(f);
       main.addEventListener('click', () => player.play(shown, shown.indexOf(f)));
       const actions = document.createElement('div');
       actions.className = 'queue-actions';
-      actions.append(
-        iconButton('phone', t('Enviar al móvil'), () => shareToPhone(f)),
-        iconButton('reveal', t('Mostrar en la carpeta'), () => desktopApi.showLibraryFile(f.folder ? `${f.folder}/${f.name}` : f.name)),
-      );
+      if (current) {
+        const i = f._index;
+        const pl = playlists.find((p) => p.id === current);
+        if (i > 0) actions.appendChild(iconButton('up', t('Subir'), () => patchList(current, { move: [i, i - 1] })));
+        if (pl && i < pl.items.length - 1) actions.appendChild(iconButton('down', t('Bajar'), () => patchList(current, { move: [i, i + 1] })));
+        actions.appendChild(iconButton('remove', t('Quitar de la lista'), () => patchList(current, { remove: i })));
+      } else {
+        actions.append(
+          iconButton('addList', t('Añadir a una lista'), () => addToList(f)),
+          iconButton('phone', t('Enviar al móvil'), () => shareToPhone(f)),
+          iconButton('reveal', t('Mostrar en la carpeta'), () => desktopApi.showLibraryFile(relOf(f))),
+        );
+      }
       li.append(main, metaControls(f), actions);
       list.appendChild(li);
     }
@@ -3291,8 +3945,66 @@ const library = (() => {
       showToast(err.message);
     }
     loaded = true;
+    await loadLists();
     render();
   }
+
+  // ---- duplicates ----
+  async function findDuplicates() {
+    const modal = $('dupesModal');
+    const box = $('dupesList');
+    box.innerHTML = '';
+    $('dupesHint').textContent = t('Buscando…');
+    modal.classList.remove('hidden');
+    $('dupesClose').focus();
+    let groups = [];
+    try {
+      groups = (await api('/api/library/duplicates')).groups || [];
+      files = (await api('/api/library')).files || files;
+    } catch (err) { $('dupesHint').textContent = err.message; return; }
+    const byId = new Map(files.map((f) => [f.id, f]));
+    $('dupesHint').textContent = groups.length
+      ? t('{n} grupos. «Idénticos» son copias exactas; «Mismo nombre», el mismo título en otro sitio o formato. Lo que mandes a la papelera se puede recuperar.', { n: groups.length })
+      : t('No hay duplicados en tu biblioteca.');
+    for (const g of groups) {
+      const group = document.createElement('div');
+      group.className = 'dupes-group';
+      const head = document.createElement('div');
+      head.className = 'dupes-kind';
+      head.textContent = g.kind === 'same' ? t('Idénticos') : t('Mismo nombre');
+      group.appendChild(head);
+      for (const id of g.ids) {
+        const f = byId.get(id);
+        if (!f) continue;
+        const row = document.createElement('div');
+        row.className = 'dupes-row';
+        const name = document.createElement('span');
+        name.className = 'dupes-name';
+        name.textContent = relOf(f);
+        name.title = relOf(f);
+        const meta = document.createElement('span');
+        meta.className = 'dupes-meta';
+        meta.textContent = [formatBytes(f.size), formatDate(f.mtime), f.fav ? '♥' : ''].filter(Boolean).join(' · ');
+        const trash = document.createElement('button');
+        trash.type = 'button';
+        trash.className = 'link-btn';
+        trash.textContent = t('A la papelera');
+        trash.addEventListener('click', async () => {
+          const r = await desktopApi.trashLibraryFile(relOf(f));
+          if (r && r.ok) { row.classList.add('gone'); trash.disabled = true; trash.textContent = t('En la papelera'); files = files.filter((x) => x.id !== f.id); }
+          else showToast(t('No se pudo mover a la papelera.'));
+        });
+        row.append(name, meta, trash);
+        group.appendChild(row);
+      }
+      box.appendChild(group);
+    }
+  }
+  const closeDupes = () => { $('dupesModal').classList.add('hidden'); render(); };
+  $('libDupes').addEventListener('click', findDuplicates);
+  $('dupesClose').addEventListener('click', closeDupes);
+  $('dupesModal').addEventListener('click', (e) => { if (e.target === $('dupesModal')) closeDupes(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('dupesModal').classList.contains('hidden')) closeDupes(); });
 
   $('libSearch').addEventListener('input', render);
   $('libSort').addEventListener('change', () => { try { localStorage.setItem('tubegrab_libsort', $('libSort').value); } catch { /* ignore */ } render(); });
@@ -3311,33 +4023,124 @@ const library = (() => {
     render();
   });
   document.addEventListener('tg:view', (e) => { if (e.detail === 'library') load(); });
-  return { render, url: libUrl };
+  return {
+    render,
+    url: libUrl,
+    cover: coverUrl,
+    files: () => files,
+    /** One more play (counted once the song has really been listened to). */
+    played: (f) => setMeta(f, { played: true }),
+  };
 })();
 
-// A player bar at the bottom: plays a list, keeps going across pages.
+// A player bar at the bottom: plays a list, keeps going across pages, with
+// an equalizer, fades between songs, synced lyrics, the TV and a mini window.
 const player = (() => {
-  const media = $('plMedia');
+  const A = $('plMedia');        // shows video too
+  const B = $('plMediaB');       // a second deck, for fading into the next song
+  let deck = A;
   let list = [];
   let index = -1;
   let shuffle = false;
   let repeat = false;
   let seeking = false;
+  let fading = null;             // { from, to, nextIndex, timer }
+  let countedFor = null;         // the play already counted
   const cur = () => list[index] || null;
 
+  // ---- equalizer (Web Audio), saved per viewer ----
+  const BANDS = [60, 230, 910, 3600, 14000];
+  const PRESETS = { flat: [0, 0, 0, 0, 0], bass: [6, 4, 0, -1, -1], vocal: [-2, -1, 3, 4, 1], rock: [4, 2, -1, 2, 4], pop: [-1, 2, 4, 2, -1], classical: [3, 1, -1, 1, 3] };
+  const EQ_KEY = 'tubegrab_eq';
+  let eq = { preset: 'flat', gains: [0, 0, 0, 0, 0], crossfade: 0 };
+  try {
+    const raw = JSON.parse(localStorage.getItem(EQ_KEY));
+    if (raw && (raw.preset in PRESETS || raw.preset === 'custom')) eq.preset = raw.preset;
+    if (raw && Array.isArray(raw.gains) && raw.gains.length === 5 && raw.gains.every((g) => Number.isFinite(g) && g >= -12 && g <= 12)) eq.gains = raw.gains;
+    if (raw && [0, 2, 4, 6, 10].includes(raw.crossfade)) eq.crossfade = raw.crossfade;
+  } catch { /* defaults */ }
+  const saveEq = () => { try { localStorage.setItem(EQ_KEY, JSON.stringify(eq)); } catch { /* ignore */ } };
+  let actx = null;
+  let filters = [];
+  const gains = new Map();
+  function graph() {
+    if (actx) { if (actx.state === 'suspended') actx.resume().catch(() => {}); return; }
+    try {
+      actx = new AudioContext();
+      filters = BANDS.map((f, i) => {
+        const b = actx.createBiquadFilter();
+        b.type = i === 0 ? 'lowshelf' : i === BANDS.length - 1 ? 'highshelf' : 'peaking';
+        b.frequency.value = f;
+        b.Q.value = 1;
+        b.gain.value = eq.gains[i];
+        return b;
+      });
+      filters.reduce((a, b) => { a.connect(b); return b; }).connect(actx.destination);
+      for (const m of [A, B]) {
+        const g = actx.createGain();
+        actx.createMediaElementSource(m).connect(g).connect(filters[0]);
+        gains.set(m, g);
+      }
+    } catch { actx = null; }
+  }
+  function applyEq() {
+    filters.forEach((f, i) => { f.gain.value = eq.gains[i]; });
+    $('eqBands').querySelectorAll('input').forEach((el, i) => { el.value = String(eq.gains[i]); });
+    $('eqPreset').value = eq.preset;
+    $('eqCrossfade').value = String(eq.crossfade);
+    saveEq();
+  }
+  (() => {
+    const box = $('eqBands');
+    const labels = ['60 Hz', '230 Hz', '910 Hz', '3,6 kHz', '14 kHz'];
+    BANDS.forEach((_, i) => {
+      const wrap = document.createElement('label');
+      wrap.className = 'eq-band';
+      wrap.innerHTML = '<input type="range" min="-12" max="12" step="1"><span></span>';
+      wrap.querySelector('span').textContent = labels[i];
+      const input = wrap.querySelector('input');
+      input.setAttribute('aria-label', labels[i]);
+      input.addEventListener('input', () => { eq.gains[i] = Number(input.value); eq.preset = 'custom'; applyEq(); });
+      box.appendChild(wrap);
+    });
+  })();
+  $('eqPreset').addEventListener('change', () => {
+    eq.preset = $('eqPreset').value;
+    if (PRESETS[eq.preset]) eq.gains = PRESETS[eq.preset].slice();
+    applyEq();
+  });
+  $('eqCrossfade').addEventListener('change', () => { eq.crossfade = Number($('eqCrossfade').value); applyEq(); });
+  applyEq();
+
+  // ---- what's playing ----
   function show(f) {
     $('player').classList.remove('hidden');
     document.body.classList.add('has-player');
     $('plTitle').textContent = f.name.replace(/\.[^.]+$/, '');
     $('plSub').textContent = f.folder || '';
-    $('plIcon').innerHTML = ICONS[f.kind === 'video' ? 'video' : 'music'];
+    const icon = $('plIcon');
+    icon.innerHTML = ICONS[f.kind === 'video' ? 'video' : 'music'];
+    if (f.kind !== 'video') {
+      // The song's own cover, when it has one.
+      const img = new Image();
+      img.alt = '';
+      img.className = 'player-cover';
+      img.onload = () => { if (cur() === f) { icon.innerHTML = ''; icon.appendChild(img); } };
+      img.src = library.cover(f);
+    }
     const isVideo = f.kind === 'video';
     $('plExpand').classList.toggle('hidden', !isVideo);
     $('plFull').classList.toggle('hidden', !isVideo);
     $('playerVideoWrap').classList.toggle('hidden', !isVideo);
     if ('mediaSession' in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({ title: $('plTitle').textContent, artist: f.folder || 'TubeGrab' });
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: $('plTitle').textContent, artist: f.folder || 'TubeGrab', ...(isVideo ? {} : { artwork: [{ src: library.cover(f), sizes: '400x400', type: 'image/jpeg' }] }),
+      });
     }
+    countedFor = null;
+    lyrics.load(f);
     library.render();
+    pushState();
   }
   function play(items, i) {
     list = items.slice();
@@ -3347,66 +4150,307 @@ const player = (() => {
   function start() {
     const f = cur();
     if (!f) return;
-    media.src = library.url(f);
-    media.play().catch(() => {});
+    cancelFade();
+    if (cast.active()) { cast.playFile(f); show(f); return; }
+    // Videos always on the deck that can show them.
+    const target = f.kind === 'video' ? A : deck;
+    const other = target === A ? B : A;
+    other.pause();
+    deck = target;
+    graph();
+    if (gains.get(deck)) gains.get(deck).gain.value = 1;
+    deck.src = library.url(f);
+    deck.play().catch(() => {});
     show(f);
+  }
+  function nextIndex(dir) {
+    if (!list.length) return -1;
+    if (dir > 0 && shuffle && list.length > 1) {
+      let n = index;
+      while (n === index) n = Math.floor(Math.random() * list.length);
+      return n;
+    }
+    return (index + dir + list.length) % list.length;
   }
   function step(dir) {
     if (!list.length) return;
-    if (dir > 0 && media.currentTime > 0 && shuffle && list.length > 1) {
-      let next = index;
-      while (next === index) next = Math.floor(Math.random() * list.length);
-      index = next;
-    } else if (dir < 0 && media.currentTime > 3) {
-      media.currentTime = 0;
-      return;
-    } else {
-      index = (index + dir + list.length) % list.length;
-    }
+    if (dir < 0 && deck.currentTime > 3 && !cast.active()) { deck.currentTime = 0; return; }
+    index = nextIndex(dir);
     start();
   }
   function close() {
-    media.pause();
-    media.removeAttribute('src');
-    media.load();
+    cancelFade();
+    for (const m of [A, B]) { m.pause(); m.removeAttribute('src'); m.load(); }
     list = [];
     index = -1;
     $('player').classList.add('hidden');
     document.body.classList.remove('has-player');
+    $('plLyrics').classList.add('hidden');
+    $('plEq').classList.add('hidden');
     library.render();
+    pushState();
   }
-  media.addEventListener('play', () => $('plPlay').classList.add('playing'));
-  media.addEventListener('pause', () => $('plPlay').classList.remove('playing'));
-  media.addEventListener('loadedmetadata', () => {
-    $('plSeek').max = String(media.duration || 1);
-    $('plDur').textContent = formatDuration(Math.round(media.duration)) || '0:00';
-  });
-  media.addEventListener('timeupdate', () => {
-    if (!seeking) $('plSeek').value = String(media.currentTime);
-    $('plTime').textContent = formatDuration(Math.floor(media.currentTime)) || '0:00';
-  });
-  media.addEventListener('ended', () => {
-    if (repeat) { media.currentTime = 0; media.play().catch(() => {}); return; }
-    if (index < list.length - 1 || shuffle) step(1);
-  });
-  media.addEventListener('error', () => { if (cur()) showToast(t('No se puede reproducir este archivo aquí.')); });
-  $('plPlay').addEventListener('click', () => (media.paused ? media.play().catch(() => {}) : media.pause()));
+
+  // ---- fade into the next song (audio only) ----
+  function cancelFade() {
+    if (!fading) return;
+    clearTimeout(fading.timer);
+    if (gains.get(fading.to)) gains.get(fading.to).gain.cancelScheduledValues(0);
+    fading.to.pause();
+    if (gains.get(fading.from)) { gains.get(fading.from).gain.cancelScheduledValues(0); gains.get(fading.from).gain.value = 1; }
+    fading = null;
+  }
+  function maybeFade() {
+    const f = cur();
+    if (!eq.crossfade || fading || repeat || !actx || cast.active() || !f || f.kind === 'video') return;
+    const left = deck.duration - deck.currentTime;
+    if (!Number.isFinite(left) || left > eq.crossfade || left <= 0.3) return;
+    const n = index < list.length - 1 || shuffle ? nextIndex(1) : -1;
+    const next = list[n];
+    if (!next || next.kind === 'video') return;
+    const from = deck;
+    const to = deck === A ? B : A;
+    const now = actx.currentTime;
+    const gFrom = gains.get(from);
+    const gTo = gains.get(to);
+    to.src = library.url(next);
+    to.volume = from.volume;
+    gTo.gain.setValueAtTime(0, now);
+    gTo.gain.linearRampToValueAtTime(1, now + left);
+    gFrom.gain.setValueAtTime(1, now);
+    gFrom.gain.linearRampToValueAtTime(0, now + left);
+    to.play().catch(() => {});
+    fading = {
+      from, to,
+      timer: setTimeout(() => {
+        from.pause();
+        gFrom.gain.cancelScheduledValues(0);
+        gFrom.gain.value = 1;
+        fading = null;
+        deck = to;
+        index = n;
+        show(next);
+      }, left * 1000),
+    };
+  }
+
+  // ---- events (only the deck in use drives the bar) ----
+  for (const m of [A, B]) {
+    m.addEventListener('play', () => { if (m === deck) { $('plPlay').classList.add('playing'); pushState(); } });
+    m.addEventListener('pause', () => { if (m === deck && !fading) { $('plPlay').classList.remove('playing'); pushState(); } });
+    m.addEventListener('loadedmetadata', () => {
+      if (m !== deck) return;
+      $('plSeek').max = String(m.duration || 1);
+      $('plDur').textContent = formatDuration(Math.round(m.duration)) || '0:00';
+    });
+    m.addEventListener('timeupdate', () => {
+      if (m !== deck) return;
+      if (!seeking) $('plSeek').value = String(m.currentTime);
+      $('plTime').textContent = formatDuration(Math.floor(m.currentTime)) || '0:00';
+      lyrics.at(m.currentTime);
+      // Counted as a play after 30 s (or half of a short song).
+      const f = cur();
+      if (f && countedFor !== f && m.currentTime > Math.min(30, (m.duration || 60) / 2)) { countedFor = f; library.played(f); }
+      maybeFade();
+      pushStateSoon();
+    });
+    m.addEventListener('ended', () => {
+      if (m !== deck || fading) return;
+      if (repeat) { m.currentTime = 0; m.play().catch(() => {}); return; }
+      if (index < list.length - 1 || shuffle) step(1);
+    });
+    m.addEventListener('error', () => { if (m === deck && cur() && m.getAttribute('src')) showToast(t('No se puede reproducir este archivo aquí.')); });
+  }
+  const toggle = () => {
+    if (cast.active()) { cast.toggle(); return; }
+    if (deck.paused) { graph(); deck.play().catch(() => {}); } else deck.pause();
+  };
+  $('plPlay').addEventListener('click', toggle);
   $('plNext').addEventListener('click', () => step(1));
   $('plPrev').addEventListener('click', () => step(-1));
   $('plClose').addEventListener('click', close);
   $('plSeek').addEventListener('input', () => { seeking = true; $('plTime').textContent = formatDuration(Math.floor(Number($('plSeek').value))) || '0:00'; });
-  $('plSeek').addEventListener('change', () => { media.currentTime = Number($('plSeek').value); seeking = false; });
-  $('plVolume').addEventListener('input', () => { media.volume = Number($('plVolume').value); });
+  $('plSeek').addEventListener('change', () => {
+    const v = Number($('plSeek').value);
+    if (cast.active()) cast.seek(v); else { cancelFade(); deck.currentTime = v; }
+    seeking = false;
+  });
+  $('plVolume').addEventListener('input', () => { A.volume = Number($('plVolume').value); B.volume = A.volume; });
   $('plShuffle').addEventListener('click', () => { shuffle = !shuffle; $('plShuffle').classList.toggle('on', shuffle); $('plShuffle').setAttribute('aria-pressed', String(shuffle)); });
   $('plRepeat').addEventListener('click', () => { repeat = !repeat; $('plRepeat').classList.toggle('on', repeat); $('plRepeat').setAttribute('aria-pressed', String(repeat)); });
   $('plExpand').addEventListener('click', () => $('playerVideoWrap').classList.toggle('hidden'));
-  $('plFull').addEventListener('click', () => { if (media.requestFullscreen) media.requestFullscreen().catch(() => {}); });
+  $('plFull').addEventListener('click', () => { if (A.requestFullscreen) A.requestFullscreen().catch(() => {}); });
+  const panel = (id, btn) => {
+    const open = $(id).classList.contains('hidden');
+    ['plLyrics', 'plEq'].forEach((p) => $(p).classList.add('hidden'));
+    $('plLyricsBtn').setAttribute('aria-pressed', 'false');
+    $('plEqBtn').setAttribute('aria-pressed', 'false');
+    $(id).classList.toggle('hidden', !open);
+    $(btn).setAttribute('aria-pressed', String(open));
+    if (open && id === 'plLyrics') lyrics.at(deck.currentTime, true);
+  };
+  $('plLyricsBtn').addEventListener('click', () => panel('plLyrics', 'plLyricsBtn'));
+  $('plEqBtn').addEventListener('click', () => { graph(); panel('plEq', 'plEqBtn'); });
+  $('plLyricsClose').addEventListener('click', () => panel('plLyrics', 'plLyricsBtn'));
+  $('plEqClose').addEventListener('click', () => panel('plEq', 'plEqBtn'));
   if ('mediaSession' in navigator) {
     // The keyboard's media keys and Windows' media overlay.
-    navigator.mediaSession.setActionHandler('play', () => media.play().catch(() => {}));
-    navigator.mediaSession.setActionHandler('pause', () => media.pause());
+    navigator.mediaSession.setActionHandler('play', () => toggle());
+    navigator.mediaSession.setActionHandler('pause', () => toggle());
     navigator.mediaSession.setActionHandler('previoustrack', () => step(-1));
     navigator.mediaSession.setActionHandler('nexttrack', () => step(1));
+  }
+
+  // ---- synced lyrics ----
+  const lyrics = (() => {
+    let lines = [];
+    let at = -1;
+    let forId = null;
+    async function load(f) {
+      lines = [];
+      at = -1;
+      forId = f.id;
+      const box = $('plLyricsLines');
+      box.innerHTML = '';
+      $('plLyricsEmpty').classList.add('hidden');
+      if (f.kind === 'video') { $('plLyricsEmpty').classList.remove('hidden'); return; }
+      let res = null;
+      try { res = await api(`/api/library/lyrics?id=${f.id}`); } catch { /* none */ }
+      if (forId !== f.id) return;
+      if (res && res.synced && res.synced.length) {
+        lines = res.synced;
+        lines.forEach((l, i) => {
+          const li = document.createElement('li');
+          li.textContent = l.text || '♪';
+          li.dataset.i = String(i);
+          li.addEventListener('click', () => { if (cast.active()) cast.seek(l.t); else deck.currentTime = l.t; });
+          box.appendChild(li);
+        });
+      } else if (res && res.plain) {
+        for (const text of res.plain.split('\n')) {
+          const li = document.createElement('li');
+          li.className = 'plain';
+          li.textContent = text || ' ';
+          box.appendChild(li);
+        }
+      } else {
+        $('plLyricsEmpty').classList.remove('hidden');
+      }
+    }
+    function lineAt(sec) {
+      let lo = 0; let hi = lines.length - 1; let found = -1;
+      while (lo <= hi) { const mid = (lo + hi) >> 1; if (lines[mid].t <= sec + 0.15) { found = mid; lo = mid + 1; } else hi = mid - 1; }
+      return found;
+    }
+    return {
+      load,
+      at(sec, force = false) {
+        if (!lines.length) return;
+        const i = lineAt(sec);
+        if (i === at && !force) return;
+        at = i;
+        const box = $('plLyricsLines');
+        box.querySelectorAll('.on').forEach((el) => el.classList.remove('on'));
+        const el = i >= 0 ? box.children[i] : null;
+        if (el) {
+          el.classList.add('on');
+          if (!$('plLyrics').classList.contains('hidden')) el.scrollIntoView({ block: 'center', behavior: prefsApi.get().reduceMotion ? 'auto' : 'smooth' });
+        }
+      },
+    };
+  })();
+
+  // ---- on the TV (Chromecast / DLNA) ----
+  const cast = (() => {
+    let state = { casting: false };
+    let device = null;
+    let paused = false;
+    function render() {
+      $('plCastBar').classList.toggle('hidden', !state.casting);
+      if (state.casting) $('plCastText').textContent = t('En «{d}»: {t}', { d: state.device, t: state.title });
+      $('plCastBtn').classList.toggle('on', state.casting);
+      $('plPlay').classList.toggle('playing', state.casting ? !paused : !deck.paused);
+    }
+    async function playFile(f) {
+      deck.pause();
+      try {
+        state = await postJson('/api/cast/play', { device, id: f.id });
+        paused = false;
+      } catch (err) { showToast(err.message); }
+      render();
+    }
+    async function control(action, value) {
+      try { state = await postJson('/api/cast/control', { action, value }); } catch (err) { showToast(err.message); }
+      render();
+    }
+    async function search() {
+      const ul = $('castList');
+      ul.innerHTML = '';
+      $('castHint').textContent = t('Buscando teles, Chromecast y altavoces DLNA en tu WiFi…');
+      try {
+        const { devices } = await postJson('/api/cast/devices', {});
+        $('castHint').textContent = devices.length ? t('Elige dónde verlo o escucharlo:') : t('No se ha encontrado ninguna. Comprueba que la tele esté encendida y en la misma WiFi.');
+        for (const d of devices) {
+          const li = document.createElement('li');
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'cast-device';
+          b.innerHTML = '<strong></strong><small></small>';
+          b.querySelector('strong').textContent = d.name;
+          b.querySelector('small').textContent = d.kind === 'cast' ? 'Chromecast' : 'DLNA';
+          b.addEventListener('click', async () => {
+            device = d.id;
+            $('castModal').classList.add('hidden');
+            const f = cur();
+            if (f) await playFile(f);
+          });
+          li.appendChild(b);
+          ul.appendChild(li);
+        }
+      } catch (err) { $('castHint').textContent = err.message; }
+    }
+    $('plCastBtn').addEventListener('click', () => {
+      if (!cur()) return;
+      $('castModal').classList.remove('hidden');
+      $('castClose').focus();
+      search();
+    });
+    $('castRefresh').addEventListener('click', search);
+    $('castClose').addEventListener('click', () => $('castModal').classList.add('hidden'));
+    $('castModal').addEventListener('click', (e) => { if (e.target === $('castModal')) $('castModal').classList.add('hidden'); });
+    $('plCastStop').addEventListener('click', async () => { await control('stop'); device = null; });
+    return {
+      active: () => state.casting && Boolean(device),
+      playFile,
+      toggle: () => { paused = !paused; control(paused ? 'pause' : 'resume'); },
+      seek: (v) => control('seek', v),
+    };
+  })();
+
+  // ---- mini player window (desktop) ----
+  let pushTimer = null;
+  function pushState() {
+    if (!desktopApi || !desktopApi.playerState) return;
+    const f = cur();
+    desktopApi.playerState({
+      title: f ? f.name.replace(/\.[^.]+$/, '') : '', sub: f ? f.folder || '' : '',
+      playing: f ? !deck.paused : false, time: deck.currentTime || 0, duration: Number.isFinite(deck.duration) ? deck.duration : 0,
+      cover: f && f.kind !== 'video' ? library.cover(f) : null,
+    });
+  }
+  function pushStateSoon() { if (!pushTimer) pushTimer = setTimeout(() => { pushTimer = null; pushState(); }, 700); }
+  if (desktopApi && desktopApi.openMini) {
+    $('plMiniBtn').addEventListener('click', () => { desktopApi.openMini(); setTimeout(pushState, 800); });
+    desktopApi.onPlayerCommand(({ cmd, value }) => {
+      if (cmd === 'toggle') toggle();
+      else if (cmd === 'next') step(1);
+      else if (cmd === 'prev') step(-1);
+      else if (cmd === 'seek' && Number.isFinite(value) && !cast.active()) deck.currentTime = value;
+      pushState();
+    });
+  } else {
+    $('plMiniBtn').classList.add('hidden');
+    $('plCastBtn').classList.add('hidden');
   }
   return { play, current: cur };
 })();
@@ -3456,6 +4500,7 @@ function getHistory() {
 function addToHistory(job) {
   try {
     const history = getHistory().filter((h) => h.id !== job.id);
+    const meta = job.meta || {};
     history.unshift({
       id: job.id,
       name: (job.files || []).length === 1 ? job.fileName : job.title,
@@ -3465,6 +4510,9 @@ function addToHistory(job) {
       files: (job.files || []).length,
       source: job.source || null,
       request: job.request || null,
+      // For the statistics.
+      size: Number(job.fileSize) || 0,
+      who: String(meta.artist || meta.channel || meta.uploader || '').slice(0, 120),
     });
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_MAX)));
   } catch { /* localStorage unavailable */ }
@@ -3620,6 +4668,307 @@ function shakeInput() {
   setTimeout(() => { wrapper.style.animation = ''; }, 400);
 }
 
+// === Whisper status (engine + models), from the server and the desktop app ===
+const whisperStatus = (() => {
+  let st = { available: false, engine: false, models: [] };
+  const listeners = [];
+  return {
+    get: () => st,
+    fromServer(s) { st = { ...st, ...s }; listeners.forEach((fn) => fn(st)); },
+    on(fn) { listeners.push(fn); fn(st); },
+  };
+})();
+whisperStatus.on((s) => editor.setCaptionsAvailable(s.available));
+
+// === Convertir → Subtítulos ===
+const transcribeUi = (() => {
+  let files = [];
+  const MODEL_LABELS = { tiny: 'Rápida (menos precisa)', base: 'Normal', small: 'Precisa (más lenta)' };
+  function refresh() {
+    const s = whisperStatus.get();
+    $('whisperMissing').classList.toggle('hidden', s.available);
+    $('btnWhisperGo').classList.toggle('hidden', !desktopApi);
+    $('whisperMissingText').textContent = desktopApi
+      ? t('Se instala una vez (unos 150 MB) y luego todo se hace en tu equipo, sin Internet.')
+      : t('Los subtítulos automáticos están en la app de escritorio.');
+    const sel = $('transModel');
+    const cur = sel.value;
+    sel.innerHTML = '';
+    for (const m of (s.models.length ? s.models : ['base'])) {
+      const o = document.createElement('option');
+      o.value = m;
+      o.textContent = t(MODEL_LABELS[m] || m);
+      sel.appendChild(o);
+    }
+    if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+    else if (s.models.includes('base')) sel.value = 'base';
+    $('btnTranscribe').disabled = !s.available;
+  }
+  function setFiles(list) {
+    files = list.slice(0, 20);
+    renderFileList($('transList'), $('transDropText'), files, 'Arrastra un vídeo o un audio');
+    $('btnTranscribe').textContent = files.length > 1 ? t('Hacer subtítulos de {n} archivos', { n: files.length }) : t('Hacer subtítulos');
+  }
+  fileZone($('transDrop'), $('transInput'), setFiles);
+  $('transOutput').addEventListener('change', () => $('transStyleRow').classList.toggle('hidden', !['burn', 'both'].includes($('transOutput').value)));
+  $('btnWhisperGo').addEventListener('click', () => setView('set-convert'));
+  $('btnTranscribe').addEventListener('click', async () => {
+    const status = $('transStatus');
+    if (!files.length) { setStatusEl(status, t('Elige uno o varios archivos primero'), 'error'); return; }
+    const ok = await uploadEach('/api/jobs/transcribe', files, {
+      lang: $('transLang').value, output: $('transOutput').value, style: $('transStyle').value, model: $('transModel').value, translate: String($('transTranslate').checked),
+    }, { button: $('btnTranscribe'), labelEl: $('btnTranscribe'), statusEl: status });
+    if (ok) setFiles([]);
+  });
+  whisperStatus.on(refresh);
+  return { refresh, setFiles };
+})();
+
+// === Ajustes → Conversión: the Whisper engine (desktop) ===
+if (desktopApi && desktopApi.getWhisper) {
+  const SIZES = { tiny: '78 MB', base: '148 MB', small: '488 MB' };
+  const NAMES = { tiny: 'Rápido', base: 'Normal (recomendado)', small: 'Preciso' };
+  const show = (s) => {
+    if (!s) return;
+    whisperStatus.fromServer({ available: s.available, engine: s.engine, models: s.models });
+    $('whisperLabel').textContent = s.busy ? t('Descargando…')
+      : s.error ? t('No se pudo instalar: {e}', { e: ts(s.error) })
+        : s.available ? t('Instalado. Puedes usarlo en Convertir → Subtítulos y en el Editor.') : t('No instalado. Elige un modelo para descargarlo.');
+    $('whisperLabel').classList.toggle('error', Boolean(s.error));
+    $('whisperProgress').classList.toggle('hidden', !s.busy);
+    $('whisperFill').style.width = `${s.progress || 0}%`;
+    $('whisperPct').textContent = `${s.progress || 0}%`;
+    const box = $('whisperModels');
+    box.innerHTML = '';
+    for (const m of ['tiny', 'base', 'small']) {
+      const have = s.models.includes(m);
+      const item = document.createElement('div');
+      item.className = 'whisper-model';
+      item.innerHTML = '<span class="row-label"></span><small></small>';
+      item.querySelector('.row-label').textContent = t(NAMES[m]);
+      item.querySelector('small').textContent = have ? t('instalado') : SIZES[m];
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = have ? 'link-btn' : 'btn';
+      b.textContent = have ? t('Quitar') : t('Descargar');
+      b.disabled = Boolean(s.busy);
+      b.addEventListener('click', async () => {
+        if (have) show(await desktopApi.removeWhisper(m));
+        else desktopApi.installWhisper(m);
+      });
+      item.appendChild(b);
+      box.appendChild(item);
+    }
+  };
+  desktopApi.getWhisper().then(show);
+  desktopApi.onWhisper(show);
+}
+
+// === Ajustes → Conversión: watch folder (desktop) ===
+if (desktopApi && desktopApi.chooseWatchFolder) {
+  const status = (msg, type) => setStatusEl($('watchStatus'), msg, type);
+  const sel = $('watchPreset');
+  // The converter's own presets (audio and video), each a set of fields.
+  const choices = [];
+  for (const kind of ['audio', 'video']) {
+    for (const p of PRESETS[kind]) {
+      if (!p.set) continue;
+      const f = p.set;
+      const fields = kind === 'audio'
+        ? { targetFormat: f.format, audioBitrate: f.bitrate, sampleRate: f.sampleRate, channels: f.channels, normalize: String(f.normalize) }
+        : { targetFormat: f.format, resolution: f.resolution, quality: f.quality, fps: f.fps };
+      choices.push({ id: `${kind}:${p.id}`, label: `${kind === 'audio' ? t('Audio') : t('Vídeo')} · ${t(p.label)}`, fields });
+    }
+  }
+  sel.innerHTML = choices.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}</option>`).join('');
+  const fieldsOf = () => (choices.find((c) => c.id === sel.value) || choices[0]).fields;
+  const showWatch = (w) => {
+    if (!w) return;
+    $('watchEnabled').checked = w.enabled;
+    $('watchDirLabel').textContent = w.dir || t('Ninguna');
+    $('watchMove').checked = w.moveOriginals;
+    const match = w.fields && choices.find((c) => JSON.stringify(c.fields) === JSON.stringify(w.fields));
+    if (match) sel.value = match.id;
+    if (w.error) status(t(w.error), 'error');
+  };
+  const send = async (patch) => {
+    try { showWatch(await postJson('/api/watch', { fields: fieldsOf(), ...patch })); status('', ''); } catch (err) { status(err.message, 'error'); }
+  };
+  document.addEventListener('tg:view', (e) => { if (e.detail === 'set-convert') api('/api/watch').then(showWatch, () => {}); });
+  $('btnWatchDir').addEventListener('click', async () => {
+    const r = await desktopApi.chooseWatchFolder();
+    if (r && r.dir) { await new Promise((ok) => setTimeout(ok, 300)); api('/api/watch').then(showWatch, () => {}); }
+  });
+  $('watchEnabled').addEventListener('change', (e) => {
+    if (e.target.checked && $('watchDirLabel').textContent === t('Ninguna')) { e.target.checked = false; status(t('Elige primero la carpeta.'), 'error'); return; }
+    send({ enabled: e.target.checked });
+  });
+  sel.addEventListener('change', () => send({}));
+  $('watchMove').addEventListener('change', (e) => send({ moveOriginals: e.target.checked }));
+}
+
+// === Ajustes → Descargas: repeats, disk space ===
+$('prefWarnDupes').checked = prefsApi.get().warnDuplicates;
+$('prefWarnDupes').addEventListener('change', (e) => prefsApi.set({ warnDuplicates: e.target.checked }));
+$('btnForgetSeen').addEventListener('click', async () => {
+  const ok = await ask({ title: t('¿Olvidar lo que ya has descargado?'), text: t('TubeGrab dejará de avisarte de lo que ya tienes. Tus archivos y el historial no se tocan.'),
+    buttons: [{ label: t('Cancelar'), value: null }, { label: t('Olvidarlo'), value: true, primary: true }] });
+  if (ok) { try { await api('/api/seen', { method: 'DELETE' }); showToast(t('Hecho')); } catch (err) { showToast(err.message); } }
+});
+if (desktopApi && desktopApi.getSpace) {
+  const showSpace = (s) => {
+    if (!s) return;
+    $('spaceLabel').textContent = [s.freeGb !== null ? t('{n} GB libres en el disco', { n: String(s.freeGb).replace('.', ',') }) : '', t('la carpeta ocupa {n} GB', { n: String(s.folderGb).replace('.', ',') })].filter(Boolean).join(' · ');
+    $('spaceLabel').classList.toggle('error', Boolean(s.lowFree || s.overFolder));
+    $('spaceMinFree').value = String(s.minFreeGb);
+    $('spaceMaxFolder').value = String(s.maxFolderGb);
+    $('spacePolicy').value = s.policy;
+  };
+  document.addEventListener('tg:view', (e) => { if (e.detail === 'set-downloads') desktopApi.getSpace().then(showSpace); });
+  for (const id of ['spaceMinFree', 'spaceMaxFolder', 'spacePolicy']) {
+    $(id).addEventListener('change', async () => showSpace(await desktopApi.setSpace({ minFreeGb: Number($('spaceMinFree').value), maxFolderGb: Number($('spaceMaxFolder').value), policy: $('spacePolicy').value })));
+  }
+  desktopApi.onSpace((s) => {
+    showSpace(s);
+    showToast(s.removed ? t('Se han movido {n} archivos antiguos a la papelera para no pasar de {g} GB.', { n: s.removed, g: s.maxFolderGb })
+      : s.lowFree ? t('Queda poco espacio: {n} GB libres.', { n: String(s.freeGb).replace('.', ',') }) : t('Tu carpeta de descargas ya ocupa {n} GB.', { n: String(s.folderGb).replace('.', ',') }));
+  });
+}
+
+// === Ajustes → Sistema: the "tubegrab" command (desktop) ===
+if (desktopApi && desktopApi.getCli) {
+  const showCli = (c) => {
+    if (!c) return;
+    $('cliRow').classList.toggle('hidden', !c.available);
+    $('optCli').checked = c.installed;
+    $('cliNote').textContent = c.portable
+      ? t('Con la versión portable, el comando manda el enlace a la app abierta (que lo descarga con tus ajustes). Con la instalada, verás el progreso en la terminal.')
+      : t('Escribe «tubegrab --help» para ver todas las opciones.');
+    if (c.error) setStatusEl($('cliStatus'), t('No se pudo instalar el comando: {e}', { e: c.error }), 'error');
+  };
+  desktopApi.getCli().then(showCli);
+  $('optCli').addEventListener('change', async (e) => {
+    const c = await desktopApi.installCli(e.target.checked);
+    showCli(c);
+    if (c && !c.error) setStatusEl($('cliStatus'), e.target.checked ? t('Listo: abre una terminal nueva y escribe «tubegrab --help».') : t('Comando quitado.'), 'success');
+  });
+}
+
+// === Estadísticas ===
+const stats = (() => {
+  const MONTHS = 12;
+  const tip = document.createElement('div');
+  tip.className = 'stat-tip hidden';
+  tip.setAttribute('role', 'tooltip');
+  document.body.appendChild(tip);
+
+  function tiles(list) {
+    const box = $('statTiles');
+    box.innerHTML = '';
+    for (const [label, value, sub] of list) {
+      const el = document.createElement('div');
+      el.className = 'stat-tile';
+      el.innerHTML = '<span class="stat-label"></span><span class="stat-value"></span><span class="stat-sub"></span>';
+      el.querySelector('.stat-label').textContent = label;
+      el.querySelector('.stat-value').textContent = value;
+      el.querySelector('.stat-sub').textContent = sub || '';
+      box.appendChild(el);
+    }
+  }
+  function rank(ol, rows, empty) {
+    ol.innerHTML = '';
+    if (!rows.length) { const li = document.createElement('li'); li.className = 'stat-empty'; li.textContent = empty; ol.appendChild(li); return; }
+    const max = rows[0][1];
+    for (const [name, n, sub] of rows) {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="stat-name"></span><span class="stat-bar"><span></span></span><span class="stat-n"></span>';
+      li.querySelector('.stat-name').textContent = name;
+      li.querySelector('.stat-name').title = name;
+      li.querySelector('.stat-bar span').style.width = `${Math.max(3, (n / max) * 100)}%`;
+      li.querySelector('.stat-n').textContent = sub || String(n);
+      ol.appendChild(li);
+    }
+  }
+  function chart(history) {
+    const box = $('statMonths');
+    box.innerHTML = '';
+    const now = new Date();
+    const months = [];
+    for (let i = MONTHS - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString(prefsApi.get().lang === 'en' ? 'en-GB' : 'es-ES', { month: 'short' }), year: d.getFullYear(), dl: 0, cv: 0 });
+    }
+    const byKey = new Map(months.map((m) => [m.key, m]));
+    for (const h of history) {
+      const d = new Date(h.date);
+      const m = byKey.get(`${d.getFullYear()}-${d.getMonth()}`);
+      if (m) m[h.type === 'convert' ? 'cv' : 'dl'] += 1;
+    }
+    const max = Math.max(1, ...months.map((m) => Math.max(m.dl, m.cv)));
+    for (const m of months) {
+      const col = document.createElement('div');
+      col.className = 'stat-col';
+      const bars = document.createElement('div');
+      bars.className = 'stat-bars';
+      for (const [k, cls, name] of [['dl', 'b-dl', t('Descargas')], ['cv', 'b-cv', t('Conversiones')]]) {
+        const b = document.createElement('span');
+        b.className = `stat-b ${cls}`;
+        b.style.height = `${(m[k] / max) * 100}%`;
+        b.setAttribute('aria-label', `${m.label} ${m.year}: ${m[k]} ${name}`);
+        b.tabIndex = 0;
+        const showTip = () => {
+          tip.textContent = `${m.label} ${m.year} · ${name}: ${m[k]}`;
+          tip.classList.remove('hidden');
+          const r = b.getBoundingClientRect();
+          tip.style.left = `${Math.min(window.innerWidth - tip.offsetWidth - 8, Math.max(8, r.left + r.width / 2 - tip.offsetWidth / 2))}px`;
+          tip.style.top = `${Math.max(8, r.top - tip.offsetHeight - 8)}px`;
+        };
+        b.addEventListener('pointerenter', showTip);
+        b.addEventListener('focus', showTip);
+        b.addEventListener('pointerleave', () => tip.classList.add('hidden'));
+        b.addEventListener('blur', () => tip.classList.add('hidden'));
+        bars.appendChild(b);
+      }
+      const label = document.createElement('span');
+      label.className = 'stat-month';
+      label.textContent = m.label;
+      col.append(bars, label);
+      box.appendChild(col);
+    }
+    $('statMonthsNote').textContent = t('máximo: {n} en un mes', { n: max });
+  }
+  async function render() {
+    const history = getHistory();
+    const dls = history.filter((h) => h.type !== 'convert');
+    const cvs = history.filter((h) => h.type === 'convert');
+    const bytes = history.reduce((a, h) => a + (Number(h.size) || 0), 0);
+    const list = [
+      [t('Descargas'), String(dls.length), t('en tu historial')],
+      [t('Conversiones'), String(cvs.length), ''],
+      [t('Guardado'), bytes ? formatBytes(bytes) : '—', t('desde esta versión')],
+    ];
+    let lib = [];
+    if (desktopApi) {
+      try { lib = (await api('/api/library')).files || []; } catch { lib = []; }
+      const size = lib.reduce((a, f) => a + f.size, 0);
+      list.push([t('Biblioteca'), t('{n} archivos', { n: lib.length }), formatBytes(size)]);
+    }
+    tiles(list);
+    chart(history);
+    const who = new Map();
+    for (const h of dls) {
+      const k = (h.who || '').trim();
+      if (k) who.set(k, (who.get(k) || 0) + 1);
+    }
+    rank($('statTop'), [...who].sort((a, b) => b[1] - a[1]).slice(0, 10), t('Aún no hay datos: aparecerán con tus próximas descargas.'));
+    if (desktopApi) {
+      const played = lib.filter((f) => f.plays > 0).sort((a, b) => b.plays - a.plays).slice(0, 10);
+      rank($('statPlayed'), played.map((f) => [f.name.replace(/\.[^.]+$/, ''), f.plays, f.plays === 1 ? t('1 vez') : t('{n} veces', { n: f.plays })]), t('Escucha algo en la Biblioteca y aparecerá aquí.'));
+    }
+  }
+  return { render };
+})();
+
 // === Init ===
 renderConvertFormats();
 refreshConvertUI();
@@ -3640,6 +4989,29 @@ if (desktopApi && desktopApi.onQuickDownload) {
       showToast(err.message);
     }
   });
+  // From the command line ("tubegrab <link> --mp3"): queued with those choices.
+  if (desktopApi.onCliDownload) {
+    desktopApi.onCliDownload(async (req) => {
+      const p = req.profile ? profilesUi.byName(req.profile) : null;
+      const mode = req.mode || (p ? p.options.mode : downloadMode);
+      const opts = p ? { ...p.options } : downloadOptions(mode);
+      if (!p) {
+        opts.mode = mode;
+        if (req.format) opts.audioFormat = req.format;
+        if (req.quality) opts.quality = req.quality;
+        if (req.container) opts.container = req.container;
+      }
+      try {
+        await postJson('/api/jobs/download', { ...opts, urls: [req.url] });
+        if (p && p.both) await postJson('/api/jobs/download', { ...opts, mode: opts.mode === 'audio' ? 'video' : 'audio', urls: [req.url] });
+        if (typeof Notification !== 'undefined') {
+          try { new Notification(t('Añadido a la cola'), { body: req.url, silent: true }); } catch { /* ignore */ }
+        }
+      } catch (err) {
+        showToast(err.message);
+      }
+    });
+  }
   desktopApi.onTrayAction(({ action }) => {
     if (action === 'pause') postJson('/api/jobs/pause-all', {}).catch(() => {});
     if (action === 'resume') postJson('/api/jobs/pause-all', { resume: true }).catch(() => {});
@@ -3799,6 +5171,11 @@ const backup = (() => {
 
   async function build() {
     const data = { format: FORMAT, version: 1, exportedAt: new Date().toISOString(), prefs: prefsApi.get(), history: getHistory() };
+    try {
+      const p = await api('/api/profiles');
+      data.profiles = p.profiles.map(({ name, options, both }) => ({ name, options, both }));
+      data.rules = p.rules.map((r) => ({ match: r.match, folder: r.folder, profile: (p.profiles.find((x) => x.id === r.profile) || {}).name || '' }));
+    } catch { /* none */ }
     if (desktopApi) {
       try {
         const res = await api('/api/subscriptions');
@@ -3882,6 +5259,23 @@ const backup = (() => {
         } catch { /* already subscribed, or no longer valid */ }
       }
     }
+    // Profiles (by name: the ones you already have are kept) and their rules.
+    if (Array.isArray(data.profiles)) {
+      const mine = profilesUi.data.profiles.map((p) => p.name.toLowerCase());
+      for (const p of data.profiles.slice(0, 50)) {
+        if (!p || typeof p.name !== 'string' || mine.includes(p.name.toLowerCase())) continue;
+        try { await postJson('/api/profiles', { name: p.name, options: p.options && typeof p.options === 'object' ? p.options : {}, both: p.both === true }); } catch { /* not valid */ }
+      }
+      await profilesUi.load();
+    }
+    if (Array.isArray(data.rules)) {
+      for (const r of data.rules.slice(0, 100)) {
+        if (!r || typeof r.match !== 'string') continue;
+        const prof = typeof r.profile === 'string' ? profilesUi.byName(r.profile) : null;
+        try { await postJson('/api/rules', { match: r.match, folder: typeof r.folder === 'string' ? r.folder : '', profile: prof ? prof.id : '' }); } catch { /* not valid */ }
+      }
+      await profilesUi.load();
+    }
     if (desktopApi && data.settings && typeof data.settings === 'object') {
       const s = data.settings;
       desktopApi.setOptions({ closeToTray: s.closeToTray, clipboardWatch: s.clipboardWatch, organize: s.organize });
@@ -3909,6 +5303,7 @@ const backup = (() => {
 })();
 
 restoreLastOptions();
+profilesUi.load();
 setView(lastView());
 tour.firstRun();
 renderHistory();

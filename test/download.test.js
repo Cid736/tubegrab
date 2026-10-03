@@ -41,6 +41,7 @@ test('parseDownloadOptions falls back to safe defaults for unknown values', () =
     mode: 'audio', audioFormat: 'mp3', audioBitrate: '192', quality: '1080', container: 'mp4',
     metadata: true, subtitles: false, subLangs: 'es,en', subMode: 'embed', sponsorblock: false, playlist: false,
     music: false, lyrics: false, nameTemplate: null, chapters: false, sectionStart: null, sectionEnd: null, rateLimit: null,
+    normalize: false, bpm: false, live: false, nfo: false,
   });
   assert.equal(download.parseDownloadOptions({ mode: 'audio', lyrics: 'true' }).lyrics, false, 'only a real true');
   assert.equal(download.parseDownloadOptions({ mode: 'video', lyrics: true }).lyrics, false, 'audio only');
