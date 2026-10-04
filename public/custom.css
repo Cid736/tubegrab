@@ -179,3 +179,16 @@
 .row > .segmented-small.picker { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; }
 [data-ui="windows"] .nav-edit { background: var(--w-card); border: 1px solid var(--w-stroke); border-radius: 6px; }
 :root[data-navicons="color"] .nav-item[data-view="listen"] { --ic: #1db954; }
+
+/* Ajustes → Apariencia: the advanced options, folded away until wanted. */
+.more-look { margin-top: 22px; border-radius: 12px; }
+.more-look > summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; cursor: pointer;
+  background: var(--group); box-shadow: inset 0 0 0 0.5px var(--hairline); color: var(--text); }
+[data-ui="windows"] .more-look > summary { background: var(--w-card); border: 1px solid var(--w-stroke); box-shadow: none; border-radius: 6px; }
+.more-look > summary::-webkit-details-marker { display: none; }
+.more-look > summary:hover { background: var(--hover); }
+.more-look > summary:focus-visible { outline: none; box-shadow: var(--focus); }
+.more-look .chev { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--text-2); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.2s ease; }
+.more-look[open] > summary .chev { transform: rotate(90deg); }
+.more-look-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.more-look-text small { font-size: 12px; color: var(--text-2); }

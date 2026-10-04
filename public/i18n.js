@@ -763,6 +763,11 @@
     'YouTube no dio el sonido de este vídeo.': "YouTube didn’t give this video’s sound.",
     'YouTube no dejó escuchar este vídeo ahora mismo.': "YouTube didn’t let this video play right now.",
     'Vídeo no válido.': "Invalid video.",
+    // --- v3.7.4 ---
+    'No se encuentran las canciones en YouTube. ¿Hay conexión a Internet?': "The songs can't be found on YouTube. Is there an Internet connection?",
+    'No se puede escuchar sin descargar ahora mismo.': "Listening without downloading isn't possible right now.",
+    'Más opciones de aspecto': 'More appearance options',
+    'Tipo de letra, espaciado, esquinas, menú lateral, barra superior y página de inicio': 'Typeface, spacing, corners, side menu, top bar and start page',
     // --- v3.7.2 (shortcuts) ---
     'solo en TubeGrab': 'only in TubeGrab',
     'Una tecla que escribe algo (letra, número, espacio, flecha) solo funciona con TubeGrab delante, para no quitártela en otros programas. Para que funcione siempre, añade Ctrl o Alt, o usa F1–F12 o el teclado numérico.': 'A key that types something (letter, number, space, arrow) only works with TubeGrab in front, so other programs keep it. To make it work everywhere, add Ctrl or Alt, or use F1–F12 or the numeric keypad.',

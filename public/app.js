@@ -478,6 +478,9 @@ const settingsSearch = (() => {
     input.value = '';
     list.classList.add('hidden');
     setView(item.view);
+    // Inside a closed "more options" box: open it first.
+    const box = item.row.closest('details');
+    if (box) box.open = true;
     requestAnimationFrame(() => {
       item.row.scrollIntoView({ block: 'center', behavior: 'smooth' });
       item.row.classList.add('flash');
@@ -4601,7 +4604,7 @@ const library = (() => {
     render();
   });
   try {
-    if (localStorage.getItem('tubegrab_libview') === 'grid') { viewMode = 'grid'; $('libView').querySelectorAll('[data-view]').forEach((x) => x.classList.toggle('active', x.dataset.view === 'grid')); }
+    if (localStorage.getItem('tubegrab_libview') === 'grid') { viewMode = 'grid'; $('libView').querySelectorAll('[data-view]').forEach((x) => { x.classList.toggle('active', x.dataset.view === 'grid'); x.setAttribute('aria-checked', String(x.dataset.view === 'grid')); }); }
   } catch { /* storage unavailable */ }
   // Many songs to the phone at once: one QR for all of them.
   $('libSendAll').addEventListener('click', () => { const shown = visible(); shareManyToPhone(shown, t('{n} archivos de TubeGrab', { n: shown.length })); });
@@ -4873,6 +4876,7 @@ const player = (() => {
   // ---- radio: similar songs from your library, once the list runs out ----
   // A song from YouTube: YouTube's own mix of similar songs (like a music app's radio).
   let radioBusy = false;
+  let findFails = 0; // songs by name not found on YouTube, in a row
   async function radioFromYouTube() {
     const f = cur();
     if (!isStream(f) || radioBusy) return false;
@@ -4953,7 +4957,9 @@ const player = (() => {
       show(f);
       findOnYouTube(f).then((ok) => {
         if (cur() !== f) return;
-        if (ok) { start(); return; }
+        if (ok) { findFails = 0; start(); return; }
+        // Three in a row: it's the connection, not the songs — stop there.
+        if (++findFails >= 3) { findFails = 0; showToast(t('No se encuentran las canciones en YouTube. ¿Hay conexión a Internet?')); return; }
         showToast(t('No se encontró «{t}» en YouTube; paso a la siguiente.', { t: nameOf(f) }));
         if (index < list.length - 1) step(1);
       });
@@ -5083,9 +5089,14 @@ const player = (() => {
       if (m !== deck || !cur() || !m.getAttribute('src')) return;
       const f = cur();
       if (!isStream(f)) { showToast(t('No se puede reproducir este archivo aquí.')); return; }
-      // One song YouTube won't play (private, age limit…): on to the next one.
-      showToast(t('No se puede escuchar «{t}» desde YouTube; paso a la siguiente.', { t: nameOf(f) }));
-      if (index < list.length - 1) setTimeout(() => { if (cur() === f) step(1); }, 1200);
+      // Why? If it's not this song (a proxy, the engine), stop instead of
+      // running through the whole list; one song YouTube won't play: the next.
+      fetch(`/api/stream/info?id=${f.yt}`, { headers: { 'x-client-id': CLIENT_ID } }).then(async (r) => {
+        if (cur() !== f) return;
+        if (r.status === 409 || r.status === 404) { showToast(ts(((await r.json().catch(() => ({}))).error) || t('No se puede escuchar sin descargar ahora mismo.'))); return; }
+        showToast(t('No se puede escuchar «{t}» desde YouTube; paso a la siguiente.', { t: nameOf(f) }));
+        if (index < list.length - 1) setTimeout(() => { if (cur() === f) step(1); }, 1200);
+      }, () => showToast(t('No se puede escuchar sin descargar ahora mismo.')));
     });
   }
   const toggle = () => {

@@ -1231,8 +1231,8 @@
             <label class="lib-group"><input type="checkbox" id="libGroup"> Agrupar por carpeta</label>
             <label class="lib-group"><input type="checkbox" id="libInLyrics"> Buscar en las letras</label>
             <div class="segmented segmented-small" id="libView" role="radiogroup" aria-label="Vista">
-              <button class="kind-btn active" data-view="list" type="button" role="radio" title="Lista" aria-label="Lista">☰</button>
-              <button class="kind-btn" data-view="grid" type="button" role="radio" title="Carátulas" aria-label="Carátulas">▦</button>
+              <button class="kind-btn active" data-view="list" type="button" role="radio" aria-checked="true" title="Lista" aria-label="Lista">☰</button>
+              <button class="kind-btn" data-view="grid" type="button" role="radio" aria-checked="false" title="Carátulas" aria-label="Carátulas">▦</button>
             </div>
             <button class="link-btn" id="libSendAll" type="button">Enviar lo que se ve al móvil</button>
             <button class="link-btn" id="libRefresh" type="button">Actualizar</button>
@@ -1387,87 +1387,93 @@
             </div>
           </div>
 
-          <div class="section-header"><h2>Texto y forma</h2></div>
-          <div class="group">
-            <label class="row"><span class="row-label">Tipo de letra</span>
-              <select data-pref="font" aria-label="Tipo de letra">
-                <option value="system">Del sistema</option>
-                <option value="humanist">Ancha y clara</option>
-                <option value="serif">Clásica (con remates)</option>
-                <option value="mono">Monoespaciada</option>
-                <option value="condensed">Estrecha</option>
-              </select>
-            </label>
-            <label class="row switch"><span class="row-label">Texto más grueso</span><input type="checkbox" data-pref="bold"><span class="switch-ui"></span></label>
-            <div class="row"><span class="row-label">Espaciado <small>cuánto sitio ocupa cada fila</small></span>
-              <div class="segmented segmented-small picker" data-pref="density" role="radiogroup" aria-label="Espaciado">
-                <button data-value="compact" type="button" role="radio">Compacto</button>
-                <button data-value="normal" type="button" role="radio">Normal</button>
-                <button data-value="comfy" type="button" role="radio">Amplio</button>
+          <details class="more-look" id="moreLook">
+            <summary>
+              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+              <span class="more-look-text"><strong>Más opciones de aspecto</strong><small>Tipo de letra, espaciado, esquinas, menú lateral, barra superior y página de inicio</small></span>
+            </summary>
+            <div class="section-header"><h2>Texto y forma</h2></div>
+            <div class="group">
+              <label class="row"><span class="row-label">Tipo de letra</span>
+                <select data-pref="font" aria-label="Tipo de letra">
+                  <option value="system">Del sistema</option>
+                  <option value="humanist">Ancha y clara</option>
+                  <option value="serif">Clásica (con remates)</option>
+                  <option value="mono">Monoespaciada</option>
+                  <option value="condensed">Estrecha</option>
+                </select>
+              </label>
+              <label class="row switch"><span class="row-label">Texto más grueso</span><input type="checkbox" data-pref="bold"><span class="switch-ui"></span></label>
+              <div class="row"><span class="row-label">Espaciado <small>cuánto sitio ocupa cada fila</small></span>
+                <div class="segmented segmented-small picker" data-pref="density" role="radiogroup" aria-label="Espaciado">
+                  <button data-value="compact" type="button" role="radio">Compacto</button>
+                  <button data-value="normal" type="button" role="radio">Normal</button>
+                  <button data-value="comfy" type="button" role="radio">Amplio</button>
+                </div>
+              </div>
+              <div class="row"><span class="row-label">Esquinas</span>
+                <div class="segmented segmented-small picker" data-pref="corners" role="radiogroup" aria-label="Esquinas">
+                  <button data-value="square" type="button" role="radio">Rectas</button>
+                  <button data-value="normal" type="button" role="radio">Normales</button>
+                  <button data-value="round" type="button" role="radio">Redondas</button>
+                </div>
+              </div>
+              <div class="row"><span class="row-label">Ancho del contenido</span>
+                <div class="segmented segmented-small picker" data-pref="contentWidth" role="radiogroup" aria-label="Ancho del contenido">
+                  <button data-value="normal" type="button" role="radio">Centrado</button>
+                  <button data-value="full" type="button" role="radio">Toda la ventana</button>
+                </div>
+              </div>
+              <div class="row"><span class="row-label">Barras de desplazamiento</span>
+                <div class="segmented segmented-small picker" data-pref="scrollbar" role="radiogroup" aria-label="Barras de desplazamiento">
+                  <button data-value="normal" type="button" role="radio">Normales</button>
+                  <button data-value="thin" type="button" role="radio">Finas</button>
+                  <button data-value="hidden" type="button" role="radio">Ocultas</button>
+                </div>
               </div>
             </div>
-            <div class="row"><span class="row-label">Esquinas</span>
-              <div class="segmented segmented-small picker" data-pref="corners" role="radiogroup" aria-label="Esquinas">
-                <button data-value="square" type="button" role="radio">Rectas</button>
-                <button data-value="normal" type="button" role="radio">Normales</button>
-                <button data-value="round" type="button" role="radio">Redondas</button>
-              </div>
-            </div>
-            <div class="row"><span class="row-label">Ancho del contenido</span>
-              <div class="segmented segmented-small picker" data-pref="contentWidth" role="radiogroup" aria-label="Ancho del contenido">
-                <button data-value="normal" type="button" role="radio">Centrado</button>
-                <button data-value="full" type="button" role="radio">Toda la ventana</button>
-              </div>
-            </div>
-            <div class="row"><span class="row-label">Barras de desplazamiento</span>
-              <div class="segmented segmented-small picker" data-pref="scrollbar" role="radiogroup" aria-label="Barras de desplazamiento">
-                <button data-value="normal" type="button" role="radio">Normales</button>
-                <button data-value="thin" type="button" role="radio">Finas</button>
-                <button data-value="hidden" type="button" role="radio">Ocultas</button>
-              </div>
-            </div>
-          </div>
 
-          <div class="section-header">
-            <h2>Menú lateral</h2>
-            <button class="link-btn" id="btnResetNav" type="button">Restablecer el menú</button>
-          </div>
-          <div class="group">
-            <div class="row"><span class="row-label">Lado</span>
-              <div class="segmented segmented-small picker" data-pref="sidebarSide" role="radiogroup" aria-label="Lado del menú">
-                <button data-value="left" type="button" role="radio">Izquierda</button>
-                <button data-value="right" type="button" role="radio">Derecha</button>
-              </div>
+            <div class="section-header">
+              <h2>Menú lateral</h2>
+              <button class="link-btn" id="btnResetNav" type="button">Restablecer el menú</button>
             </div>
-            <div class="row"><span class="row-label">Ancho del menú</span>
-              <div class="segmented segmented-small picker" data-pref="sidebarWidth" role="radiogroup" aria-label="Ancho del menú">
-                <button data-value="icons" type="button" role="radio">Solo iconos</button>
-                <button data-value="normal" type="button" role="radio">Normal</button>
-                <button data-value="wide" type="button" role="radio">Ancho</button>
+            <div class="group">
+              <div class="row"><span class="row-label">Lado</span>
+                <div class="segmented segmented-small picker" data-pref="sidebarSide" role="radiogroup" aria-label="Lado del menú">
+                  <button data-value="left" type="button" role="radio">Izquierda</button>
+                  <button data-value="right" type="button" role="radio">Derecha</button>
+                </div>
               </div>
+              <div class="row"><span class="row-label">Ancho del menú</span>
+                <div class="segmented segmented-small picker" data-pref="sidebarWidth" role="radiogroup" aria-label="Ancho del menú">
+                  <button data-value="icons" type="button" role="radio">Solo iconos</button>
+                  <button data-value="normal" type="button" role="radio">Normal</button>
+                  <button data-value="wide" type="button" role="radio">Ancho</button>
+                </div>
+              </div>
+              <label class="row"><span class="row-label">Iconos del menú</span>
+                <select data-pref="navIcons" aria-label="Iconos del menú">
+                  <option value="auto">Como la interfaz</option>
+                  <option value="accent">Color de énfasis</option>
+                  <option value="color">Uno de cada color</option>
+                  <option value="mono">Sin color</option>
+                </select>
+              </label>
+              <div class="row"><span class="row-label">Páginas del menú <small>elige cuáles se ven y en qué orden</small></span></div>
+              <ul class="nav-edit" id="navEdit" aria-label="Páginas del menú"></ul>
             </div>
-            <label class="row"><span class="row-label">Iconos del menú</span>
-              <select data-pref="navIcons" aria-label="Iconos del menú">
-                <option value="auto">Como la interfaz</option>
-                <option value="accent">Color de énfasis</option>
-                <option value="color">Uno de cada color</option>
-                <option value="mono">Sin color</option>
-              </select>
-            </label>
-            <div class="row"><span class="row-label">Páginas del menú <small>elige cuáles se ven y en qué orden</small></span></div>
-            <ul class="nav-edit" id="navEdit" aria-label="Páginas del menú"></ul>
-          </div>
 
-          <div class="section-header"><h2>Barra superior y arranque</h2></div>
-          <div class="group">
-            <label class="row switch"><span class="row-label">Descripción bajo el título <small>la frase que explica cada página</small></span><input type="checkbox" data-pref="showSubtitle"><span class="switch-ui"></span></label>
-            <label class="row switch"><span class="row-label">Botón Windows / Mac en la barra</span><input type="checkbox" data-pref="showUiSwitch"><span class="switch-ui"></span></label>
-            <label class="row"><span class="row-label">Al abrir la app, empezar en</span>
-              <select data-pref="startView" id="startViewSelect" aria-label="Al abrir la app, empezar en">
-                <option value="last">La última página que usaste</option>
-              </select>
-            </label>
-          </div>
+            <div class="section-header"><h2>Barra superior y arranque</h2></div>
+            <div class="group">
+              <label class="row switch"><span class="row-label">Descripción bajo el título <small>la frase que explica cada página</small></span><input type="checkbox" data-pref="showSubtitle"><span class="switch-ui"></span></label>
+              <label class="row switch"><span class="row-label">Botón Windows / Mac en la barra</span><input type="checkbox" data-pref="showUiSwitch"><span class="switch-ui"></span></label>
+              <label class="row"><span class="row-label">Al abrir la app, empezar en</span>
+                <select data-pref="startView" id="startViewSelect" aria-label="Al abrir la app, empezar en">
+                  <option value="last">La última página que usaste</option>
+                </select>
+              </label>
+            </div>
+          </details>
         </section>
 
         <!-- ===== Ajustes → Descargas ===== -->

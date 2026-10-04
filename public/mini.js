@@ -185,12 +185,13 @@
       document.body.classList.toggle('compact', prefs.compact);
       document.body.classList.toggle('locked', prefs.locked);
       document.body.classList.toggle('through', prefs.through === true);
+      document.body.classList.toggle('full', prefs.full === true);
     });
   }
   // Fully visible under the pointer; with clicks passing through, Ctrl makes it usable.
   let grabbed = false;
-  document.addEventListener('mouseenter', () => api.miniCommand({ cmd: 'hover', value: true }));
-  document.addEventListener('mouseleave', () => { grabbed = false; api.miniCommand({ cmd: 'hover', value: false }); });
+  document.documentElement.addEventListener('mouseenter', () => api.miniCommand({ cmd: 'hover', value: true }));
+  document.documentElement.addEventListener('mouseleave', () => { grabbed = false; api.miniCommand({ cmd: 'hover', value: false }); });
   document.addEventListener('mousemove', (e) => {
     if (!prefs.clickThrough || e.ctrlKey === grabbed) return;
     grabbed = e.ctrlKey;

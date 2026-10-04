@@ -625,3 +625,20 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 
 ### [Nuevo] Ajustes propios del mini reproductor (pestaña «Ajustes» de la lupa)
 - 📌 siempre encima (nivel «screen-saver», que también queda por encima de juegos en ventana sin bordes), opacidad del 20 % al 100 %, del todo visible al pasar el ratón, fijar la posición, dejar pasar los clics (overlay; se vuelve a usar manteniendo Ctrl encima o desde la bandeja), tamaño compacto (300 × 64) y llevarlo a una esquina con un clic. Se guardan en settings.json y se validan al leerlos; las órdenes nuevas del mini reproductor (`miniPrefs`, `snap`, `hover`, `grab`) pasan por la lista blanca del proceso principal y solo las acepta de la ventana del mini reproductor.
+
+---
+
+## 2026-10-04 — v3.7.4: más sencillo y accesible; revisión 17
+
+### [Accesibilidad] Auditoría automática de todas las páginas y del mini reproductor
+- **Cómo:** en la app real, por CDP, cada página: botones y pestañas sin nombre, campos sin etiqueta, imágenes sin `alt`, opciones sin estado (`aria-checked`), ids repetidos, texto secundario demasiado tenue; y recorrido con la tecla Tab de verdad (70 paradas por página) comprobando que cada control enseña dónde está el foco.
+- **Encontrado y corregido:** el selector Lista / Carátulas de la Biblioteca no decía cuál estaba elegido a un lector de pantalla. Todo lo demás pasó (los campos de texto enseñan el foco en su recuadro).
+
+### [UI] Apariencia más sencilla
+- Arriba quedan lo básico y los estilos rápidos; letra, espaciado, esquinas, menú lateral, barra superior y página de inicio pasan a «Más opciones de aspecto», cerrado. El buscador de Ajustes lo abre solo si lo que buscas está dentro.
+
+### [Bugs] Revisión 17
+- **«Del todo visible al pasar el ratón»** (mini reproductor) no hacía nada: escuchaba `mouseenter` en `document`, que el navegador nunca lanza ahí; ahora en `<html>`. Probado: 40 % de opacidad quieto, 100 % con el ratón encima.
+- **Con un proxy**, cada canción de YouTube fallaba y el reproductor recorría la lista entera saltando; ahora pregunta el motivo y, si no es la canción, se para y lo explica.
+- **Sin conexión**, una lista de Spotify iba saltando canción tras canción; ahora para tras tres fallos seguidos y pregunta si hay Internet.
+- Seguridad: lo nuevo (ajustes del mini reproductor) solo lo acepta el proceso principal desde la ventana del mini reproductor y con valores comprobados; `npm audit --omit=dev` → 0.

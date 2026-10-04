@@ -759,7 +759,7 @@ function applyMiniPrefs() {
   miniWindow.setAlwaysOnTop(p.onTop, p.onTop ? 'screen-saver' : 'normal');
   const through = p.clickThrough && !miniGrabbed && !miniExpanded;
   miniWindow.setIgnoreMouseEvents(through, through ? { forward: true } : undefined);
-  miniWindow.webContents.send('mini:prefs', { ...p, through, expanded: miniExpanded });
+  miniWindow.webContents.send('mini:prefs', { ...p, through, expanded: miniExpanded, full });
 }
 function openMini() {
   if (miniWindow && !miniWindow.isDestroyed()) { miniWindow.show(); miniWindow.focus(); return; }
