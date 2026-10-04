@@ -144,8 +144,8 @@
   if (en) {
     const EN_TEXT = {
       tabSet: 'Settings', lOpacity: 'Opacity', lHover: 'Fully visible under the pointer', lTop: 'Always on top (also of games in a window)',
-      lLock: 'Fix it here (dragging doesn’t move it)', lNoFocus: 'Don’t take the keyboard from the game when using its buttons', lThrough: 'Let clicks through (overlay): hold Ctrl over it to use it', lCompact: 'Compact', lCorner: 'Send to a corner',
-      lGame: 'Over exclusive fullscreen games Windows shows nothing: use the game’s borderless window mode. If clicks pass through, use it again with Ctrl, with Ctrl+Alt+O or from the tray icon.',
+      lLock: 'Fix it here (dragging doesn’t move it)', lNoFocus: 'Don’t take the keyboard from the game when using its buttons', lThrough: 'Let clicks through (overlay): hold Ctrl and move the mouse over it to use it', lCompact: 'Compact', lCorner: 'Send to a corner',
+      lGame: 'Over exclusive fullscreen games Windows shows nothing: use the game’s borderless window mode. If clicks pass through, use it again by holding Ctrl while moving the mouse over it, with Ctrl+Alt+O, with TubeGrab’s mini player button or from the tray icon.',
     };
     for (const [id, text] of Object.entries(EN_TEXT)) $(id).textContent = text;
     $('pin').title = 'Always on top';
@@ -418,8 +418,8 @@
     osdTimer = setTimeout(() => el.classList.remove('show'), 1400);
   }
   const O = en
-    ? { vol: 'Volume', muted: 'Muted', play: '▶ Playing', pause: '⏸ Paused', through: 'Clicks pass through · hold Ctrl to use it', usable: 'Usable with the mouse' }
-    : { vol: 'Volumen', muted: 'Silenciado', play: '▶ Sonando', pause: '⏸ En pausa', through: 'Los clics pasan a través · mantén Ctrl para usarlo', usable: 'Se usa con el ratón' };
+    ? { vol: 'Volume', muted: 'Muted', play: '▶ Playing', pause: '⏸ Paused', through: 'Clicks pass through · hold Ctrl and move the mouse to use it', usable: 'Usable with the mouse' }
+    : { vol: 'Volumen', muted: 'Silenciado', play: '▶ Sonando', pause: '⏸ En pausa', through: 'Los clics pasan a través · mantén Ctrl y mueve el ratón para usarlo', usable: 'Se usa con el ratón' };
   api.onPlayerState((s) => {
     if (last) {
       if (s.muted !== last.muted) osd(s.muted ? `🔇 ${O.muted}` : `🔊 ${O.vol} ${Math.round(s.volume * 100)}%`);

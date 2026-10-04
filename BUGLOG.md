@@ -734,3 +734,13 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - Hecho para ti (mixes diarios, lo más escuchado, escuchado hace poco, redescubre) y tus listas (las de carpetas detrás, con su carpeta). ▶ reproduce; al abrir una se ve su contenido y se empieza desde la canción que elijas, o con aleatorio.
 - El mini reproductor solo pide «esta lista, desde esta canción»: la ventana principal lo comprueba (id de lista de 16 hex, o uno de los seis tipos; canción por posición o por su clave) y la monta igual que en Escuchar (con tu archivo si ya la tienes). Probado: ▶, empezar en la tercera, empezar en la segunda de «Lo más escuchado» (sonó el archivo descargado), aleatorio, el mix diario, y dos órdenes falsas ignoradas.
 - Las canciones aún sin carátula (de Spotify) dejan su hueco para que los títulos queden alineados.
+
+
+---
+
+## 2026-10-04 — v3.10.2: el mini reproductor ya no se queda atascado
+
+### [Bug] El mini reproductor no dejaba hacer nada (ni cerrarlo ni moverlo)
+- Con «dejar pasar los clics» y «fijarlo aquí» activados, todos los clics lo atravesaban; como el ajuste se guarda, seguía igual tras reiniciar. La salida (mantener Ctrl y mover el ratón encima, Ctrl+Alt+O o la bandeja) no se veía.
+- Ahora, al abrirlo tú (botón, atajo), siempre empieza usable con el ratón; volver a pulsar el botón del mini en TubeGrab con él abierto también lo hace usable. Solo el modo juego lo abre dejando pasar los clics, si así lo elegiste. Los textos explican que hay que mover el ratón con Ctrl pulsado.
+- Probado con el estado atascado guardado en disco: se abre usable; activado con él abierto, el botón lo desactiva.

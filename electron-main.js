@@ -776,7 +776,16 @@ function keepMiniOnTop() {
     miniWindow.moveTop();
   }, 1500);
 }
-function openMini() {
+/**
+ * Opened by you (not by game mode): it always starts usable with the mouse, so
+ * clicks left passing through (and the window fixed in place) can never leave
+ * it stuck, not even after restarting. Asking for it again does the same.
+ */
+function openMini(opts = {}) {
+  if (!opts.overlay && miniPrefs().clickThrough) {
+    if (miniWindow && !miniWindow.isDestroyed()) setMiniPrefs({ clickThrough: false });
+    else saveSettings({ miniPrefs: { ...miniPrefs(), clickThrough: false } });
+  }
   if (miniWindow && !miniWindow.isDestroyed()) { miniWindow.show(); miniWindow.focus(); return; }
   const pos = miniPosition();
   miniExpanded = false;
@@ -1322,7 +1331,7 @@ const gameMode = (() => {
     saveSettings({ gameMode: { ...g, restore: { prefs: miniPrefs(), pos: pos && Number.isInteger(pos.x) && Number.isInteger(pos.y) ? { x: pos.x, y: pos.y } : null, wasOpen: Boolean(miniWindow && !miniWindow.isDestroyed()) } } });
     active = name;
     setMiniPrefs({ opacity: c.opacity, compact: c.compact, onTop: true, clickThrough: c.through, noFocus: true });
-    openMini();
+    openMini({ overlay: true });
     setTimeout(() => snapMini(c.corner), 900);
     sendToRenderer('desktop:gameMode', { running: name });
   }
