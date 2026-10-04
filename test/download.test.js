@@ -40,7 +40,7 @@ test('parseDownloadOptions falls back to safe defaults for unknown values', () =
   assert.deepEqual(o, {
     mode: 'audio', audioFormat: 'mp3', audioBitrate: '192', quality: '1080', container: 'mp4',
     metadata: true, subtitles: false, subLangs: 'es,en', subMode: 'embed', sponsorblock: false, sponsorMode: 'remove', playlist: false,
-    music: false, lyrics: false, nameTemplate: null, chapters: false, sectionStart: null, sectionEnd: null, rateLimit: null,
+    music: false, official: false, lyrics: false, nameTemplate: null, chapters: false, sectionStart: null, sectionEnd: null, rateLimit: null,
     normalize: false, bpm: false, live: false, nfo: false,
   });
   assert.equal(download.parseDownloadOptions({ mode: 'audio', lyrics: 'true' }).lyrics, false, 'only a real true');
@@ -48,6 +48,11 @@ test('parseDownloadOptions falls back to safe defaults for unknown values', () =
   assert.equal(download.parseDownloadOptions({ mode: 'audio', lyrics: true }).lyrics, true);
   assert.equal(download.parseDownloadOptions({ mode: 'video', subtitles: true }).subtitles, true);
   assert.equal(download.parseDownloadOptions({ mode: 'audio', subtitles: true }).subtitles, false);
+  // v3.13: the official audio, only in music mode (on unless turned off).
+  assert.equal(download.parseDownloadOptions({ mode: 'audio', music: true }).official, true);
+  assert.equal(download.parseDownloadOptions({ mode: 'audio', music: true, official: false }).official, false);
+  assert.equal(download.parseDownloadOptions({ mode: 'audio', official: true }).official, false, 'not without music mode');
+  assert.equal(download.parseDownloadOptions({ mode: 'video', music: true, official: true }).official, false);
 });
 
 test('buildArgs: hardening flags, and the URL is always after "--"', () => {

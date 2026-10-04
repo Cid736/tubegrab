@@ -623,7 +623,7 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
     assert.equal((await api(`${p}${p.includes('?') ? '&' : '?'}client=${CLIENT}`)).status, 404, `web: ${p}`);
   }
   assert.equal((await api('/api/lyrics/translate', json({ lines: ['hello'], to: 'es' }))).status, 404, 'web: translate');
-  for (const p of ['/api/listen/smart', '/api/listen/summary', '/api/listen/likes']) assert.equal((await api(p)).status, 404, `web: ${p}`);
+  for (const p of ['/api/listen/smart', '/api/listen/summary', '/api/listen/likes', '/api/listen/news', '/api/library/review']) assert.equal((await api(p)).status, 404, `web: ${p}`);
   assert.equal((await api('/api/listen/unlike', json({ key: 'yt:dQw4w9WgXcQ' }))).status, 404, 'web: unlike');
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-stream-'));
   const port = await freePort();
@@ -719,6 +719,15 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
     assert.equal((await (await call(`/api/streamlists/${many.id}/restore`, json({}))).json()).name, 'many');
     assert.equal((await call(`/api/streamlists/${many.id}/restore`, json({}))).status, 404, 'only once');
     await call(`/api/streamlists/${many.id}`, { method: 'DELETE' });
+    // v3.13: reviewing the library: only ids of its own files; albums need both names; news is a list.
+    const rev = await (await call('/api/library/review')).json();
+    assert.ok(Array.isArray(rev.files) && typeof rev.indexing === 'boolean');
+    for (const p of ['/api/library/review/lyrics', '/api/library/review/fix', '/api/library/review/upgrade']) {
+      for (const ids of [undefined, 'x', [], ['../../etc/passwd'], ['a'.repeat(31)]]) assert.equal((await call(p, json({ ids }))).status, 400, `${p} ${JSON.stringify(ids)}`);
+    }
+    assert.equal((await (await call('/api/library/review/fix', json({ ids: ['a'.repeat(32)] }))).json()).missing, 1, 'an id not in the library: nothing touched');
+    for (const body of [{}, { artist: 'Queen' }, { album: 'x' }, { artist: ' ', album: ' ' }]) assert.equal((await call('/api/library/review/album', json(body))).status, 400, JSON.stringify(body));
+    assert.ok(Array.isArray((await (await call('/api/listen/news')).json()).news));
     // Chapters: only of files in the library.
     for (const id of ['', '../../etc/passwd', 'a'.repeat(32), 'C:%5CWindows%5Cwin.ini']) assert.equal((await call(`/api/library/chapters?id=${id}`)).status, 404, id);
   } finally {

@@ -802,3 +802,28 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - Si se desconectan los cascos/Bluetooth mientras suena, pausa (se puede quitar en Sonido).
 - Karaoke: izquierda menos derecha quita el centro (la voz) y un paso bajo devuelve los graves. Medido: una voz en el centro baja a un 12 % (−18 dB); lo de los lados se queda.
 - 257 pruebas.
+
+
+---
+
+## 2026-10-05 — v3.13.0: revisar la biblioteca, audio oficial, descargas comprobadas, novedades
+
+### [Feature] Biblioteca → Revisar
+- Cada canción se lee una vez con ffmpeg (en segundo plano, una a una; `library-info.json` hasta que el archivo cambie): calidad del propio audio (no del total, que infla la carátula), etiquetas, carátula, letra (también un .lrc al lado) y de dónde vino (el enlace que guarda la descarga).
+- Pestañas: Calidad (por debajo de 128 kb/s en MP3, 112 en AAC… YouTube no da más de ~160: no se proponen mejoras falsas), Datos (MusicBrainz rellena solo lo que falta, y solo si la duración coincide ±15 s; copia sin recodificar, comprobada antes de sustituir), Letras (LRCLIB), Álbumes (MusicBrainz: el álbum oficial más antiguo con ese nombre y sus canciones; bajar las que faltan) y Espacio (lo que más ocupa, vídeos, sin abrir en 6 meses → papelera de Windows).
+- Los nombres para buscar se limpian: un vídeo bajado sin modo música tiene «Artista - Canción (Official Video)» de título y el canal («Queen Official») de artista.
+- Probado: 13 canciones; letra de Despacito encontrada (.lrc + en el archivo); un archivo de 40 s llamado «Bohemian Rhapsody» ya no recibe datos de otra versión.
+
+### [Feature] Audio oficial (modo música)
+- Si el enlace es un videoclip («Official Video», «Video Oficial», «MV»…), se busca el audio de la canción: una subida «- Topic» del artista, un «Official Audio» del mismo canal o una del canal del artista que no sea un clip; mismo nombre, sin otras versiones entre paréntesis (live, piano, remix…) y que no dure más. Si no hay uno así, se baja el vídeo como siempre.
+- Probado: Rick Astley (Official Video) → «Never Gonna Give You Up (2022 Remaster)» de su canal; Uptown Funk → su «Official Audio»; Queen, Ed Sheeran, Despacito → el original (no había uno seguro). Antes de afinarlo cogía una versión «Pianoforte» y una subida de un fan.
+
+### [Feature] Descargas comprobadas
+- Al terminar: que se abra, que dure al menos el 90 % de lo que decía el vídeo y que sus últimos 8 s se decodifiquen. Si no, se borra y se baja otra vez (una vez).
+
+### [Feature] Novedades de tus artistas
+- Cada 12 h, de tus 8 artistas más escuchados: su canal (buscado una vez: el que se llama como ellos, «Official» o «VEVO», o el de uno de sus vídeos) y sus vídeos más nuevos. La primera vez solo se apunta lo que hay; luego, lo nuevo (sin directos, versiones, reacciones, letras ni shorts) sale en Escuchar y como aviso de Windows (una vez cada uno).
+- `ytsearchdate` ya no existe en yt-dlp y la búsqueda de YouTube no respeta «ordenar por fecha»: por eso el canal.
+
+### [Bug] Al revisar, las canciones borradas no se olvidaban si no había nada nuevo que leer
+- 264 pruebas.

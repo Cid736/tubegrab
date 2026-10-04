@@ -621,7 +621,7 @@ function playDoneSound() {
 
 // Remember the last download options (restored on next launch).
 const REMEMBERED_SELECTS = { audioFormat, audioBitrate, videoQuality, videoContainer, subLangs, subMode, sponsorMode: $('sponsorMode') };
-const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, lyrics: optLyrics, both: optBoth, normalize: optNormalize, bpm: optBpm, nfo: optNfo };
+const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, official: $('optOfficial'), lyrics: optLyrics, both: optBoth, normalize: optNormalize, bpm: optBpm, nfo: optNfo };
 
 function saveLastOptions() {
   if (!prefsApi.get().remember) return;
@@ -648,6 +648,8 @@ function restoreLastOptions() {
 
 [...Object.values(REMEMBERED_SELECTS), ...Object.values(REMEMBERED_SWITCHES)]
   .forEach((el) => el.addEventListener('change', saveLastOptions));
+// "Preferir el audio oficial" only means something in music mode.
+optMusic.addEventListener('change', () => $('optOfficialWrap').classList.toggle('hidden', !optMusic.checked || $('optMusicWrap').classList.contains('hidden')));
 
 // === Server settings (concurrency, GPU) ===
 const GPU_NAMES = { nvidia: 'NVIDIA (NVENC)', intel: 'Intel (Quick Sync)', amd: 'AMD (AMF)' };
@@ -806,6 +808,7 @@ function applyMode() {
   $('downloadExtras').classList.toggle('hidden', isConvert);
   $('dlMoreOptions').classList.toggle('hidden', isConvert);
   $('optMusicWrap').classList.toggle('hidden', currentMode !== 'audio');
+  $('optOfficialWrap').classList.toggle('hidden', currentMode !== 'audio' || !optMusic.checked);
   $('optLyricsWrap').classList.toggle('hidden', currentMode !== 'audio');
   $('optBpmWrap').classList.toggle('hidden', currentMode !== 'audio');
   $('optNfoWrap').classList.toggle('hidden', currentMode !== 'video');
@@ -870,6 +873,7 @@ function downloadOptions(mode = downloadMode) {
     sponsorblock: optSponsorblock.checked,
     sponsorMode: $('sponsorMode').value,
     music: optMusic.checked,
+    official: $('optOfficial').checked,
     lyrics: optLyrics.checked,
     normalize: optNormalize.checked,
     bpm: optBpm.checked,
@@ -4686,6 +4690,7 @@ const library = (() => {
     files: () => files,
     ensure,
     relOf,
+    load,
     /** One more play (counted once the song has really been listened to). */
     played: (f) => setMeta(f, { played: true }),
   };
@@ -7900,6 +7905,7 @@ const listenUi = (() => {
       });
     }
     for (const c of forYou) box.appendChild(card(c));
+    loadNews();
     // Your artists: each one's radio.
     const chips = $('forYouArtists');
     chips.innerHTML = '';
@@ -7925,6 +7931,30 @@ const listenUi = (() => {
     }
     renderQuick();
   }
+
+  // ---- news of your artists (the server looks every 12 hours) ----
+  const NEWS_SEEN = 'tubegrab_news_seen';
+  async function loadNews() {
+    let items = [];
+    try { items = (await api('/api/listen/news')).news || []; } catch { items = []; }
+    const box = $('forYouNews');
+    box.innerHTML = '';
+    $('forYouNewsWrap').classList.toggle('hidden', !items.length);
+    for (const n of items.slice(0, 12)) {
+      const song = { yt: n.yt, title: n.title, artist: n.artist, thumbnail: n.thumbnail, duration: n.duration };
+      box.appendChild(card({ name: n.title, sub: n.artist, art: { pics: [n.thumbnail] }, onOpen: () => player.playMixed([song]), onPlay: () => player.playMixed([song]) }));
+    }
+    // New since last time: a notice from Windows too (once each).
+    let seen = [];
+    try { seen = JSON.parse(localStorage.getItem(NEWS_SEEN)) || []; } catch { seen = []; }
+    const fresh = items.filter((n) => !seen.includes(n.yt));
+    if (fresh.length && seen.length !== 0 && typeof Notification === 'function' && Notification.permission === 'granted') {
+      try { new Notification(fresh.length === 1 ? t('Nueva canción de {a}', { a: fresh[0].artist }) : t('{n} canciones nuevas de tus artistas', { n: fresh.length }), { body: fresh.slice(0, 3).map((n) => n.title).join('\n'), silent: true }); } catch { /* no notices */ }
+    }
+    try { localStorage.setItem(NEWS_SEEN, JSON.stringify([...new Set([...items.map((n) => n.yt), ...seen])].slice(0, 200))); } catch { /* ignore */ }
+  }
+  setTimeout(loadNews, 90 * 1000);
+  setInterval(loadNews, 30 * 60 * 1000);
 
   // ---- the home page: hello, quick tiles, what to show ----
   function greet() {
@@ -8744,6 +8774,248 @@ const ctxMenu = (() => {
   for (const m of [$('plMedia'), $('plMediaB')]) for (const ev of ['timeupdate', 'volumechange', 'loadedmetadata', 'seeked', 'emptied']) m.addEventListener(ev, paint);
   paint();
 })();
+// === Biblioteca → Revisar: low quality, missing data or lyrics, albums with
+// songs missing, and what takes up the most space (desktop) ===
+const libReview = (() => {
+  if (!desktopApi) return {};
+  let data = { files: [], indexing: false, done: 0, total: 0 };
+  let tab = 'quality';
+  let poll = null;
+  const picked = new Set();
+  const modal = $('reviewModal');
+  const TABS = {
+    quality: { label: 'Calidad', hint: 'Canciones con poca calidad (por debajo de 128 kb/s). Se vuelven a bajar con lo mejor que tenga YouTube (unos 160 kb/s como mucho); la versión antigua puedes quitarla luego en Duplicados.' },
+    tags: { label: 'Datos', hint: 'Sin artista, sin título o sin carátula: se completan con MusicBrainz, sin tocar lo que ya tienen.' },
+    lyrics: { label: 'Letras', hint: 'Canciones sin letra: se buscan en LRCLIB y se guardan en el archivo (y sincronizadas, cuando las hay).' },
+    albums: { label: 'Álbumes', hint: 'Tus álbumes según sus etiquetas: comprueba en MusicBrainz qué canciones te faltan y bájalas.' },
+    space: { label: 'Espacio', hint: 'Lo que más ocupa y lo que no abres desde hace meses. Lo que quites va a la papelera de Windows.' },
+  };
+  const issue = (f, i) => f.issues.includes(i);
+  const of = { quality: (f) => issue(f, 'quality'), tags: (f) => issue(f, 'tags') || issue(f, 'cover'), lyrics: (f) => issue(f, 'lyrics') };
+  const what = (f) => [issue(f, 'tags') && (!f.artist ? t('sin artista') : t('sin título')), issue(f, 'cover') && t('sin carátula')].filter(Boolean).join(' · ');
+  async function fetchData() {
+    try { data = await api('/api/library/review'); } catch (err) { $('reviewHint').textContent = err.message; return; }
+    $('reviewHint').textContent = data.indexing ? t('Leyendo tus canciones… {d} de {n}', { d: data.done, n: data.total }) : t('{n} canciones revisadas', { n: data.files.length });
+    clearTimeout(poll);
+    if (data.indexing && !modal.classList.contains('hidden')) poll = setTimeout(fetchData, 2500);
+    render();
+  }
+  function row(id, title, sub, checked = false) {
+    const li = document.createElement('li');
+    const label = document.createElement('label');
+    label.className = 'review-row';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = checked;
+    box.addEventListener('change', () => { if (box.checked) picked.add(id); else picked.delete(id); paintActions(); });
+    const text = document.createElement('span');
+    text.className = 'review-text';
+    const a = document.createElement('span');
+    a.className = 'review-title';
+    a.textContent = title;
+    const b = document.createElement('span');
+    b.className = 'review-sub';
+    b.textContent = sub;
+    text.append(a, b);
+    label.append(box, text);
+    li.appendChild(label);
+    return li;
+  }
+  const actionsBox = () => $('reviewActions');
+  function button(label, fn, primary = false) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `btn${primary ? ' btn-primary' : ''}`;
+    b.textContent = label;
+    b.addEventListener('click', fn);
+    return b;
+  }
+  function paintActions() {
+    const box = actionsBox();
+    box.innerHTML = '';
+    const n = picked.size;
+    const all = () => { for (const el of $('reviewList').querySelectorAll('input[type=checkbox]')) { el.checked = true; } listIds().forEach((id) => picked.add(id)); paintActions(); };
+    if (tab === 'albums') return;
+    box.appendChild(button(t('Todas'), all));
+    if (tab === 'quality') box.appendChild(button(t('Volver a bajarlas mejor ({n})', { n }), upgrade, true));
+    if (tab === 'tags') box.appendChild(button(t('Arreglar con MusicBrainz ({n})', { n }), () => fixing('/api/library/review/fix'), true));
+    if (tab === 'lyrics') box.appendChild(button(t('Buscar sus letras ({n})', { n }), () => fixing('/api/library/review/lyrics'), true));
+    if (tab === 'space') {
+      const size = [...picked].reduce((s, id) => s + ((library.files().find((f) => f.id === id) || {}).size || 0), 0);
+      box.appendChild(button(t('A la papelera ({n} · {s})', { n, s: formatBytes(size) }), trash, true));
+      box.appendChild(button(t('Buscar duplicados'), () => { close(); $('libDupes').click(); }));
+    }
+    for (const b of box.querySelectorAll('.btn-primary')) b.disabled = !n;
+  }
+  const listIds = () => [...$('reviewList').querySelectorAll('li[data-id]')].map((li) => li.dataset.id);
+  function render() {
+    for (const b of $('reviewTabs').querySelectorAll('[data-tab]')) {
+      const k = b.dataset.tab;
+      const count = of[k] ? data.files.filter(of[k]).length : null;
+      b.querySelector('.review-count').textContent = count === null ? '' : String(count);
+      b.classList.toggle('active', k === tab);
+      b.setAttribute('aria-selected', String(k === tab));
+    }
+    $('reviewTabHint').textContent = t(TABS[tab].hint);
+    const ul = $('reviewList');
+    ul.innerHTML = '';
+    if (of[tab]) {
+      const list = data.files.filter(of[tab]).slice(0, 500);
+      for (const f of list) {
+        const sub = tab === 'quality' ? `${f.bitrate || '?'} kb/s · ${f.codec || ''}` : tab === 'tags' ? what(f) : [f.artist, f.album].filter(Boolean).join(' · ');
+        const li = row(f.id, f.label || f.name, sub, picked.has(f.id));
+        li.dataset.id = f.id;
+        ul.appendChild(li);
+      }
+      if (!list.length) ul.innerHTML = `<li class="review-empty">${escapeHtml(data.indexing ? t('Aún leyendo tus canciones…') : t('Nada que arreglar aquí.'))}</li>`;
+    } else if (tab === 'albums') renderAlbums(ul);
+    else renderSpace(ul);
+    paintActions();
+  }
+  // ---- albums ----
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  function renderAlbums(ul) {
+    const groups = new Map();
+    for (const f of data.files) {
+      if (!f.album || !(f.albumArtist || f.artist)) continue;
+      const artist = f.albumArtist || f.artist;
+      const k = `${fold(artist)}|${fold(f.album)}`;
+      if (!groups.has(k)) groups.set(k, { artist, album: f.album, n: 0 });
+      groups.get(k).n++;
+    }
+    const list = [...groups.values()].filter((g) => g.n >= 2).sort((a, b) => b.n - a.n).slice(0, 200);
+    if (!list.length) { ul.innerHTML = `<li class="review-empty">${escapeHtml(t('No hay álbumes con dos o más canciones (según sus etiquetas).'))}</li>`; return; }
+    for (const g of list) {
+      const li = document.createElement('li');
+      li.className = 'review-album';
+      const head = document.createElement('div');
+      head.className = 'review-row';
+      const text = document.createElement('span');
+      text.className = 'review-text';
+      text.innerHTML = '<span class="review-title"></span><span class="review-sub"></span>';
+      text.querySelector('.review-title').textContent = g.album;
+      text.querySelector('.review-sub').textContent = `${g.artist} · ${t('{n} canciones', { n: g.n })}`;
+      const check = button(t('Comprobar'), async () => {
+        check.disabled = true;
+        check.textContent = t('Comprobando…');
+        try {
+          const r = await postJson('/api/library/review/album', { artist: g.artist, album: g.album });
+          const missing = r.tracks.filter((x) => !x.have);
+          const box = document.createElement('div');
+          box.className = 'review-missing';
+          if (!missing.length) box.textContent = t('Lo tienes completo ({n} canciones).', { n: r.tracks.length });
+          else {
+            const p = document.createElement('p');
+            p.textContent = t('Te faltan {n} de {m}:', { n: missing.length, m: r.tracks.length });
+            const ol = document.createElement('ol');
+            for (const x of missing.slice(0, 60)) { const it = document.createElement('li'); it.textContent = x.title; ol.appendChild(it); }
+            const status = document.createElement('span');
+            status.className = 'status-message';
+            const get = button(t('Bajar las que faltan ({n})', { n: missing.length }), () => {
+              queueItems(missing.map((x) => ({ query: `${r.release.artist || g.artist} - ${x.title}`, title: `${r.release.artist || g.artist} - ${x.title}` })), status);
+              get.disabled = true;
+            }, true);
+            box.append(p, ol, get, status);
+          }
+          li.querySelector('.review-missing') && li.querySelector('.review-missing').remove();
+          li.appendChild(box);
+          check.textContent = t('Comprobado');
+        } catch (err) { check.disabled = false; check.textContent = t('Comprobar'); showToast(err.message); }
+      });
+      head.append(text, check);
+      li.appendChild(head);
+      ul.appendChild(li);
+    }
+  }
+  // ---- space: the biggest, and the forgotten ----
+  let spaceMode = 'big';
+  function renderSpace(ul) {
+    const bar = document.createElement('li');
+    bar.className = 'review-filter';
+    for (const [k, label] of [['big', t('Lo que más ocupa')], ['video', t('Vídeos')], ['old', t('Sin abrir en 6 meses')]]) {
+      const b = button(label, () => { spaceMode = k; picked.clear(); render(); });
+      b.setAttribute('aria-pressed', String(spaceMode === k));
+      if (spaceMode === k) b.classList.add('btn-primary');
+      bar.appendChild(b);
+    }
+    ul.appendChild(bar);
+    const half = Date.now() - 182 * 86400e3;
+    let list = library.files().slice();
+    if (spaceMode === 'video') list = list.filter((f) => f.kind === 'video');
+    if (spaceMode === 'old') list = list.filter((f) => (f.lastPlayed || 0) < half && f.mtime < half && !f.fav);
+    list.sort((a, b) => b.size - a.size);
+    const total = list.reduce((s, f) => s + f.size, 0);
+    const sum = document.createElement('li');
+    sum.className = 'review-empty';
+    sum.textContent = t('{n} archivos · {s}', { n: list.length, s: formatBytes(total) });
+    ul.appendChild(sum);
+    for (const f of list.slice(0, 200)) {
+      const sub = [formatBytes(f.size), f.kind === 'video' ? t('vídeo') : t('audio'), f.lastPlayed ? t('abierto el {d}', { d: new Date(f.lastPlayed).toLocaleDateString() }) : t('nunca abierto aquí')].join(' · ');
+      const li = row(f.id, library.relOf(f), sub, picked.has(f.id));
+      li.dataset.id = f.id;
+      ul.appendChild(li);
+    }
+  }
+  // ---- actions ----
+  async function upgrade() {
+    const ids = [...picked];
+    try {
+      const r = await postJson('/api/library/review/upgrade', { ids, opts: downloadOptions('audio') });
+      showToast(t('{n} canciones a la cola, con la mejor calidad', { n: r.queued }));
+      picked.clear();
+      render();
+    } catch (err) { showToast(err.message); }
+  }
+  async function fixing(path) {
+    const ids = [...picked];
+    const btns = actionsBox().querySelectorAll('button');
+    btns.forEach((b) => { b.disabled = true; });
+    let done = 0;
+    let missing = 0;
+    for (let i = 0; i < ids.length; i += 5) {
+      $('reviewHint').textContent = t('Arreglando… {d} de {n}', { d: i, n: ids.length });
+      try { const r = await postJson(path, { ids: ids.slice(i, i + 5) }); done += r.done; missing += r.missing; } catch (err) { showToast(err.message); break; }
+    }
+    showToast(t('{d} arregladas · {m} sin encontrar', { d: done, m: missing }));
+    picked.clear();
+    library.load && library.load();
+    fetchData();
+  }
+  async function trash() {
+    const ids = [...picked];
+    let n = 0;
+    for (const id of ids) {
+      const f = library.files().find((x) => x.id === id);
+      if (!f) continue;
+      const r = await desktopApi.trashLibraryFile(library.relOf(f));
+      if (r && r.ok) n++;
+    }
+    showToast(t('{n} archivos a la papelera de Windows', { n }));
+    picked.clear();
+    if (library.load) await library.load();
+    render();
+  }
+  function open() {
+    modal.classList.remove('hidden');
+    picked.clear();
+    $('reviewClose').focus();
+    library.ensure().then(fetchData);
+  }
+  function close() { modal.classList.add('hidden'); clearTimeout(poll); }
+  $('libReview').addEventListener('click', open);
+  $('reviewClose').addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.classList.contains('hidden') && !ctxMenu.isOpen()) close(); });
+  $('reviewTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tab]');
+    if (!b) return;
+    tab = b.dataset.tab;
+    picked.clear();
+    render();
+  });
+  return { open };
+})();
+
 $('searchSaveList').addEventListener('click', () => {
   const sel = searchPicker.selected();
   listenUi.saveAsList(sel.length ? sel : searchPicker.all(), $('searchInput').value.trim() || t('Mi lista'));

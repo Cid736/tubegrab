@@ -331,6 +331,7 @@
             <div class="more-body">
               <div class="group">
                 <label class="row switch" id="optMusicWrap"><span class="row-label">Modo música <small>artista y título limpios, portada cuadrada</small></span><input type="checkbox" id="optMusic"><span class="switch-ui"></span></label>
+                <label class="row switch hidden" id="optOfficialWrap"><span class="row-label">Preferir el audio oficial <small>si el enlace es un videoclip, baja la versión de audio de la canción (sin intro ni final del vídeo)</small></span><input type="checkbox" id="optOfficial" checked><span class="switch-ui"></span></label>
                 <label class="row switch" id="optLyricsWrap"><span class="row-label">Letras <small>las busca en LRCLIB y las añade a la canción</small></span><input type="checkbox" id="optLyrics"><span class="switch-ui"></span></label>
                 <label class="row switch"><span class="row-label">Igualar el volumen <small>que todo suene igual de fuerte (EBU R128)</small></span><input type="checkbox" id="optNormalize"><span class="switch-ui"></span></label>
                 <label class="row switch" id="optBpmWrap"><span class="row-label">BPM y tonalidad <small>en las etiquetas, para DJs (MP3, FLAC, OGG, OPUS)</small></span><input type="checkbox" id="optBpm"><span class="switch-ui"></span></label>
@@ -571,6 +572,10 @@
                 <div data-shelf="foryou">
                   <div class="section-header"><h2>Hecho para ti</h2><span class="hint">Con lo que escuchas, solo en este equipo</span></div>
                   <div class="listen-grid-row" id="forYouCards"></div>
+                </div>
+                <div data-shelf="foryou" class="hidden" id="forYouNewsWrap">
+                  <div class="section-header"><h2>Novedades de tus artistas</h2><span class="hint">Lo nuevo de los que más escuchas</span></div>
+                  <div class="listen-grid-row" id="forYouNews"></div>
                 </div>
                 <div data-shelf="artists">
                   <div class="section-header hidden" id="forYouArtistsHead"><h2>Tus artistas</h2><span class="hint">La radio de cada uno</span></div>
@@ -1335,6 +1340,7 @@
             <button class="link-btn" id="libSendAll" type="button">Enviar lo que se ve al móvil</button>
             <button class="link-btn" id="libRefresh" type="button">Actualizar</button>
             <button class="link-btn" id="libDupes" type="button">Buscar duplicados</button>
+            <button class="link-btn" id="libReview" type="button">Revisar la biblioteca</button>
           </div>
           <div class="lib-pl-bar hidden" id="libPlBar">
             <strong id="libPlName"></strong>
@@ -2359,6 +2365,25 @@
         <button class="btn" id="castRefresh" type="button">Buscar otra vez</button>
         <button class="btn btn-primary" id="castClose" type="button">Cerrar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Biblioteca → Revisar: quality, data, lyrics, albums, space -->
+  <div class="modal hidden" id="reviewModal" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
+    <div class="modal-card review-card">
+      <h2 id="reviewTitle">Revisar la biblioteca</h2>
+      <p class="hint" id="reviewHint" role="status"></p>
+      <div class="segmented segmented-small review-tabs" id="reviewTabs" role="tablist" aria-label="Qué revisar">
+        <button type="button" role="tab" data-tab="quality" class="active">Calidad <span class="review-count"></span></button>
+        <button type="button" role="tab" data-tab="tags">Datos <span class="review-count"></span></button>
+        <button type="button" role="tab" data-tab="lyrics">Letras <span class="review-count"></span></button>
+        <button type="button" role="tab" data-tab="albums">Álbumes <span class="review-count"></span></button>
+        <button type="button" role="tab" data-tab="space">Espacio <span class="review-count"></span></button>
+      </div>
+      <p class="hint" id="reviewTabHint"></p>
+      <div class="review-actions" id="reviewActions"></div>
+      <ul class="review-list" id="reviewList"></ul>
+      <div class="modal-actions"><button class="btn btn-primary" id="reviewClose" type="button">Listo</button></div>
     </div>
   </div>
 

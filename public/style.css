@@ -1893,3 +1893,24 @@ body.has-player .toast-undo { bottom: 96px; }
 .player:not(.long) .pl-book { display: none; }
 .pl-book svg text { font-size: 7.5px; font-weight: 700; fill: currentColor; stroke: none; font-family: var(--font); }
 @media (prefers-reduced-motion: reduce) { .toast-undo { transition: none; } }
+
+/* ===== v3.13: Biblioteca → Revisar ===== */
+.review-card { width: min(720px, 100%); text-align: left; }
+.review-card h2, .review-card > .hint { text-align: left; }
+.review-tabs { margin-top: 12px; flex-wrap: wrap; }
+.review-count:not(:empty) { margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--inset); font-size: 11px; font-variant-numeric: tabular-nums; }
+.review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+.review-list { list-style: none; margin: 0; padding: 4px; max-height: min(52vh, 520px); overflow-y: auto; border-radius: 12px; background: var(--inset); }
+.review-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+.review-row:hover { background: var(--hover); }
+.review-row input { flex: none; }
+.review-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.review-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-sub { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-empty { padding: 14px 10px; font-size: 13px; color: var(--text-2); }
+.review-filter { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 4px 8px; }
+.review-album .review-row { cursor: default; }
+.review-missing { margin: 0 8px 10px 8px; padding: 10px 12px; border-radius: 10px; background: var(--group); font-size: 13px; }
+.review-missing ol { margin: 6px 0 10px 20px; columns: 2; column-gap: 24px; }
+.review-missing .status-message { margin-left: 10px; }
+@media (max-width: 560px) { .review-missing ol { columns: 1; } }

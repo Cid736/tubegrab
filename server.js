@@ -3,6 +3,8 @@ const path = require('path');
 const ffmpegPath = require('ffmpeg-static');
 const { execFile } = require('child_process');
 const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
@@ -969,6 +971,166 @@ app.post('/api/library/meta', requireDesktop, requireClient, createLimiter, (req
 // Lyrics for the player: the synced .lrc next to the song, else the words in
 // its tags, else (when asked, v3.8) LRCLIB by the song's artist and title,
 // like a song from YouTube.
+// === Revisar la biblioteca (desktop): low quality, missing tags, covers or lyrics, albums with songs missing ===
+const { LibInfo, issuesOf } = require('./lib/libinfo');
+const SAFE_IN = ['-protocol_whitelist', 'file', '-format_whitelist', convert.INPUT_DEMUXERS];
+const libInfo = IS_DESKTOP ? new LibInfo(path.join(dataDir, 'library-info.json'), { ffmpegPath: () => currentFfmpegPath(), safeInput: SAFE_IN }) : null;
+const libEntry = (id) => (/^[a-f0-9]{32}$/.test(String(id)) ? (library.lastFiles || []).find((f) => f.id === id) || null : null);
+// "(Official Video)", "[4K Remaster]"…: not part of the song's name.
+const NAME_NOISE = /\s*[([][^)\]]*\b(official|oficial|video|v[ií]deo|audio|lyrics?|letra|visuali[sz]er|hd|4k|remaster(ed)?|mv)\b[^)\]]*[)\]]/gi;
+/**
+ * The song's artist and name, to look it up: from its tags, or its file name.
+ * A download without music mode has the video's title ("Artist - Song (Official
+ * Video)") as its title and the channel ("Queen Official") as its artist.
+ */
+function songNames(f, info) {
+  const base = f.name.replace(/\.[^.]+$/, '').replace(/\s*\[[\w-]{6,}\]$/, '').replace(/^\d{1,3}[\s.\-_]+/, '');
+  let artist = (info && info.artist) || '';
+  let title = ((info && info.title) || base).replace(NAME_NOISE, '').trim();
+  const m = /^(.+?)\s+[-–—]\s+(.+)$/.exec(title);
+  if (m) { artist = m[1].trim(); title = m[2].trim(); }
+  artist = artist.replace(/\s*-\s*Topic$/i, '').replace(/\s*VEVO$/i, '').replace(/\s+Official$/i, '').trim();
+  title = title.replace(/\s+(ft\.?|feat\.?|featuring)\s.+$/i, '').trim();
+  return { artist, title, album: (info && info.album) || '' };
+}
+app.get('/api/library/review', requireDesktop, requireClient, infoLimiter, (req, res) => {
+  if (!library.lastFiles || !library.lastFiles.length) library.scan();
+  const audio = (library.lastFiles || []).filter((f) => f.kind === 'audio');
+  if (!libInfo.running) libInfo.refresh(audio.map((f) => ({ ...f, full: library.resolve(f.id) })).filter((f) => f.full));
+  const files = [];
+  for (const f of audio) {
+    const info = libInfo.get(f);
+    if (!info) continue;
+    files.push({
+      id: f.id, name: f.name, size: f.size, issues: issuesOf(info, f), bitrate: info.bitrate, codec: info.codec, duration: info.duration,
+      artist: info.artist, title: info.title, album: info.album, albumArtist: info.albumArtist, track: info.track, source: Boolean(info.source),
+      label: ((n) => (n.artist ? `${n.artist} - ${n.title}` : n.title))(songNames(f, info)),
+    });
+  }
+  res.json({ indexing: Boolean(libInfo.running), done: libInfo.progress.done, total: libInfo.progress.total, files });
+});
+const reviewIds = (b, max) => (Array.isArray(b && b.ids) ? [...new Set(b.ids.filter((x) => /^[a-f0-9]{32}$/.test(String(x))))].slice(0, max) : []);
+let fixing = false; // one fixing round at a time (they rewrite files)
+async function oneAtATime(res, fn) {
+  if (fixing) return res.status(429).json({ error: 'Ya se están arreglando canciones; espera a que acabe.' });
+  fixing = true;
+  try { res.json(await fn()); } catch (err) { res.status(500).json({ error: err.message }); } finally { fixing = false; }
+}
+// Lyrics for songs without them (LRCLIB), written into the file (+ .lrc when synced).
+app.post('/api/library/review/lyrics', requireDesktop, requireClient, createLimiter, (req, res) => {
+  const ids = reviewIds(req.body, 10);
+  if (!ids.length) return res.status(400).json({ error: 'No hay canciones que revisar.' });
+  oneAtATime(res, async () => {
+    let done = 0;
+    let missing = 0;
+    for (const id of ids) {
+      const f = libEntry(id);
+      const file = f && library.resolve(id);
+      if (!file) { missing++; continue; }
+      const info = libInfo.get(f);
+      const n = songNames(f, info);
+      try {
+        await tags.addLyrics({ ffmpegPath: currentFfmpegPath(), file, artist: n.artist, title: n.title, album: n.album, duration: info && info.duration });
+        const after = fs.existsSync(file.slice(0, file.length - path.extname(file).length) + '.lrc');
+        libInfo.forget(f.rel);
+        if (after || (await tags.readTags(currentFfmpegPath(), file, f.name).catch(() => null) || { tags: {} }).tags.lyrics) done++; else missing++;
+      } catch { missing++; }
+    }
+    library.scan();
+    return { done, missing };
+  });
+});
+// Artist, title, album, year, track and the cover from MusicBrainz, written into the file.
+app.post('/api/library/review/fix', requireDesktop, requireClient, createLimiter, (req, res) => {
+  const ids = reviewIds(req.body, 10);
+  if (!ids.length) return res.status(400).json({ error: 'No hay canciones que revisar.' });
+  oneAtATime(res, async () => {
+    let done = 0;
+    let missing = 0;
+    for (const id of ids) {
+      const f = libEntry(id);
+      const file = f && library.resolve(id);
+      if (!file) { missing++; continue; }
+      const info = libInfo.get(f);
+      const n = songNames(f, info);
+      let found = null;
+      try { found = await musicbrainz.byName({ title: n.title, artist: n.artist, duration: info && info.duration }); } catch { found = null; }
+      if (!found || !found.title) { missing++; continue; }
+      // Only that very song: same length (a live or another cut lasts something else).
+      const len = found.length || await musicbrainz.recordingLength(found.recordingId).catch(() => null);
+      if (!info || !info.duration || !len || Math.abs(len - info.duration) > 15) { missing++; continue; }
+      const ext = path.extname(file).slice(1).toLowerCase();
+      if (!tags.TAG_FORMATS.has(ext)) { missing++; continue; }
+      // Only what it doesn't have yet (what you wrote yourself stays).
+      const newTags = {};
+      for (const k of ['artist', 'title', 'album', 'album_artist', 'date', 'track']) {
+        const mine = info ? { artist: info.artist, title: info.title, album: info.album, album_artist: info.albumArtist, track: info.track }[k] : '';
+        if (!mine && found[k]) newTags[k] = String(found[k]).slice(0, 300);
+      }
+      let cover = null;
+      if (info && !info.cover && found.releaseId && tags.COVER_FORMATS.has(ext)) {
+        const art = await musicbrainz.coverArt(found.releaseId).catch(() => null);
+        if (art) { cover = path.join(os.tmpdir(), `tg-cover-${crypto.randomBytes(6).toString('hex')}.${art.type === 'image/png' ? 'png' : 'jpg'}`); fs.writeFileSync(cover, art.data); }
+      }
+      if (!Object.keys(newTags).length && !cover) { missing++; continue; }
+      const tmp = path.join(path.dirname(file), `.tg-fix-${crypto.randomBytes(4).toString('hex')}.${ext}`);
+      try {
+        await tags.writeTags({ ffmpegPath: currentFfmpegPath(), inputPath: file, ext, tags: newTags, coverPath: cover, out: tmp });
+        // The new one has to be the same song (same length) before it replaces the old one.
+        const a = await convert.probe(currentFfmpegPath(), tmp);
+        const b = await convert.probe(currentFfmpegPath(), file);
+        if (!a || !a.ok || !b || Math.abs((a.duration || 0) - (b.duration || 0)) > 1.5) throw new Error('bad');
+        fs.renameSync(tmp, file);
+        libInfo.forget(f.rel);
+        done++;
+      } catch { missing++; } finally {
+        fs.rmSync(tmp, { force: true });
+        if (cover) fs.rmSync(cover, { force: true });
+      }
+    }
+    library.scan();
+    return { done, missing };
+  });
+});
+// Low quality: the same song again from where it came from (or found by name), as good as YouTube has it.
+app.post('/api/library/review/upgrade', requireDesktop, requireClient, createLimiter, (req, res) => {
+  const ids = reviewIds(req.body, 100);
+  const b = req.body || {};
+  const opts = download.parseDownloadOptions({ ...(b.opts && typeof b.opts === 'object' ? b.opts : {}), mode: 'audio', audioBitrate: '320', playlist: false, chapters: false, sectionStart: '', sectionEnd: '', live: false });
+  const invalid = download.validateOptions(opts);
+  if (invalid) return res.status(400).json({ error: invalid });
+  const items = [];
+  for (const id of ids) {
+    const f = libEntry(id);
+    const info = f ? libInfo.get(f) : null;
+    if (!f) continue;
+    const n = songNames(f, info);
+    const from = info && info.source ? download.normalizeMediaUrl(info.source) : null;
+    const url = from || download.searchUrl(n.artist ? `${n.artist} - ${n.title}` : n.title);
+    if (url) items.push({ url, title: n.artist ? `${n.artist} - ${n.title}` : n.title });
+  }
+  if (!items.length) return res.status(400).json({ error: 'No hay canciones que revisar.' });
+  if (!jobs.canCreate(req.clientId, items.length)) return res.status(429).json(TOO_MANY_JOBS);
+  res.json({ queued: queueDownloads(req.clientId, items, opts) });
+});
+// An album: its songs on MusicBrainz, and which of them you have.
+app.post('/api/library/review/album', requireDesktop, requireClient, infoLimiter, async (req, res) => {
+  const b = req.body || {};
+  const artist = String(b.artist || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 200);
+  const album = String(b.album || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 200);
+  if (!artist || !album) return res.status(400).json({ error: 'Falta el artista o el álbum.' });
+  let found = null;
+  try { found = await musicbrainz.albumTracks({ artist, album }); } catch (err) { return res.status(502).json({ error: err.message }); }
+  if (!found) return res.status(404).json({ error: 'No se encuentra ese álbum en MusicBrainz.' });
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s*[([][^)\]]*[)\]]/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const mine = new Set();
+  for (const f of (library.lastFiles || []).filter((x) => x.kind === 'audio')) {
+    const info = libInfo.get(f);
+    if (info && fold(info.album) === fold(album)) mine.add(fold(info.title || songNames(f, info).title));
+  }
+  res.json({ release: found.release, tracks: found.tracks.map((t) => ({ ...t, have: mine.has(fold(t.title)) })) });
+});
+
 // The chapters of a long file (audiobooks, courses): read once per version of the file.
 const chapterCache = new Map(); // full path -> { mtime, chapters }
 app.get('/api/library/chapters', requireDesktop, requireClient, infoLimiter, async (req, res) => {
@@ -1290,6 +1452,28 @@ app.get('/api/listen/summary', requireDesktop, requireClient, (req, res) => {
 });
 app.post('/api/listen/settings', requireDesktop, requireClient, (req, res) => res.json(listenLog.settings(req.body || {})));
 app.delete('/api/listen', requireDesktop, requireClient, (req, res) => { listenLog.clear(); res.json({ ok: true }); });
+
+// "Novedades de tus artistas": new songs by the artists you listen to most,
+// looked for a few minutes after start and then every 12 hours.
+const { News } = require('./lib/news');
+const news = IS_DESKTOP ? new News(path.join(dataDir, 'news.json')) : null;
+async function lookForNews() {
+  if (!news || !listenLog || listenLog.paused) return;
+  const artists = (listenLog.smart().artists || []).map((a) => a.name).filter(Boolean).slice(0, 8);
+  if (!artists.length || !infoSlots.take()) return;
+  try {
+    await news.check(artists, {
+      // Their channel: of a search for their name, the channel called just that.
+      findChannel: async (a) => News.channelOf(a, await download.search(a, ytEnv(), 12)),
+      newest: async (url) => { const r = await download.latestEntries(url, ytEnv(), 12); return r ? r.entries : []; },
+    });
+  } finally { infoSlots.release(); }
+}
+if (IS_DESKTOP) {
+  setTimeout(() => { lookForNews().catch(() => {}); }, 5 * 60 * 1000).unref();
+  setInterval(() => { lookForNews().catch(() => {}); }, 12 * 3600 * 1000).unref();
+}
+app.get('/api/listen/news', requireDesktop, requireClient, (req, res) => res.json({ news: news.list() }));
 
 // "Favoritas": the songs marked with the star (only on this computer).
 const { Likes } = require('./lib/likes');
