@@ -592,7 +592,7 @@
     'En Convertir → Etiquetas, «Rellenar con MusicBrainz» busca artista, álbum, año, número de pista y la carátula. Sin clave, busca por el título y el artista que ya tengan las canciones.': 'In Convert → Tags, “Fill in from MusicBrainz” looks up the artist, album, year, track number and cover. Without a key it searches by the title and artist the songs already have.',
     'Atajos del reproductor': 'Player shortcuts', 'Funcionan aunque TubeGrab no esté delante': 'Work even when TubeGrab isn’t in front',
     'también en el mini reproductor y con la ventana en la bandeja': 'also with the mini player and with the window in the tray',
-    'Pulsa en una casilla y luego la combinación de teclas.': 'Click a box, then press the key combination.', 'Supr la deja vacía': 'Delete clears it',
+    'Pulsa en una casilla y luego la tecla o la combinación que quieras.': 'Click a box, then press the key or combination you want.', 'Supr la deja vacía': 'Delete clears it',
     'Last.fm': 'Last.fm', 'Registrar lo que escuchas': 'Scrobble what you listen to', '«scrobbling» en tu cuenta de Last.fm': 'to your Last.fm account',
     'API key': 'API key', 'gratis en last.fm/api/account/create': 'free at last.fm/api/account/create', 'Shared secret': 'Shared secret',
     'Cuenta': 'Account', 'Sin conectar': 'Not connected', 'Conectar…': 'Connect…', 'Ya lo he aceptado': 'I’ve approved it', 'Desconectar': 'Disconnect',
@@ -642,7 +642,7 @@
     'Ahora no: lo que añadas empezará a las {h}.': 'Not now: whatever you add starts at {h}.', 'última vez {t}': 'last run {t}', 'Borrar la tarea': 'Delete the task',
     'Tarea añadida': 'Task added', 'Sin atajo': 'No shortcut', 'Otro programa ya usa esta combinación': 'Another program already uses this combination',
     '{n} atajos no funcionan con la ventana en segundo plano: otro programa ya los usa. Cámbialos.': '{n} shortcuts don’t work in the background: another program already uses them. Change them.',
-    'Pulsa la combinación…': 'Press the combination…', 'el «shared secret» de tu cuenta de API': 'your API account’s shared secret',
+    'Pulsa la tecla o la combinación…': 'Press the key or combination…', 'el «shared secret» de tu cuenta de API': 'your API account’s shared secret',
     'Conectado como {u}': 'Connected as {u}', 'Acepta el permiso en la página de Last.fm que se ha abierto y vuelve aquí.': 'Approve access on the Last.fm page that opened, then come back here.',
     'Falta el ID de la aplicación.': 'The application ID is missing.', 'última copia {t}': 'last backup {t}', 'Elige la carpeta de las copias.': 'Choose the backup folder.',
     'Activa la copia automática y elige su carpeta.': 'Turn on automatic backup and choose its folder.', 'Copia guardada: {f}': 'Backup saved: {f}',
@@ -763,6 +763,9 @@
     'YouTube no dio el sonido de este vídeo.': "YouTube didn’t give this video’s sound.",
     'YouTube no dejó escuchar este vídeo ahora mismo.': "YouTube didn’t let this video play right now.",
     'Vídeo no válido.': "Invalid video.",
+    // --- v3.7.2 (shortcuts) ---
+    'solo en TubeGrab': 'only in TubeGrab',
+    'Una tecla que escribe algo (letra, número, espacio, flecha) solo funciona con TubeGrab delante, para no quitártela en otros programas. Para que funcione siempre, añade Ctrl o Alt, o usa F1–F12 o el teclado numérico.': 'A key that types something (letter, number, space, arrow) only works with TubeGrab in front, so other programs keep it. To make it work everywhere, add Ctrl or Alt, or use F1–F12 or the numeric keypad.',
     // --- v3.7.0 (lists, lyrics) ---
     'Escuchar': "Listen",
     'Tus listas de Spotify, Apple Music y YouTube, sin descargar': "Your Spotify, Apple Music and YouTube lists, without downloading",

@@ -78,12 +78,12 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
   - **Play on the TV**: Chromecast and DLNA/UPnP TVs and speakers on your WiFi (play, pause, seek, next)
   - **Mini player**: a small window that stays on top of the others
   - The mini player **can be dragged anywhere** (it opens where you left it) and has mute and keyboard controls
-  - **Your own keyboard shortcuts**: play/pause, next, previous, stop, volume up/down, mute, ±10 s, mini player, show the app — also with the window in the background or in the tray; ⏮ ⏯ ⏭ in the **taskbar thumbnail** and in the tray menu
+  - **Your own keyboard shortcuts** (any key or combination; plain letter keys only inside TubeGrab): play/pause, next, previous, stop, volume up/down, mute, ±10 s, mini player, show the app — also with the window in the background or in the tray; ⏮ ⏯ ⏭ in the **taskbar thumbnail** and in the tray menu
   - **Cover grid**, **smart lists** (not played yet, added this month, most played, recently played, 4–5 stars), **search by a line of the lyrics**, the **.srt subtitles** next to a video, and **radio mode** (when the list ends, similar songs from your library)
   - **Send a whole list to the phone** at once: one QR, every file or all of them as a .zip
   - **Listen without downloading** (desktop), like a music app: play any search result, a YouTube playlist or your **Spotify / Apple Music playlists** straight from YouTube, nothing saved; ⬇ downloads the song you like
   - **Escuchar** page: paste a Spotify, Apple Music or YouTube playlist link and it stays as a list of yours (play, shuffle, add to what's playing, download all, update from the link)
-  - **Up next** list (jump, remove, save as a list), **radio** with YouTube's mix of similar songs, and a **mini player that searches and plays** by itself
+  - **Up next** list (jump, remove, save as a list), **radio** with YouTube's mix of similar songs, and a **mini player that searches and plays** by itself, with volume, shuffle, repeat and radio
   - **Lyrics in step**: followed frame by frame, the line being sung fills in like karaoke, and − / + moves them if a version starts earlier or later (remembered per song)
   - **Last.fm** scrobbling and **Discord** "Listening to…" (with your own free keys)
 - **Statistics**: downloads and conversions per month, top channels and artists, most played, library size
@@ -319,12 +319,12 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
   - **Enviar a la tele**: Chromecast y teles o altavoces DLNA/UPnP de tu WiFi (reproducir, pausa, saltar, siguiente)
   - **Mini reproductor**: una ventanita que se queda encima de las demás
   - El mini reproductor **se arrastra a donde quieras** (se abre donde lo dejaste) y tiene silencio y control con el teclado
-  - **Tus propios atajos de teclado**: reproducir/pausa, siguiente, anterior, parar, subir/bajar volumen, silenciar, ±10 s, mini reproductor, mostrar la app; también con la ventana en segundo plano o en la bandeja; ⏮ ⏯ ⏭ en la **miniatura de la barra de tareas** y en el menú de la bandeja
+  - **Tus propios atajos de teclado** (cualquier tecla o combinación; las letras sueltas solo dentro de TubeGrab): reproducir/pausa, siguiente, anterior, parar, subir/bajar volumen, silenciar, ±10 s, mini reproductor, mostrar la app; también con la ventana en segundo plano o en la bandeja; ⏮ ⏯ ⏭ en la **miniatura de la barra de tareas** y en el menú de la bandeja
   - **Vista de carátulas**, **listas inteligentes** (sin escuchar, añadidas este mes, las más escuchadas, escuchadas hace poco, 4–5 estrellas), **buscar por un trozo de la letra**, los **subtítulos .srt** de un vídeo, y **modo radio** (al acabar la lista, canciones parecidas de tu biblioteca)
   - **Enviar una lista entera al móvil** de una vez: un QR, cada archivo o todos en un .zip
   - **Escuchar sin descargar** (app de escritorio), como una app de música: cualquier resultado de Buscar, una playlist de YouTube o **tus playlists de Spotify / Apple Music** suenan directo desde YouTube, sin guardar nada; ⬇ descarga la que te guste
   - Página **Escuchar**: pega el enlace de una playlist de Spotify, Apple Music o YouTube y se queda como una lista tuya (reproducir, aleatorio, añadir a lo que suena, descargar todo, actualizar desde el enlace)
-  - Lista **A continuación** (saltar, quitar, guardar como lista), **radio** con la mezcla de canciones parecidas de YouTube, y un **mini reproductor que busca y reproduce** él solo
+  - Lista **A continuación** (saltar, quitar, guardar como lista), **radio** con la mezcla de canciones parecidas de YouTube, y un **mini reproductor que busca y reproduce** él solo, con volumen, aleatorio, repetir y radio
   - **Letra a la par**: se sigue fotograma a fotograma, la línea que se canta se rellena como en un karaoke, y con − / + se ajusta si una versión empieza antes o después (se recuerda por canción)
   - **Last.fm** (scrobbling) y **Discord** («Escuchando…»), con tus propias claves gratuitas
 - **Estadísticas**: descargas y conversiones por mes, canales y artistas que más, lo más escuchado y el tamaño de la biblioteca

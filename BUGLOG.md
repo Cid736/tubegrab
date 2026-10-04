@@ -602,3 +602,15 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - **Corregido:** pedir muchas canciones distintas a la vez lanzaba un yt-dlp por cada una sin límite; ahora van como mucho 3 a la vez, hasta 30 esperando, y el resto recibe «ocupado».
 - **Comprobado con pruebas de ataque contra el servidor en modo escritorio:** ids de vídeo inventados o con saltos de línea, rutas `../` y opciones de yt-dlp camufladas → 400; sin identificador de cliente → 400; importar listas desde `127.0.0.1`, `file://`, `javascript:`, otros dominios o `open.spotify.com.evil.example` → 400; listas hechas a mano con miniaturas de otros sitios, canciones vacías o datos que no son canciones → se limpian; todo esto no existe en un servidor web propio (404).
 - **Repasado a mano:** el sonido solo se pide a `*.googlevideo.com` y a direcciones públicas, también tras redirecciones; la página nunca ve esa dirección. Todo lo que muestran la página, la lista «A continuación», las listas y el mini reproductor (títulos de YouTube o de Spotify) va como texto, nunca como HTML. Los mensajes del mini reproductor al proceso principal pasan por una lista blanca. El código de estilo y los desfases de la letra se validan al leerlos. `npm audit --omit=dev` → 0 vulnerabilidades. 237 pruebas.
+
+---
+
+## 2026-10-04 — v3.7.2: atajos con cualquier tecla y un mini reproductor más completo
+
+### [UI] Los atajos solo aceptaban combinaciones
+- **Síntoma:** una tecla sola (una letra, el espacio, una flecha, una tecla de puntuación del teclado español) no se podía poner; solo las multimedia y F1–F24.
+- **Causa:** el proceso principal rechazaba toda tecla suelta que no fuera de esa lista (para no robársela a los demás programas), y la página no reconocía las teclas de puntuación de un teclado que no sea inglés.
+- **Fix:** ahora vale cualquier tecla o combinación. Las que funcionan aunque TubeGrab no esté delante: F1–F24, las multimedia, el teclado numérico, Inicio/Fin/RePág/AvPág/Insert y cualquier combinación con Ctrl, Alt o Win. Una tecla que escribe algo (letra, número, espacio, flecha, sola o con Mayús) funciona solo con TubeGrab delante (se ve «solo en TubeGrab» en su casilla), así no se le quita esa tecla a los demás programas; mientras escribes en un campo de TubeGrab no cuenta. Las teclas de puntuación se reconocen por su posición. La lista blanca de teclas del proceso principal sigue igual.
+
+### [UI] Mini reproductor con más controles sin crecer
+- Volumen (barra pequeña y rueda del ratón sobre el reproductor), tiempo transcurrido y total, aleatorio, repetir, modo radio y ⬇ para descargar la canción que suena desde YouTube; sigue midiendo 360 × 128. Las órdenes nuevas pasan por la misma lista blanca del proceso principal.

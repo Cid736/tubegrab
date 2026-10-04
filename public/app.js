@@ -5351,7 +5351,7 @@ const player = (() => {
       playing: f ? !deck.paused : false, time: deck.currentTime || 0, duration: Number.isFinite(deck.duration) ? deck.duration : 0,
       cover: f && f.kind !== 'video' ? coverOf(f) : null,
       volume: A.volume, muted: A.muted,
-      streaming: isStream(f),
+      streaming: isStream(f), shuffle, repeat, radio,
       upNext: list.map((x, n) => ({ title: nameOf(x), sub: isStream(x) ? x.channel : x.folder || '', n })).slice(index + 1, index + 31),
     });
   }
@@ -5371,6 +5371,9 @@ const player = (() => {
     if (!cur() && cmd !== 'hello') return;
     if (cmd === 'jump' && Number.isInteger(value) && list[value]) { index = value; start(); return; }
     if (cmd === 'pause') { if (!deck.paused) deck.pause(); pushState(); return; }
+    // The mini player's toggles and ⬇ are the bar's own buttons.
+    const BUTTONS = { shuffle: 'plShuffle', repeat: 'plRepeat', radio: 'plRadio', save: 'plSave' };
+    if (BUTTONS[cmd]) { if (cmd !== 'save' || isStream(cur())) $(BUTTONS[cmd]).click(); pushState(); return; }
     if (cmd === 'toggle') toggle();
     else if (cmd === 'next') step(1);
     else if (cmd === 'prev') step(-1);
@@ -5400,6 +5403,8 @@ const playerKeys = (() => {
   const KEY_NAMES = { ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', ' ': 'Space', '+': 'Plus', Escape: 'Esc',
     MediaTrackNext: 'MediaNextTrack', MediaTrackPrevious: 'MediaPreviousTrack', MediaPlayPause: 'MediaPlayPause', MediaStop: 'MediaStop',
     AudioVolumeUp: 'VolumeUp', AudioVolumeDown: 'VolumeDown', AudioVolumeMute: 'VolumeMute' };
+  const NUMPAD = { NumpadAdd: 'numadd', NumpadSubtract: 'numsub', NumpadMultiply: 'nummult', NumpadDivide: 'numdiv', NumpadDecimal: 'numdec' };
+  const PUNCT = { Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'", Backquote: '`', Backslash: '\\', Comma: ',', Period: '.', Slash: '/' };
   /** A key press → "Control+Alt+P" (Electron's way of writing it), or null. */
   function accelerator(e) {
     if (['Control', 'Alt', 'Shift', 'Meta', 'AltGraph'].includes(e.key)) return null;
@@ -5407,6 +5412,9 @@ const playerKeys = (() => {
     if (!key && /^Key[A-Z]$/.test(e.code)) key = e.code.slice(3);
     if (!key && /^Digit\d$/.test(e.code)) key = e.code.slice(5);
     if (!key && /^Numpad\d$/.test(e.code)) key = `num${e.code.slice(6)}`;
+    if (!key && NUMPAD[e.code]) key = NUMPAD[e.code];
+    // Punctuation by where the key is, so a Spanish keyboard (ñ, ´, º…) works too.
+    if (!key && PUNCT[e.code]) key = PUNCT[e.code];
     if (!key && /^F([1-9]|1\d|2[0-4])$/.test(e.key)) key = e.key;
     if (!key && ['Enter', 'Tab', 'Backspace', 'Delete', 'Insert', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) key = e.key;
     if (!key && e.key.length === 1 && /[,.\-=;'/\\`[\]]/.test(e.key)) key = e.key;
@@ -5420,14 +5428,19 @@ const playerKeys = (() => {
     try { cfg = (await desktopApi.getShortcuts()) || cfg; } catch { /* defaults */ }
   }
   document.addEventListener('keydown', (e) => {
-    if (!desktopApi || cfg.global || e.defaultPrevented || e.repeat) return;
+    if (!desktopApi || e.defaultPrevented || e.repeat) return;
+    if (document.querySelector('.keys-box.recording')) return;
     const acc = accelerator(e);
     if (!acc) return;
     // While typing, only combinations with Ctrl or Alt count.
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName) || (document.activeElement && document.activeElement.isContentEditable);
     if (typing && !e.ctrlKey && !e.altKey) return;
+    // A plain key on a focused button or the seek bar is that control's own.
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && /^(BUTTON|A)$/.test(document.activeElement && document.activeElement.tagName) && (acc === 'Space' || acc === 'Enter')) return;
     const action = Object.keys(cfg.keys || {}).find((a) => cfg.keys[a] && norm(cfg.keys[a]) === acc);
     if (!action) return;
+    // Background shortcuts are Windows' to deliver; plain keys only work here.
+    if (cfg.global && !(cfg.localOnly || []).includes(action)) return;
     e.preventDefault();
     if (action === 'mini') desktopApi.openMini();
     else if (action !== 'show') player.command(action);
@@ -6891,9 +6904,11 @@ const podcastsUi = (() => {
       row.innerHTML = '<span class="row-label"></span><button type="button" class="keys-box"></button>';
       row.querySelector('.row-label').textContent = t(NAMES[a]);
       const b = row.querySelector('.keys-box');
-      b.textContent = cfg.keys[a] ? pretty(cfg.keys[a]) : t('Sin atajo');
+      const local = cfg.global && (cfg.localOnly || []).includes(a);
+      b.textContent = cfg.keys[a] ? `${pretty(cfg.keys[a])}${local ? ` · ${t('solo en TubeGrab')}` : ''}` : t('Sin atajo');
       b.classList.toggle('failed', (cfg.failed || []).includes(a));
       if ((cfg.failed || []).includes(a)) b.title = t('Otro programa ya usa esta combinación');
+      else if (local) b.title = t('Una tecla que escribe algo (letra, número, espacio, flecha) solo funciona con TubeGrab delante, para no quitártela en otros programas. Para que funcione siempre, añade Ctrl o Alt, o usa F1–F12 o el teclado numérico.');
       b.setAttribute('aria-label', `${t(NAMES[a])}: ${b.textContent}`);
       b.addEventListener('click', () => record(a, b));
       box.appendChild(row);
@@ -6903,7 +6918,7 @@ const podcastsUi = (() => {
     setStatusEl($('keysStatus'), failed ? t('{n} atajos no funcionan con la ventana en segundo plano: otro programa ya los usa. Cámbialos.', { n: failed }) : '', failed ? 'error' : '');
   }
   function record(action, b) {
-    b.textContent = t('Pulsa la combinación…');
+    b.textContent = t('Pulsa la tecla o la combinación…');
     b.classList.add('recording');
     const onKey = async (e) => {
       e.preventDefault();

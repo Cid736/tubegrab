@@ -8,13 +8,17 @@
   const en = (() => { try { return JSON.parse(localStorage.getItem('tubegrab_prefs')).lang === 'en'; } catch { return false; } })();
   if (en) {
     $('sub').textContent = 'Nothing playing';
-    for (const [id, label] of [['open', 'Open TubeGrab'], ['close', 'Close'], ['prev', 'Previous'], ['play', 'Play / pause'], ['next', 'Next'], ['mute', 'Mute']]) {
+    for (const [id, label] of [['open', 'Open TubeGrab'], ['close', 'Close'], ['prev', 'Previous'], ['play', 'Play / pause'], ['next', 'Next'], ['mute', 'Mute (mouse wheel: volume)'],
+      ['shuffle', 'Shuffle'], ['repeat', 'Repeat'], ['radio', 'Radio mode: similar songs when the list ends'], ['save', 'Download this song'], ['vol', 'Volume']]) {
       $(id).title = label;
       $(id).setAttribute('aria-label', label);
     }
   }
   let seeking = false;
   let coverSrc = null;
+  let volDragging = false;
+  let volume = 1;
+  const fmt = (s) => (Number.isFinite(s) && s > 0 ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}` : '');
   api.onPlayerState((s) => {
     $('title').textContent = s.title || 'TubeGrab';
     $('sub').textContent = s.sub || (s.title ? '' : (en ? 'Nothing playing' : 'Nada sonando'));
@@ -24,7 +28,17 @@
     if (!seeking) {
       $('seek').max = String(s.duration || 1);
       $('seek').value = String(s.time || 0);
+      $('time').textContent = fmt(s.time) || '0:00';
     }
+    $('dur').textContent = fmt(s.duration) || '0:00';
+    if (!volDragging && Number.isFinite(s.volume)) $('vol').value = String(s.muted ? 0 : s.volume);
+    volume = Number.isFinite(s.volume) ? s.volume : volume;
+    for (const k of ['shuffle', 'repeat', 'radio']) {
+      $(k).classList.toggle('on', s[k] === true);
+      $(k).setAttribute('aria-pressed', String(s[k] === true));
+    }
+    // Only a song playing from YouTube (not downloaded) can be downloaded from here.
+    $('save').classList.toggle('hidden', s.streaming !== true);
     if (s.cover !== coverSrc) {
       coverSrc = s.cover;
       const box = $('cover');
@@ -46,7 +60,17 @@
   $('mute').addEventListener('click', () => api.miniCommand('mute'));
   $('open').addEventListener('click', () => api.miniCommand('open'));
   $('close').addEventListener('click', () => api.miniCommand('close'));
-  $('seek').addEventListener('input', () => { seeking = true; });
+  for (const k of ['shuffle', 'repeat', 'radio', 'save']) $(k).addEventListener('click', () => api.miniCommand(k));
+  // Volume: the little bar, or the mouse wheel anywhere on the player.
+  $('vol').addEventListener('input', () => { volDragging = true; volume = Number($('vol').value); api.miniCommand({ cmd: 'volume', value: volume }); });
+  $('vol').addEventListener('change', () => { volDragging = false; });
+  $('mini').addEventListener('wheel', (e) => {
+    e.preventDefault();
+    volume = Math.min(1, Math.max(0, Math.round((volume + (e.deltaY < 0 ? 0.05 : -0.05)) * 20) / 20));
+    $('vol').value = String(volume);
+    api.miniCommand({ cmd: 'volume', value: volume });
+  }, { passive: false });
+  $('seek').addEventListener('input', () => { seeking = true; $('time').textContent = fmt(Number($('seek').value)) || '0:00'; });
   $('seek').addEventListener('change', () => { api.miniCommand({ cmd: 'seek', value: Number($('seek').value) }); seeking = false; });
 
   // Moving the window: how far the pointer went, on screen, sent as it moves.
@@ -122,7 +146,6 @@
   }
   $('tabSearch').addEventListener('click', () => tab('search'));
   $('tabNext').addEventListener('click', () => tab('next'));
-  const fmt = (s) => (Number.isFinite(s) && s > 0 ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}` : '');
   function row(title, sub, thumb, onPlay, onAdd) {
     const li = document.createElement('li');
     const b = document.createElement('button');

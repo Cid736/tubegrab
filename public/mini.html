@@ -18,16 +18,26 @@
           <span class="title" id="title">TubeGrab</span>
           <span class="sub" id="sub">Nada sonando</span>
         </div>
-        <button class="icon" id="open" type="button" title="Abrir TubeGrab" aria-label="Abrir TubeGrab"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></button>
-        <button class="icon" id="close" type="button" title="Cerrar" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button class="icon sm hidden" id="save" type="button" title="Descargar esta canción" aria-label="Descargar esta canción"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/></svg></button>
+        <button class="icon sm" id="open" type="button" title="Abrir TubeGrab" aria-label="Abrir TubeGrab"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></button>
+        <button class="icon sm" id="close" type="button" title="Cerrar" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <div class="controls">
+        <button class="icon sm toggle" id="shuffle" type="button" title="Aleatorio" aria-label="Aleatorio" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
         <button class="icon" id="prev" type="button" title="Anterior" aria-label="Anterior"><svg viewBox="0 0 24 24"><path d="M6 5v14M19 5l-9 7 9 7z"/></svg></button>
         <button class="icon play" id="play" type="button" title="Reproducir / pausa" aria-label="Reproducir / pausa"><svg class="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
         <button class="icon" id="next" type="button" title="Siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></svg></button>
-        <button class="icon" id="mute" type="button" title="Silenciar" aria-label="Silenciar" aria-pressed="false"><svg class="i-vol" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg><svg class="i-muted" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg></button>
+        <button class="icon sm toggle" id="repeat" type="button" title="Repetir" aria-label="Repetir" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
+        <button class="icon sm toggle" id="radio" type="button" title="Modo radio: al acabar, sigue con canciones parecidas" aria-label="Modo radio" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l10-5"/><circle cx="8" cy="14" r="2.2"/><path d="M14 12h4M14 16h4"/></svg></button>
+        <span class="flex"></span>
+        <button class="icon sm" id="more" type="button" title="Buscar y lo que viene" aria-label="Buscar y lo que viene" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M19 19l-4-4"/></svg></button>
+      </div>
+      <div class="bottom">
+        <span class="time" id="time">0:00</span>
         <input type="range" id="seek" min="0" max="1" step="0.1" value="0" aria-label="Posición">
-        <button class="icon" id="more" type="button" title="Buscar y lo que viene" aria-label="Buscar y lo que viene" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M19 19l-4-4"/></svg></button>
+        <span class="time" id="dur">0:00</span>
+        <button class="icon xs" id="mute" type="button" title="Silenciar (rueda del ratón: volumen)" aria-label="Silenciar" aria-pressed="false"><svg class="i-vol" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg><svg class="i-muted" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg></button>
+        <input type="range" class="vol" id="vol" min="0" max="1" step="0.05" value="1" aria-label="Volumen" title="Volumen">
       </div>
     </div>
   </div>

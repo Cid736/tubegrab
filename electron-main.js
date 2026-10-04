@@ -789,7 +789,7 @@ ipcMain.on('player:state', (event, state) => {
     volume: Number.isFinite(Number(state.volume)) ? Math.min(1, Math.max(0, Number(state.volume))) : 1, muted: state.muted === true,
     // What comes next (the mini window's "Up next"), titles only.
     upNext: Array.isArray(state.upNext) ? state.upNext.slice(0, 30).map((x) => ({ title: text(x && x.title, 200), sub: text(x && x.sub, 120), n: Number.isInteger(x && x.n) ? x.n : -1 })) : [],
-    streaming: state.streaming === true,
+    streaming: state.streaming === true, shuffle: state.shuffle === true, repeat: state.repeat === true, radio: state.radio === true,
   };
   clean.active = Boolean(clean.title);
   const was = playerNow;
@@ -799,7 +799,7 @@ ipcMain.on('player:state', (event, state) => {
   scrobbler.onState(clean);
   discord.onState(clean);
 });
-const PLAYER_COMMANDS = ['toggle', 'next', 'prev', 'hello', 'stop', 'volup', 'voldown', 'mute', 'seekf', 'seekb'];
+const PLAYER_COMMANDS = ['toggle', 'next', 'prev', 'hello', 'stop', 'volup', 'voldown', 'mute', 'seekf', 'seekb', 'shuffle', 'repeat', 'radio', 'save'];
 ipcMain.on('player:command', (event, cmd) => {
   if (!isTrustedSender(event) || !miniWindow || event.sender !== miniWindow.webContents) return;
   if (cmd === 'close') { miniWindow.close(); return; }
@@ -886,7 +886,7 @@ const SHORTCUT_DEFAULTS = {
   mini: 'Control+Alt+P', show: 'Control+Alt+T',
 };
 const ACCEL_MODS = new Set(['Control', 'Ctrl', 'CommandOrControl', 'CmdOrCtrl', 'Alt', 'Shift', 'Super', 'Meta']);
-const ACCEL_LONE = /^(MediaPlayPause|MediaNextTrack|MediaPreviousTrack|MediaStop|VolumeUp|VolumeDown|VolumeMute|F([1-9]|1\d|2[0-4]))$/;
+const ACCEL_LONE = /^(MediaPlayPause|MediaNextTrack|MediaPreviousTrack|MediaStop|VolumeUp|VolumeDown|VolumeMute|F([1-9]|1\d|2[0-4])|num[0-9]|numadd|numsub|nummult|numdiv|numdec|Insert|Home|End|PageUp|PageDown)$/;
 const ACCEL_KEY = /^([A-Z0-9]|F([1-9]|1\d|2[0-4])|Up|Down|Left|Right|Space|Tab|Backspace|Delete|Insert|Enter|Home|End|PageUp|PageDown|Plus|num[0-9]|numadd|numsub|nummult|numdiv|numdec|[,.\-=;'/\\`[\]]|MediaPlayPause|MediaNextTrack|MediaPreviousTrack|MediaStop|VolumeUp|VolumeDown|VolumeMute)$/;
 /** "Control+Alt+P" → itself if it's a combination we accept (letters need a modifier), else null. */
 function cleanAccelerator(raw) {
@@ -897,10 +897,19 @@ function cleanAccelerator(raw) {
   const key = parts.pop();
   const mods = parts;
   if (!ACCEL_KEY.test(key) || new Set(mods).size !== mods.length || !mods.every((m) => ACCEL_MODS.has(m))) return null;
-  if (!mods.length && !ACCEL_LONE.test(key)) return null;
-  // Shift alone with a letter would take over typing capitals.
-  if (mods.length === 1 && mods[0] === 'Shift' && !ACCEL_LONE.test(key)) return null;
+  // Any key, alone or with modifiers (see globalOk for where it works).
   return [...mods, key].join('+');
+}
+/**
+ * Whether a shortcut can work with TubeGrab in the background. A plain key
+ * that types something (a letter, Space, an arrow…), alone or with Shift,
+ * would stop typing it in every other program: those only work in TubeGrab.
+ */
+function globalOk(acc) {
+  const parts = String(acc).split('+');
+  const key = parts.pop();
+  if (parts.some((m) => m !== 'Shift')) return true;
+  return ACCEL_LONE.test(key);
 }
 function shortcutSettings() {
   const raw = getSettings().shortcuts || {};
@@ -922,6 +931,8 @@ function applyShortcuts() {
     const acc = s.keys[a];
     if (!acc || seen.has(acc)) continue;
     seen.add(acc);
+    // Only in TubeGrab (the page handles it): never taken from other programs.
+    if (!globalOk(acc)) continue;
     const fire = () => {
       if (a === 'show') showWindow();
       else if (a === 'mini') { if (miniWindow && !miniWindow.isDestroyed()) miniWindow.close(); else openMini(); }
@@ -933,7 +944,10 @@ function applyShortcuts() {
     if (!ok) shortcutFailed.push(a);
   }
 }
-const shortcutView = () => ({ ...shortcutSettings(), defaults: SHORTCUT_DEFAULTS, failed: shortcutFailed });
+const shortcutView = () => {
+  const s = shortcutSettings();
+  return { ...s, defaults: SHORTCUT_DEFAULTS, failed: shortcutFailed, localOnly: SHORTCUT_ACTIONS.filter((a) => s.keys[a] && !globalOk(s.keys[a])) };
+};
 ipcMain.handle('desktop:getShortcuts', (event) => (isTrustedSender(event) ? shortcutView() : null));
 ipcMain.handle('desktop:setShortcuts', (event, patch) => {
   if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return null;
