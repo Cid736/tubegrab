@@ -73,3 +73,31 @@ input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .time { font-size: 10px; color: var(--text-2); font-variant-numeric: tabular-nums; min-width: 26px; text-align: center; }
 .bottom #seek { flex: 1; min-width: 40px; }
 .bottom .vol { flex: 0 0 56px; width: 56px; }
+
+/* v3.7.3: its own settings (drawer tab), compact size, overlay. */
+.settings { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 2px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.srow { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.srow > span:first-child { flex: none; }
+.srow input[type="range"] { flex: 1; }
+.srow output { min-width: 36px; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.srow.check { cursor: pointer; align-items: flex-start; }
+.srow.check input { margin: 1px 0 0; accent-color: var(--accent); flex: none; }
+.corners { display: flex; gap: 2px; margin-left: auto; }
+.corners .icon { font-size: 14px; }
+.settings .note { margin: 2px 0 0; line-height: 1.35; }
+body.locked .mini { cursor: default; }
+
+/* Compact: one row, 300 × 64 — cover, title, ⏮ ⏯ ⏭, search, close. */
+body.compact .mini { height: 64px; padding: 8px 10px; gap: 8px; }
+body.compact .cover { flex-basis: 48px; height: 48px; border-radius: 6px; }
+body.compact .cover svg { width: 22px; height: 22px; }
+body.compact .body { flex-direction: row; align-items: center; gap: 4px; }
+body.compact .top { display: contents; }
+body.compact .text { flex: 1; min-width: 0; order: 0; padding-top: 0; }
+body.compact #close { order: 2; }
+body.compact .controls { flex: none; order: 1; }
+body.compact .bottom, body.compact .controls .toggle, body.compact .flex, body.compact #save, body.compact #open, body.compact #pin { display: none; }
+body.compact .play { width: 30px; height: 30px; }
+body.compact .title { font-size: 12px; }
+body.compact .sub { font-size: 11px; }
+body.compact .drawer { height: calc(100% - 64px); }

@@ -16,6 +16,7 @@
   }
   let seeking = false;
   let coverSrc = null;
+  let prefs = { opacity: 1, hoverFull: true, onTop: true, locked: false, clickThrough: false, compact: false };
   let volDragging = false;
   let volume = 1;
   const fmt = (s) => (Number.isFinite(s) && s > 0 ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}` : '');
@@ -77,7 +78,7 @@
   const box = $('mini');
   let drag = null;
   box.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || e.target.closest('button, input')) return;
+    if (e.button !== 0 || e.target.closest('button, input') || prefs.locked) return;
     drag = { x: e.screenX, y: e.screenY, id: e.pointerId };
     box.setPointerCapture(e.pointerId);
     box.classList.add('dragging');
@@ -119,6 +120,18 @@
   $('q').placeholder = L.ph;
   $('q').setAttribute('aria-label', L.ph);
   $('note').textContent = L.note;
+  if (en) {
+    const EN_TEXT = {
+      tabSet: 'Settings', lOpacity: 'Opacity', lHover: 'Fully visible under the pointer', lTop: 'Always on top (also of games in a window)',
+      lLock: 'Fix it here (dragging doesn’t move it)', lThrough: 'Let clicks through (overlay): hold Ctrl over it to use it', lCompact: 'Compact', lCorner: 'Send to a corner',
+      lGame: 'Over exclusive fullscreen games Windows shows nothing: use the game’s borderless window mode. If clicks pass through, use it again with Ctrl or from the tray icon.',
+    };
+    for (const [id, text] of Object.entries(EN_TEXT)) $(id).textContent = text;
+    $('pin').title = 'Always on top';
+    $('pin').setAttribute('aria-label', 'Always on top');
+    const CORNERS = { tl: 'Top left', tr: 'Top right', bl: 'Bottom left', br: 'Bottom right' };
+    document.querySelectorAll('[data-corner]').forEach((b) => { b.title = CORNERS[b.dataset.corner]; b.setAttribute('aria-label', b.title); });
+  }
   let open = false;
   let results = [];
   let upNext = [];
@@ -134,18 +147,55 @@
   $('more').addEventListener('click', () => setOpen(!open));
   function tab(which) {
     const search = which === 'search';
-    $('tabSearch').classList.toggle('on', search);
-    $('tabNext').classList.toggle('on', !search);
-    $('tabSearch').setAttribute('aria-selected', String(search));
-    $('tabNext').setAttribute('aria-selected', String(!search));
+    for (const [id, name] of [['tabSearch', 'search'], ['tabNext', 'next'], ['tabSet', 'set']]) {
+      $(id).classList.toggle('on', which === name);
+      $(id).setAttribute('aria-selected', String(which === name));
+    }
     $('searchForm').classList.toggle('hidden', !search);
     $('results').classList.toggle('hidden', !search);
-    $('upnext').classList.toggle('hidden', search);
     $('note').classList.toggle('hidden', !search);
-    if (!search) renderNext();
+    $('upnext').classList.toggle('hidden', which !== 'next');
+    $('settings').classList.toggle('hidden', which !== 'set');
+    if (which === 'next') renderNext();
   }
   $('tabSearch').addEventListener('click', () => tab('search'));
   $('tabNext').addEventListener('click', () => tab('next'));
+  $('tabSet').addEventListener('click', () => tab('set'));
+
+  // ---- Its own settings: see-through, on top, fixed, clicks through, compact ----
+  const setPrefs = (patch) => api.miniCommand({ cmd: 'miniPrefs', value: patch });
+  $('pin').addEventListener('click', () => setPrefs({ onTop: !prefs.onTop }));
+  $('sOpacity').addEventListener('input', () => { $('sOpacityOut').textContent = `${Math.round(Number($('sOpacity').value) * 100)}%`; setPrefs({ opacity: Number($('sOpacity').value) }); });
+  for (const [id, key] of [['sHover', 'hoverFull'], ['sTop', 'onTop'], ['sLock', 'locked'], ['sThrough', 'clickThrough'], ['sCompact', 'compact']]) {
+    $(id).addEventListener('change', () => setPrefs({ [key]: $(id).checked }));
+  }
+  document.querySelectorAll('[data-corner]').forEach((b) => b.addEventListener('click', () => api.miniCommand({ cmd: 'snap', value: b.dataset.corner })));
+  if (api.onMiniPrefs) {
+    api.onMiniPrefs((p) => {
+      prefs = p || prefs;
+      $('sOpacity').value = String(prefs.opacity);
+      $('sOpacityOut').textContent = `${Math.round(prefs.opacity * 100)}%`;
+      $('sHover').checked = prefs.hoverFull;
+      $('sTop').checked = prefs.onTop;
+      $('sLock').checked = prefs.locked;
+      $('sThrough').checked = prefs.clickThrough;
+      $('sCompact').checked = prefs.compact;
+      $('pin').classList.toggle('on', prefs.onTop);
+      $('pin').setAttribute('aria-pressed', String(prefs.onTop));
+      document.body.classList.toggle('compact', prefs.compact);
+      document.body.classList.toggle('locked', prefs.locked);
+      document.body.classList.toggle('through', prefs.through === true);
+    });
+  }
+  // Fully visible under the pointer; with clicks passing through, Ctrl makes it usable.
+  let grabbed = false;
+  document.addEventListener('mouseenter', () => api.miniCommand({ cmd: 'hover', value: true }));
+  document.addEventListener('mouseleave', () => { grabbed = false; api.miniCommand({ cmd: 'hover', value: false }); });
+  document.addEventListener('mousemove', (e) => {
+    if (!prefs.clickThrough || e.ctrlKey === grabbed) return;
+    grabbed = e.ctrlKey;
+    api.miniCommand({ cmd: 'grab', value: grabbed });
+  });
   function row(title, sub, thumb, onPlay, onAdd) {
     const li = document.createElement('li');
     const b = document.createElement('button');

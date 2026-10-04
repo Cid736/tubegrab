@@ -716,36 +716,74 @@ ipcMain.handle('desktop:syncMirror', async (event, info) => {
 // === Mini player: a small window on top of the others ===
 // Moved by dragging it anywhere but its buttons (the page sends how far the
 // pointer went; only the mini window itself can), and it opens where it was left.
+// It can also be an overlay over a game: see-through, on top of everything,
+// fixed in place, and even letting clicks through to what's behind.
 let miniWindow = null;
-const MINI_SIZE = { width: 360, height: 128 };
+const MINI_SIZES = { normal: { width: 360, height: 128 }, compact: { width: 300, height: 64 } };
+const MINI_TALL = 470;
+const MINI_DEFAULTS = { opacity: 1, hoverFull: true, onTop: true, locked: false, clickThrough: false, compact: false };
+/** The mini player's own settings, each checked (they drive window calls). */
+function miniPrefs() {
+  const raw = getSettings().miniPrefs || {};
+  const out = { ...MINI_DEFAULTS };
+  if (Number.isFinite(raw.opacity)) out.opacity = Math.min(1, Math.max(0.2, Math.round(raw.opacity * 20) / 20));
+  for (const k of ['hoverFull', 'onTop', 'locked', 'clickThrough', 'compact']) if (typeof raw[k] === 'boolean') out[k] = raw[k];
+  return out;
+}
+const miniSize = () => MINI_SIZES[miniPrefs().compact ? 'compact' : 'normal'];
+let miniExpanded = false;
+let miniHovered = false;
+let miniGrabbed = false; // Ctrl held over it while clicks pass through
+// Where it was before the search opened (it may move up to fit), to go back there.
+let miniBeforeExpand = null;
+let miniMovedWhileOpen = false;
 function miniPosition() {
   const saved = getSettings().miniPos;
+  const size = miniSize();
   if (saved && Number.isInteger(saved.x) && Number.isInteger(saved.y)) {
     // Only if it's still on a screen (a monitor may have been unplugged).
     const fits = screen.getAllDisplays().some(({ workArea: w }) => saved.x >= w.x - 40 && saved.y >= w.y - 10 && saved.x + 80 <= w.x + w.width && saved.y + 40 <= w.y + w.height);
     if (fits) return saved;
   }
   const { workArea } = screen.getPrimaryDisplay();
-  return { x: workArea.x + workArea.width - MINI_SIZE.width - 20, y: workArea.y + workArea.height - MINI_SIZE.height - 20 };
+  return { x: workArea.x + workArea.width - size.width - 20, y: workArea.y + workArea.height - size.height - 20 };
+}
+/** Opacity, on top, clicks through: what the settings say, now. */
+function applyMiniPrefs() {
+  if (!miniWindow || miniWindow.isDestroyed()) return;
+  const p = miniPrefs();
+  // Fully visible while the pointer is on it (or the search is open), if so chosen.
+  const full = (p.hoverFull && miniHovered) || miniExpanded || miniGrabbed;
+  miniWindow.setOpacity(full ? 1 : p.opacity);
+  // "screen-saver" also stays above games in borderless / windowed mode.
+  miniWindow.setAlwaysOnTop(p.onTop, p.onTop ? 'screen-saver' : 'normal');
+  const through = p.clickThrough && !miniGrabbed && !miniExpanded;
+  miniWindow.setIgnoreMouseEvents(through, through ? { forward: true } : undefined);
+  miniWindow.webContents.send('mini:prefs', { ...p, through, expanded: miniExpanded });
 }
 function openMini() {
   if (miniWindow && !miniWindow.isDestroyed()) { miniWindow.show(); miniWindow.focus(); return; }
   const pos = miniPosition();
+  miniExpanded = false;
+  miniBeforeExpand = null;
   miniWindow = new BrowserWindow({
-    ...MINI_SIZE, ...pos,
+    ...miniSize(), ...pos,
     frame: false, resizable: false, alwaysOnTop: true, skipTaskbar: false, maximizable: false, fullscreenable: false,
     title: 'TubeGrab', icon: path.join(__dirname, 'build', 'icon.ico'), backgroundColor: '#1c1c1e',
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
   });
-  miniWindow.setAlwaysOnTop(true, 'floating');
   miniWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   miniWindow.webContents.on('will-navigate', (e) => e.preventDefault());
   miniWindow.webContents.on('will-attach-webview', (e) => e.preventDefault());
+  miniWindow.webContents.on('did-finish-load', applyMiniPrefs);
   miniWindow.loadURL(`${APP_ORIGIN}/mini.html`);
+  applyMiniPrefs();
   // Moved by Windows (keyboard, snap) too: remembered either way.
-  miniWindow.on('moved', saveMiniPosSoon);
+  miniWindow.on('moved', () => { if (!miniExpanded) saveMiniPosSoon(); });
   miniWindow.on('closed', () => {
     miniWindow = null;
+    miniGrabbed = false;
+    miniHovered = false;
     // The main window was closed while the mini player kept the music going:
     // now it really closes (or stays in the tray, if that's what you chose).
     if (!closedBehindMini || !mainWindow || mainWindow.isVisible()) return;
@@ -754,13 +792,61 @@ function openMini() {
     else { quitting = true; app.quit(); }
   });
 }
+/** The search drawer: taller (moved up only if it must, to fit), then back exactly where it was. */
+function expandMini(tall) {
+  if (!miniWindow || miniWindow.isDestroyed() || tall === miniExpanded) return;
+  const size = miniSize();
+  const [x, y] = miniWindow.getPosition();
+  if (tall) {
+    miniBeforeExpand = { x, y };
+    const { workArea: w } = screen.getDisplayMatching({ x, y, width: size.width, height: MINI_TALL });
+    miniExpanded = true;
+    miniWindow.setBounds({ x, y: Math.max(w.y, Math.min(y, w.y + w.height - MINI_TALL)), width: size.width, height: MINI_TALL });
+  } else {
+    miniExpanded = false;
+    const back = miniBeforeExpand && !miniMovedWhileOpen ? miniBeforeExpand : { x, y };
+    miniMovedWhileOpen = false;
+    miniBeforeExpand = null;
+    miniWindow.setBounds({ x: back.x, y: back.y, width: size.width, height: size.height });
+    saveMiniPosSoon();
+  }
+  applyMiniPrefs();
+}
+/** To a corner of its screen, 12 px in. */
+function snapMini(corner) {
+  if (!miniWindow || miniWindow.isDestroyed()) return;
+  const [x, y] = miniWindow.getPosition();
+  const [width, height] = miniWindow.getSize();
+  const { workArea: w } = screen.getDisplayMatching({ x, y, width, height });
+  const m = 12;
+  const nx = corner.endsWith('l') ? w.x + m : w.x + w.width - width - m;
+  const ny = corner.startsWith('t') ? w.y + m : w.y + w.height - height - m;
+  miniWindow.setPosition(nx, ny);
+  if (miniExpanded) miniBeforeExpand = { x: nx, y: corner.startsWith('t') ? ny : w.y + w.height - miniSize().height - m };
+  saveMiniPosSoon();
+}
+function setMiniPrefs(patch) {
+  const cur = miniPrefs();
+  const next = { ...cur };
+  if (Number.isFinite(patch.opacity)) next.opacity = Math.min(1, Math.max(0.2, Math.round(patch.opacity * 20) / 20));
+  for (const k of ['hoverFull', 'onTop', 'locked', 'clickThrough', 'compact']) if (typeof patch[k] === 'boolean') next[k] = patch[k];
+  saveSettings({ miniPrefs: next });
+  // Compact or not: another size, keeping the same bottom-right corner on screen.
+  if (next.compact !== cur.compact && miniWindow && !miniWindow.isDestroyed() && !miniExpanded) {
+    const [x, y] = miniWindow.getPosition();
+    const size = miniSize();
+    const { workArea: w } = screen.getDisplayMatching({ x, y, width: size.width, height: size.height });
+    miniWindow.setBounds({ x: Math.min(x, w.x + w.width - size.width), y: Math.min(y, w.y + w.height - size.height), ...size });
+  }
+  applyMiniPrefs();
+}
 // The main window hidden because it was closed with the mini player open.
 let closedBehindMini = false;
 let miniHintShown = false;
 let miniSaveTimer = null;
 function saveMiniPosSoon() {
   clearTimeout(miniSaveTimer);
-  miniSaveTimer = setTimeout(() => { if (miniWindow && !miniWindow.isDestroyed()) { const [x, y] = miniWindow.getPosition(); saveSettings({ miniPos: { x, y } }); } }, 400);
+  miniSaveTimer = setTimeout(() => { if (miniWindow && !miniWindow.isDestroyed() && !miniExpanded) { const [x, y] = miniWindow.getPosition(); saveSettings({ miniPos: { x, y } }); } }, 400);
 }
 ipcMain.on('desktop:openMini', (event) => {
   if (!isTrustedSender(event) || event.sender !== (mainWindow && mainWindow.webContents)) return;
@@ -768,12 +854,16 @@ ipcMain.on('desktop:openMini', (event) => {
 });
 ipcMain.on('mini:move', (event, delta) => {
   if (!isTrustedSender(event) || !miniWindow || miniWindow.isDestroyed() || event.sender !== miniWindow.webContents || !delta || typeof delta !== 'object') return;
+  // Fixed in place: dragging does nothing.
+  if (miniPrefs().locked) return;
   const dx = Math.round(Number(delta.dx));
   const dy = Math.round(Number(delta.dy));
   if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.abs(dx) > 4000 || Math.abs(dy) > 4000) return;
   const [x, y] = miniWindow.getPosition();
   miniWindow.setPosition(x + dx, y + dy);
-  saveMiniPosSoon();
+  // Moved by hand with the search open: closing it keeps the new place.
+  if (miniExpanded) miniMovedWhileOpen = true;
+  else saveMiniPosSoon();
 });
 // What's playing, as the main page last said (for the mini window, the
 // taskbar buttons, Last.fm and Discord).
@@ -804,6 +894,7 @@ ipcMain.on('player:command', (event, cmd) => {
   if (!isTrustedSender(event) || !miniWindow || event.sender !== miniWindow.webContents) return;
   if (cmd === 'close') { miniWindow.close(); return; }
   if (cmd === 'open') { showWindow(); return; }
+  if (cmd === 'hello') applyMiniPrefs();
   if (PLAYER_COMMANDS.includes(cmd)) sendToRenderer('player:command', { cmd });
   else if (cmd && typeof cmd === 'object' && cmd.cmd === 'seek' && Number.isFinite(cmd.value)) sendToRenderer('player:command', { cmd: 'seek', value: cmd.value });
   else if (cmd && typeof cmd === 'object' && cmd.cmd === 'volume' && Number.isFinite(cmd.value)) sendToRenderer('player:command', { cmd: 'volume', value: Math.min(1, Math.max(0, cmd.value)) });
@@ -815,17 +906,21 @@ ipcMain.on('player:command', (event, cmd) => {
     const index = Number.isInteger(cmd.index) && cmd.index >= 0 && cmd.index < items.length ? cmd.index : 0;
     sendToRenderer('player:command', { cmd: cmd.cmd, items, value: index });
   } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'expand') {
-    // Taller to show the search and what's next; kept on its screen.
-    const tall = cmd.value === true;
-    const [x, y] = miniWindow.getPosition();
-    const h = tall ? MINI_TALL : MINI_SIZE.height;
-    const { workArea: w } = screen.getDisplayMatching({ x, y, width: MINI_SIZE.width, height: h });
-    miniWindow.setBounds({ x, y: Math.max(w.y, Math.min(y, w.y + w.height - h)), width: MINI_SIZE.width, height: h });
+    expandMini(cmd.value === true);
+  } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'snap' && ['tl', 'tr', 'bl', 'br'].includes(cmd.value)) {
+    snapMini(cmd.value);
+  } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'miniPrefs' && cmd.value && typeof cmd.value === 'object') {
+    setMiniPrefs(cmd.value);
+  } else if (cmd && typeof cmd === 'object' && (cmd.cmd === 'hover' || cmd.cmd === 'grab')) {
+    // Pointer over it (full opacity) / Ctrl held over it (usable while clicks pass through).
+    if (cmd.cmd === 'hover') miniHovered = cmd.value === true;
+    else miniGrabbed = cmd.value === true;
+    if (cmd.cmd === 'hover' && !miniHovered) miniGrabbed = false;
+    applyMiniPrefs();
   }
 });
 // A YouTube thumbnail (the only pictures a song from YouTube shows).
 const YT_THUMB_RE = /^https:\/\/i\d?\.ytimg\.com\/[A-Za-z0-9_\-/.]{1,200}(\?[A-Za-z0-9_\-=&%.]{0,300})?$/;
-const MINI_TALL = 470;
 /** Songs from the mini window's search: YouTube ids and short texts only. */
 function cleanStreamItems(list) {
   if (!Array.isArray(list)) return [];
@@ -1642,6 +1737,7 @@ function setupTray() {
     { label: 'Reproducir / pausa', click: () => sendToRenderer('player:command', { cmd: 'toggle' }) },
     { label: 'Siguiente canción', click: () => sendToRenderer('player:command', { cmd: 'next' }) },
     { label: 'Mini reproductor', click: openMini },
+    { label: 'Mini reproductor: volver a usarlo con el ratón', click: () => setMiniPrefs({ clickThrough: false }) },
     { type: 'separator' },
     { label: 'Salir', click: () => { quitting = true; app.quit(); } },
   ]));

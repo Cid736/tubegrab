@@ -19,6 +19,7 @@
           <span class="sub" id="sub">Nada sonando</span>
         </div>
         <button class="icon sm hidden" id="save" type="button" title="Descargar esta canción" aria-label="Descargar esta canción"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/></svg></button>
+        <button class="icon sm toggle" id="pin" type="button" title="Siempre encima" aria-label="Siempre encima" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/></svg></button>
         <button class="icon sm" id="open" type="button" title="Abrir TubeGrab" aria-label="Abrir TubeGrab"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></button>
         <button class="icon sm" id="close" type="button" title="Cerrar" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
@@ -45,11 +46,29 @@
     <div class="tabs" role="tablist">
       <button class="tab on" id="tabSearch" type="button" role="tab" aria-selected="true">Buscar</button>
       <button class="tab" id="tabNext" type="button" role="tab" aria-selected="false">A continuación</button>
+      <button class="tab" id="tabSet" type="button" role="tab" aria-selected="false">Ajustes</button>
     </div>
     <form class="search" id="searchForm"><input id="q" type="search" maxlength="200" placeholder="Busca una canción o un artista…" aria-label="Busca una canción o un artista" autocomplete="off" spellcheck="false"></form>
     <p class="note" id="note">Suena directo desde YouTube, sin descargar nada.</p>
     <ul class="list" id="results"></ul>
     <ul class="list hidden" id="upnext"></ul>
+    <div class="settings hidden" id="settings">
+      <div class="srow"><span id="lOpacity">Opacidad</span><input type="range" id="sOpacity" min="0.2" max="1" step="0.05" aria-labelledby="lOpacity"><output id="sOpacityOut"></output></div>
+      <label class="srow check"><input type="checkbox" id="sHover"><span id="lHover">Del todo visible al pasar el ratón</span></label>
+      <label class="srow check"><input type="checkbox" id="sTop"><span id="lTop">Siempre encima (también de juegos en ventana)</span></label>
+      <label class="srow check"><input type="checkbox" id="sLock"><span id="lLock">Fijar aquí (no se mueve al arrastrar)</span></label>
+      <label class="srow check"><input type="checkbox" id="sThrough"><span id="lThrough">Dejar pasar los clics (overlay): mantén Ctrl encima para usarlo</span></label>
+      <label class="srow check"><input type="checkbox" id="sCompact"><span id="lCompact">Compacto</span></label>
+      <div class="srow"><span id="lCorner">Llevar a una esquina</span>
+        <span class="corners">
+          <button class="icon sm" type="button" data-corner="tl" title="Arriba a la izquierda" aria-label="Arriba a la izquierda">↖</button>
+          <button class="icon sm" type="button" data-corner="tr" title="Arriba a la derecha" aria-label="Arriba a la derecha">↗</button>
+          <button class="icon sm" type="button" data-corner="bl" title="Abajo a la izquierda" aria-label="Abajo a la izquierda">↙</button>
+          <button class="icon sm" type="button" data-corner="br" title="Abajo a la derecha" aria-label="Abajo a la derecha">↘</button>
+        </span>
+      </div>
+      <p class="note" id="lGame">En juegos a pantalla completa «exclusiva», Windows no deja poner nada encima: usa en el juego el modo «ventana sin bordes». Si dejas pasar los clics, vuelve a usarlo con Ctrl o desde el icono de la bandeja.</p>
+    </div>
   </div>
   <script src="mini.js"></script>
 </body>

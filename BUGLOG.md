@@ -614,3 +614,14 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 
 ### [UI] Mini reproductor con más controles sin crecer
 - Volumen (barra pequeña y rueda del ratón sobre el reproductor), tiempo transcurrido y total, aleatorio, repetir, modo radio y ⬇ para descargar la canción que suena desde YouTube; sigue midiendo 360 × 128. Las órdenes nuevas pasan por la misma lista blanca del proceso principal.
+
+---
+
+## 2026-10-04 — v3.7.3: el mini reproductor como overlay
+
+### [UI] Al cerrar la lupa, el mini reproductor no volvía a su sitio
+- **Síntoma:** abajo en la pantalla, al abrir la búsqueda subía para caber (bien), pero al cerrarla se quedaba arriba.
+- **Fix:** recuerda dónde estaba antes de abrirse y vuelve exactamente ahí (si lo arrastras con la búsqueda abierta, se queda donde lo dejaste). Mientras está abierta no se guarda esa posición provisional. Probado abajo a la derecha: 892 → 562 → 892.
+
+### [Nuevo] Ajustes propios del mini reproductor (pestaña «Ajustes» de la lupa)
+- 📌 siempre encima (nivel «screen-saver», que también queda por encima de juegos en ventana sin bordes), opacidad del 20 % al 100 %, del todo visible al pasar el ratón, fijar la posición, dejar pasar los clics (overlay; se vuelve a usar manteniendo Ctrl encima o desde la bandeja), tamaño compacto (300 × 64) y llevarlo a una esquina con un clic. Se guardan en settings.json y se validan al leerlos; las órdenes nuevas del mini reproductor (`miniPrefs`, `snap`, `hover`, `grab`) pasan por la lista blanca del proceso principal y solo las acepta de la ventana del mini reproductor.

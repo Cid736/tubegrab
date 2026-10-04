@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('desktop', {
   chooseWatchFolder: () => ipcRenderer.invoke('desktop:chooseWatchFolder'),
   // Mini player: dragged around by the page itself.
   miniMove: (dx, dy) => ipcRenderer.send('mini:move', { dx, dy }),
+  onMiniPrefs: (cb) => ipcRenderer.on('mini:prefs', (_e, p) => cb(p)),
   // Keyboard shortcuts (also in the background).
   getShortcuts: () => ipcRenderer.invoke('desktop:getShortcuts'),
   setShortcuts: (patch) => ipcRenderer.invoke('desktop:setShortcuts', patch),
