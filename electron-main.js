@@ -2407,7 +2407,15 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on('ready', registerProtocol);
   // The Explorer's menu, pointing at this .exe (a portable one may have moved).
-  app.on('ready', () => { const m = getSettings().explorerMenu; const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath; if (m && m.exe !== exe && app.isPackaged) explorerMenu(true); });
+  // The Explorer's menu: on by itself the first time (it was easy to miss in Settings);
+  // written again if the portable exe moved. Turned off in Settings, it stays off.
+  app.on('ready', () => {
+    if (!app.isPackaged || process.platform !== 'win32') return;
+    const s = getSettings();
+    const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+    if (!s.explorerMenuAuto) explorerMenu(true).then((r) => { if (r && r.on) saveSettings({ explorerMenuAuto: true }); });
+    else if (s.explorerMenu && s.explorerMenu.exe !== exe) explorerMenu(true);
+  });
   app.on('ready', createWindow);
 }
 

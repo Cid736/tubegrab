@@ -845,3 +845,12 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 ### [Feature] Tu biblioteca en el móvil
 - Nueva pestaña «En el móvil» en la página del teléfono: tu música (y vídeos) con buscador; suena en el móvil desde el PC, con saltos por rangos de bytes y la siguiente al acabar (un script de 1 línea con nonce; CSP con `media-src 'self'` solo en esa página). Solo con el móvil emparejado y solo archivos de la biblioteca.
 - 265 pruebas.
+
+
+---
+
+## 2026-10-04 — v3.14.1: el menú del Explorador, encendido solo
+
+### [Bug] El menú del botón derecho no salía
+- Había que encenderlo en Ajustes → Sistema y era fácil no verlo: el registro estaba vacío. Ahora se activa solo la primera vez que se abre la app (instalada o portátil); si lo apagas en Ajustes, se queda apagado.
+- Desinstalar quita también las entradas del menú (no al actualizar).
