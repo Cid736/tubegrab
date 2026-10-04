@@ -4133,6 +4133,7 @@ const ICONS = {
   stopSave: svg('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 13l2 2 4-4"/>'),
   copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
   flag: svg('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'),
+  star: svg('<path d="M12 3.6l2.55 5.2 5.75.84-4.16 4.05.98 5.72L12 16.7l-5.12 2.71.98-5.72L3.7 9.64l5.75-.84z"/>'),
   listen: svg('<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/>'),
   addList: svg('<path d="M4 6h11M4 11h11M4 16h6"/><path d="M18 13v8M14 17h8"/>'),
   folder: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
@@ -4795,6 +4796,8 @@ const player = (() => {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\b(official|oficial|video|audio|lyrics?|letra|hd|4k|mv|visualizer)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
   let localIndex = new Map();
   let localFor = null;
+  // Your file playing in place of a song of a list: which one it was (Escuchar marks it).
+  const origins = new WeakMap();
   function localCopy(f) {
     if (!listenPrefs.local || !isStream(f)) return null;
     const files = library.files();
@@ -5339,7 +5342,7 @@ const player = (() => {
     cancelFade();
     // Already downloaded: your own file instead (also without Internet).
     const mine = localCopy(f);
-    if (mine) { list[index] = mine; start(); return; }
+    if (mine) { origins.set(mine, { list: f.list, n: f.n, yt: f.yt }); list[index] = mine; start(); return; }
     if (isStream(f) && desktopApi) library.ensure();
     // Known only by name: find it on YouTube first (the title shows meanwhile).
     if (isStream(f) && !f.yt) {
@@ -5969,6 +5972,8 @@ const player = (() => {
   let pushTimer = null;
   function pushState() {
     nowView.sync();
+    // Escuchar marks the song playing, the heart, the colour of the cover.
+    document.dispatchEvent(new CustomEvent('tg:player'));
     if (!desktopApi || !desktopApi.playerState) return;
     const f = cur();
     const tg = f ? tagsOf(f) : { artist: '', track: '' };
@@ -6031,6 +6036,19 @@ const player = (() => {
   }
   return {
     play, current: cur, command,
+    /** What's playing, for Escuchar (its key, to like it; its list and place in it). */
+    info: () => {
+      const f = cur();
+      if (!f) return null;
+      const tg = tagsOf(f);
+      const cover = f.kind !== 'video' ? coverOf(f) : null;
+      const o = origins.get(f) || null;
+      return {
+        key: songKey(f), alt: o && o.yt ? `yt:${o.yt}` : null, list: isStream(f) ? f.list : o ? o.list : null, n: isStream(f) ? f.n : o ? o.n : null, playing: !deck.paused,
+        title: isStream(f) ? f.track || f.title : tg.track || nameOf(f), artist: isStream(f) ? f.artist || tg.artist || f.channel : tg.artist,
+        cover, thumb: cover && /^https:\/\/i\d?\.ytimg\.com\//.test(cover) ? cover : null, duration: Number.isFinite(deck.duration) ? deck.duration : f.duration || null,
+      };
+    },
     /** Plays results from YouTube without saving them, from result `i`. */
     playStreams: (items, i = 0) => { const songs = asStreams(items); if (songs.length) play(songs, Math.min(i, songs.length - 1)); },
     enqueueStreams: (items, opts) => enqueue(asStreams(items), opts),
@@ -7289,16 +7307,108 @@ const lookUi = (() => {
 
 // === Escuchar: your lists (Spotify, Apple Music, YouTube playlists, your own),
 // played straight from YouTube without downloading; "Made for you" from what
-// you listen to (daily mixes, most played, heard lately, to rediscover) ===
+// you listen to (daily mixes, most played, heard lately, to rediscover) and
+// your favourites. A big, dark music-app look, to your taste ===
+
 const listenUi = (() => {
-  if (!desktopApi) return { saveAsList: () => {} };
+  if (!desktopApi) return { saveAsList: () => {}, look: () => ({ keys: false }) };
   let lists = [];
   let open = null; // the list shown, with its tracks (or a list made for you: { virtual: true })
   let smart = null;
+  let likes = []; // your favourites (the star), newest first
+  let likedKeys = new Set();
+  let forYou = []; // the cards of "Made for you" (also offered as quick tiles)
   const SOURCE = { spotify: 'Spotify', apple: 'Apple Music', youtube: 'YouTube', own: 'Tu lista' };
   const tracksOf = (l) => (l.virtual ? l.tracks : l.tracks.map((tr, n) => ({ ...tr, list: l.id, n, channel: tr.artist })));
   const totalTime = (l) => { const s = l.tracks.reduce((a, tr) => a + (tr.duration || 0), 0); return s ? formatDuration(s) : ''; };
   const shuffled = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+  const fold = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  // ---- how it looks: yours to choose (kept in this app) ----
+  const LOOK_KEY = 'tubegrab_listen_look';
+  const LOOK_DEFAULT = { style: 'modern', dark: true, color: 'app', custom: '#ff7a59', head: true, cards: 'm', rows: 'comfy', click: 'double', greet: true, artists: true, keys: true };
+  const LOOK_CHOICES = { style: ['modern', 'classic'], color: ['app', 'cover', 'custom'], cards: ['s', 'm', 'l'], rows: ['comfy', 'compact'], click: ['double', 'single'] };
+  let look = { ...LOOK_DEFAULT };
+  try {
+    const saved = JSON.parse(localStorage.getItem(LOOK_KEY)) || {};
+    for (const [k, v] of Object.entries(saved)) {
+      if (LOOK_CHOICES[k] ? LOOK_CHOICES[k].includes(v) : k === 'custom' ? /^#[0-9a-f]{6}$/i.test(v) : typeof LOOK_DEFAULT[k] === 'boolean' && typeof v === 'boolean') look[k] = v;
+    }
+  } catch { /* the defaults */ }
+  let coverRgb = null; // the colour of the cover playing (for "the cover's colour")
+  /** Black or white text, whichever reads better on that colour. */
+  const inkOn = ([r, g, b]) => ((0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.55 ? '#000' : '#fff');
+  const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  function paintColour() {
+    const root = document.documentElement.style;
+    const rgb = look.color === 'custom' ? hexRgb(look.custom) : look.color === 'cover' ? coverRgb : null;
+    if (rgb) { root.setProperty('--lx', `rgb(${rgb.join(', ')})`); root.setProperty('--on-lx', inkOn(rgb)); } else { root.removeProperty('--lx'); root.removeProperty('--on-lx'); }
+  }
+  function applyLook() {
+    const b = document.body.classList;
+    b.toggle('lx-on', look.style === 'modern');
+    b.toggle('lx-dark', look.style === 'modern' && look.dark);
+    b.toggle('lx-compact', look.rows === 'compact');
+    b.toggle('lx-no-greet', !look.greet);
+    b.toggle('lx-no-artists', !look.artists);
+    document.body.dataset.lxCards = look.cards;
+    paintColour();
+    $('lkStyle').value = look.style;
+    $('lkDark').checked = look.dark;
+    $('lkColor').value = look.color;
+    $('lkCustom').value = look.custom;
+    $('lkCustom').classList.toggle('hidden', look.color !== 'custom');
+    $('lkHead').checked = look.head;
+    $('lkCards').value = look.cards;
+    $('lkRows').value = look.rows;
+    $('lkClick').value = look.click;
+    $('lkGreet').checked = look.greet;
+    $('lkArtists').checked = look.artists;
+    $('lkKeys').checked = look.keys;
+  }
+  function setLook(patch) {
+    if (patch.color === 'cover' && look.color !== 'cover') { lastCover = undefined; setTimeout(syncPlayer, 0); }
+    look = { ...look, ...patch };
+    try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch { /* only for now */ }
+    applyLook();
+    if (open) paintHead();
+  }
+  for (const [id, key] of [['lkStyle', 'style'], ['lkColor', 'color'], ['lkCards', 'cards'], ['lkRows', 'rows'], ['lkClick', 'click']]) $(id).addEventListener('change', () => setLook({ [key]: $(id).value }));
+  for (const [id, key] of [['lkDark', 'dark'], ['lkHead', 'head'], ['lkGreet', 'greet'], ['lkArtists', 'artists'], ['lkKeys', 'keys']]) $(id).addEventListener('change', () => setLook({ [key]: $(id).checked }));
+  $('lkCustom').addEventListener('input', () => { if (/^#[0-9a-f]{6}$/i.test($('lkCustom').value)) setLook({ custom: $('lkCustom').value }); });
+  applyLook();
+
+  /** A picture's most vivid colour (to tint a header, or as the colour), or null if it can't be read. */
+  function colourOf(src) {
+    return new Promise((resolve) => {
+      if (!src) { resolve(null); return; }
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = 20;
+          c.height = 20;
+          const x = c.getContext('2d', { willReadFrequently: true });
+          x.drawImage(img, 0, 0, 20, 20);
+          const d = x.getImageData(0, 0, 20, 20).data;
+          let best = null;
+          let bestScore = -1;
+          let sum = [0, 0, 0];
+          for (let i = 0; i < d.length; i += 4) {
+            sum = [sum[0] + d[i], sum[1] + d[i + 1], sum[2] + d[i + 2]];
+            const mx = Math.max(d[i], d[i + 1], d[i + 2]);
+            const mn = Math.min(d[i], d[i + 1], d[i + 2]);
+            const score = mx ? ((mx - mn) / mx) * (mx / 255) : 0;
+            if (mx > 60 && score > bestScore) { bestScore = score; best = [d[i], d[i + 1], d[i + 2]]; }
+          }
+          resolve(bestScore > 0.15 ? best : sum.map((v) => Math.round(v / (d.length / 4))));
+        } catch { resolve(null); } // a picture from elsewhere without permission to read it
+      };
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+  }
 
   // A song from the listening history → something the player can play (your file, or YouTube).
   function fromLog(r) {
@@ -7312,6 +7422,70 @@ const listenUi = (() => {
   // YouTube's mix entries → songs (the channel isn't the artist: kept apart).
   const fromRadio = (e) => ({ yt: e.id, title: e.title, channel: e.channel || '', thumbnail: e.thumbnail || null, duration: e.duration || null });
   const idOfItem = (x) => (x.file ? `f:${library.relOf(x.file)}` : x.yt ? `yt:${x.yt}` : `q:${x.query || x.title}`);
+  /** The key a song is liked by (one only known by name can't be, until it's found). */
+  const keyOf = (x) => (x.file ? `f:${library.relOf(x.file)}` : x.yt ? `yt:${x.yt}` : null);
+  const songOf = (x) => {
+    const key = keyOf(x);
+    if (!key) return null;
+    const s = { key, title: x.title, artist: x.artist || x.channel || '' };
+    if (x.thumbnail) s.thumb = x.thumbnail;
+    if (x.duration) s.dur = x.duration;
+    return s;
+  };
+
+  // ---- your favourites ----
+  async function loadLikes() {
+    try { likes = (await api('/api/listen/likes')).songs || []; } catch { likes = []; }
+    likedKeys = new Set(likes.map((s) => s.key));
+    syncPlayer();
+  }
+  async function setLike(song, on) {
+    if (!song || !song.key) return;
+    try {
+      if (on) await postJson('/api/listen/likes', { song });
+      else await postJson('/api/listen/unlike', { key: song.key });
+    } catch (err) { showToast(err.message); return; }
+    if (on) { likedKeys.add(song.key); likes = [{ ...song, at: Date.now() }, ...likes.filter((s) => s.key !== song.key)]; } else { likedKeys.delete(song.key); likes = likes.filter((s) => s.key !== song.key); }
+    showToast(on ? t('Añadida a Favoritas') : t('Quitada de Favoritas'));
+    syncPlayer();
+    if (open && open.kind === 'liked') { open = likedList(); renderDetail(); } else if (open) markRows();
+    if (!open) { renderGrid(); renderQuick(); }
+  }
+  const likedList = () => ({ virtual: true, id: 'liked', kind: 'liked', label: t('Lista'), name: t('Favoritas'), tracks: likes.map(fromLog).filter(Boolean), source: 'own' });
+  const LIKED_ART = { liked: true };
+  async function openLiked() {
+    await library.ensure();
+    if (!likes.length) await loadLikes();
+    showVirtual(likedList(), true);
+  }
+  const toggleLikePlaying = () => {
+    const i = player.info();
+    if (!i || !i.key) return;
+    setLike({ key: i.key, title: i.title, artist: i.artist, ...(i.thumb ? { thumb: i.thumb } : {}), ...(i.duration ? { dur: Math.round(i.duration) } : {}) }, !likedKeys.has(i.key));
+  };
+  $('plLike').addEventListener('click', toggleLikePlaying);
+
+  // ---- what's playing: the star, its row, the colour of the cover ----
+  let lastPlaying = '';
+  let lastCover = null;
+  function syncPlayer() {
+    const i = player.info();
+    const btn = $('plLike');
+    btn.classList.toggle('hidden', !i || !i.key);
+    const on = Boolean(i && i.key && likedKeys.has(i.key));
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.title = on ? t('Quitar de Favoritas') : t('Añadir a Favoritas');
+    btn.setAttribute('aria-label', btn.title);
+    const sig = i ? `${i.key}|${i.alt}|${i.list}|${i.n}|${i.playing}` : '';
+    if (sig !== lastPlaying) { lastPlaying = sig; markRows(); }
+    const cover = i && i.cover ? i.cover : null;
+    if (cover !== lastCover) {
+      lastCover = cover;
+      if (look.color === 'cover') colourOf(cover).then((rgb) => { if (lastCover === cover) { coverRgb = rgb; paintColour(); } });
+    }
+  }
+  document.addEventListener('tg:player', syncPlayer);
 
   // ---- made for you ----
   const MIX_KEY = 'tubegrab_mixes';
@@ -7340,6 +7514,16 @@ const listenUi = (() => {
     }
     return out;
   }
+  function playButton(name, onPlay, cls) {
+    const play = document.createElement('button');
+    play.type = 'button';
+    play.className = cls;
+    play.innerHTML = ICONS.play;
+    play.title = t('Reproducir «{name}»', { name });
+    play.setAttribute('aria-label', play.title);
+    play.addEventListener('click', (e) => { e.stopPropagation(); onPlay(); });
+    return play;
+  }
   function card({ name, sub, art, onOpen, onPlay }) {
     const c = document.createElement('div');
     c.className = 'listen-card for-you-card';
@@ -7351,14 +7535,7 @@ const listenUi = (() => {
     b.title = t('Abrir «{name}»', { name });
     paintArt(b, art);
     b.addEventListener('click', onOpen);
-    const play = document.createElement('button');
-    play.type = 'button';
-    play.className = 'listen-play';
-    play.innerHTML = ICONS.play;
-    play.title = t('Reproducir «{name}»', { name });
-    play.setAttribute('aria-label', play.title);
-    play.addEventListener('click', (e) => { e.stopPropagation(); onPlay(); });
-    wrap.append(b, play);
+    wrap.append(b, playButton(name, onPlay, 'listen-play'));
     const n = document.createElement('span');
     n.className = 'listen-card-name';
     n.textContent = name;
@@ -7366,13 +7543,37 @@ const listenUi = (() => {
     s.className = 'listen-card-meta';
     s.textContent = sub;
     c.append(wrap, n, s);
+    // The whole card opens it, not only the picture.
+    c.addEventListener('click', (e) => { if (!e.target.closest('button')) onOpen(); });
+    return c;
+  }
+  /** A quick tile at the top of the home page (what you play most, one click away). */
+  function tile({ name, art, onOpen, onPlay }) {
+    const c = document.createElement('div');
+    c.className = 'lx-tile';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lx-tile-main';
+    const pic = document.createElement('span');
+    pic.className = 'lx-tile-art';
+    paintArt(pic, art, true);
+    const n = document.createElement('span');
+    n.className = 'lx-tile-name';
+    n.textContent = name;
+    b.append(pic, n);
+    b.title = t('Abrir «{name}»', { name });
+    b.addEventListener('click', onOpen);
+    c.append(b, playButton(name, onPlay, 'lx-tile-play'));
     return c;
   }
   // YouTube's "hq" thumbnail has black bars above and below: the 16:9 one, cropped square, doesn't.
   const noBars = (src) => String(src).replace(/\/(hq|sd)default\.jpg(\?.*)?$/, '/mqdefault.jpg');
+  const HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.6l2.55 5.2 5.75.84-4.16 4.05.98 5.72L12 16.7l-5.12 2.71.98-5.72L3.7 9.64l5.75-.84z"/></svg>';
   /** One cover, or four in a mosaic; a gradient with a label when there are none. */
-  function paintArt(el, art) {
+  function paintArt(el, art, small = false) {
     el.innerHTML = '';
+    el.classList.toggle('liked-art', Boolean(art && art.liked));
+    if (art && art.liked) { el.innerHTML = HEART; return; }
     const pics = (art && art.pics ? art.pics : []).filter(Boolean).map(noBars);
     if (pics.length >= 4) {
       const grid = document.createElement('span');
@@ -7386,7 +7587,7 @@ const listenUi = (() => {
       img.src = pics[0];
       el.appendChild(img);
     } else el.innerHTML = ICONS.listen;
-    if (art && art.label) {
+    if (art && art.label && !small) {
       const tag = document.createElement('span');
       tag.className = `listen-tag tint-${art.tint || 0}`;
       tag.textContent = art.label;
@@ -7399,23 +7600,24 @@ const listenUi = (() => {
     try { smart = await api('/api/listen/smart'); } catch { smart = null; }
     const box = $('forYouCards');
     box.innerHTML = '';
+    forYou = [];
     $('loAuto').checked = Boolean(smart && smart.autoSave);
     $('loLog').checked = !(smart && smart.paused);
     $('loCount').textContent = smart ? t('{n} escuchas guardadas', { n: smart.count }) : '';
-    if (!smart || !smart.count) { $('listenForYou').classList.add('hidden'); return; }
+    if (!smart || !smart.count) { $('listenForYou').classList.add('hidden'); renderQuick(); return; }
     await library.ensure();
     $('listenForYou').classList.remove('hidden');
-    const virtual = (id, name, kind, items) => ({ virtual: true, id, name, kind, tracks: items, source: 'own' });
+    const virtual = (id, name, kind, items) => ({ virtual: true, id, name, kind, label: t('Hecho para ti'), tracks: items, source: 'own' });
     // Daily mixes: one per artist you play most lately.
     smart.artists.filter((a) => a.seed).slice(0, 3).forEach((a, i) => {
       const name = t('Mix diario {n}', { n: i + 1 });
       const get = async () => virtual(`mix:${i}`, name, t('Hecho para ti · cambia cada día'), await buildMix(a));
-      box.appendChild(card({
+      forYou.push({
         name, sub: t('{a} y canciones parecidas', { a: a.name }),
         art: { pics: [a.seed.thumb || `https://i.ytimg.com/vi/${a.seed.yt}/mqdefault.jpg`], label: a.name, tint: i + 1 },
         onOpen: async () => showVirtual(await get()),
         onPlay: async () => { const l = await get(); if (l.tracks.length) player.playMixed(l.tracks); else showToast(t('No se pudo preparar el mix ahora mismo.')); },
-      }));
+      });
     });
     const kinds = [
       ['top', t('Lo más escuchado'), t('Tus canciones de los últimos 3 meses'), smart.top],
@@ -7425,13 +7627,14 @@ const listenUi = (() => {
     for (const [id, name, sub, rows] of kinds) {
       const items = rows.map(fromLog).filter(Boolean);
       if (!items.length) continue;
-      box.appendChild(card({
+      forYou.push({
         name, sub,
         art: { pics: picsOf(items) },
         onOpen: () => showVirtual(virtual(id, name, t('Hecho para ti'), items)),
         onPlay: () => player.playMixed(id === 'lately' ? items : shuffled(items)),
-      }));
+      });
     }
+    for (const c of forYou) box.appendChild(card(c));
     // Your artists: each one's radio.
     const chips = $('forYouArtists');
     chips.innerHTML = '';
@@ -7446,37 +7649,68 @@ const listenUi = (() => {
       img.src = a.seed.thumb || `https://i.ytimg.com/vi/${a.seed.yt}/mqdefault.jpg`;
       const s = document.createElement('span');
       s.textContent = a.name;
-      b.append(img, s);
+      const k = document.createElement('small');
+      k.textContent = t('Artista');
+      b.append(img, s, k);
       b.addEventListener('click', async () => {
         const items = await buildMix(a);
         if (items.length) { player.playMixed(items); showToast(t('Radio de {a}', { a: a.name })); } else showToast(t('No se pudo preparar el mix ahora mismo.'));
       });
       chips.appendChild(b);
     }
+    renderQuick();
   }
+
+  // ---- the home page: hello, quick tiles, what to show ----
+  function greet() {
+    const h = new Date().getHours();
+    $('lxGreeting').textContent = h >= 6 && h < 13 ? t('Buenos días') : h >= 13 && h < 21 ? t('Buenas tardes') : t('Buenas noches');
+  }
+  const likedEntry = () => ({
+    name: t('Favoritas'), sub: `${t('Lista')} · ${t('{n} canciones', { n: likes.length })}`, art: LIKED_ART,
+    onOpen: openLiked, onPlay: async () => { await library.ensure(); const l = likedList(); if (l.tracks.length) player.playMixed(l.tracks); },
+  });
+  function renderQuick() {
+    const box = $('lxQuick');
+    box.innerHTML = '';
+    const recent = [...lists].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map(listEntry);
+    const all = [...(likes.length ? [likedEntry()] : []), ...forYou.slice(0, 2), ...recent, ...forYou.slice(2)].slice(0, 8);
+    for (const e of all) box.appendChild(tile(e));
+    box.classList.toggle('hidden', !all.length);
+  }
+  $('lxChips').addEventListener('click', (e) => {
+    const b = e.target.closest('.lx-chip');
+    if (!b) return;
+    // Pressed again: back to everything.
+    const show = b.dataset.show === $('listenHome').dataset.show ? 'all' : b.dataset.show;
+    $('listenHome').dataset.show = show;
+    for (const c of $('lxChips').querySelectorAll('.lx-chip')) c.setAttribute('aria-pressed', String(c.dataset.show === show));
+  });
 
   // ---- your lists (in folders) ----
   async function load() {
+    greet();
     try { lists = (await api('/api/streamlists')).lists || []; } catch { lists = []; }
+    await loadLikes();
     renderGrid();
     loadForYou();
   }
-  function listCard(l) {
-    return card({
+  function listEntry(l) {
+    return {
       name: l.name,
       sub: `${t(SOURCE[l.source] || 'Tu lista')} · ${t('{n} canciones', { n: l.count })}`,
       art: { pics: l.thumbs && l.thumbs.length ? l.thumbs : [l.thumbnail] },
       onOpen: () => show(l.id),
       onPlay: async () => { try { const full = await api(`/api/streamlists/${l.id}`); player.playMixed(tracksOf(full)); } catch (err) { showToast(err.message); } },
-    });
+    };
   }
   function renderGrid() {
     const grid = $('listenGrid');
     grid.innerHTML = '';
-    $('listenEmpty').classList.toggle('hidden', lists.length > 0);
+    $('listenEmpty').classList.toggle('hidden', lists.length > 0 || likes.length > 0);
     const loose = lists.filter((l) => !l.folder);
     const folders = [...new Set(lists.map((l) => l.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-    const section = (title, items) => {
+    const section = (title, cards) => {
       if (title) {
         const h = document.createElement('h3');
         h.className = 'listen-folder';
@@ -7486,84 +7720,287 @@ const listenUi = (() => {
       }
       const row = document.createElement('div');
       row.className = 'listen-grid-row';
-      for (const l of items) row.appendChild(listCard(l));
+      for (const c of cards) row.appendChild(card(c));
       grid.appendChild(row);
     };
-    if (loose.length) section(null, loose);
-    for (const name of folders) section(name, lists.filter((l) => l.folder === name));
+    const first = [...(likes.length ? [likedEntry()] : []), ...loose.map(listEntry)];
+    if (first.length) section(null, first);
+    for (const name of folders) section(name, lists.filter((l) => l.folder === name).map(listEntry));
     const dl = $('ldFolders');
     dl.innerHTML = '';
     for (const name of folders) { const o = document.createElement('option'); o.value = name; dl.appendChild(o); }
   }
+  let nav = 0; // the latest page asked for (an older answer arriving later is dropped)
   async function show(id) {
-    try { open = await api(`/api/streamlists/${id}`); } catch (err) { showToast(err.message); return; }
+    const mine = ++nav;
+    let l;
+    try { l = await api(`/api/streamlists/${id}`); } catch (err) { if (mine === nav) showToast(err.message); return; }
+    if (mine !== nav) return;
+    open = l;
     openDetail();
   }
-  function showVirtual(l) {
-    if (!l.tracks.length) { showToast(t('No se pudo preparar el mix ahora mismo.')); return; }
+  function showVirtual(l, quiet = false) {
+    if (!l.tracks.length && !quiet) { showToast(t('No se pudo preparar el mix ahora mismo.')); return; }
+    nav++;
     open = l;
     openDetail();
   }
   function openDetail() {
     $('listenHome').classList.add('hidden');
     $('listenDetail').classList.remove('hidden');
+    $('ldFilter').value = '';
     renderDetail();
     $('ldBack').focus();
   }
   function back() {
+    nav++;
     open = null;
     $('listenDetail').classList.add('hidden');
     $('listenHome').classList.remove('hidden');
     load();
   }
+  /** The header in the colour of the list's cover (if so chosen). */
+  let headFor = null;
+  function paintHead() {
+    const d = $('listenDetail');
+    const src = open && open.kind !== 'liked' ? $('ldCover').getAttribute('src') : null;
+    headFor = src;
+    if (!look.head || look.style !== 'modern') { d.style.removeProperty('--ld-c'); return; }
+    if (open && open.kind === 'liked') { d.style.setProperty('--ld-c', 'color-mix(in srgb, var(--accent) 70%, #000)'); return; }
+    d.style.removeProperty('--ld-c');
+    colourOf(src).then((rgb) => { if (headFor === src && rgb) d.style.setProperty('--ld-c', `rgb(${rgb.map((v) => Math.round(v * 0.75)).join(', ')})`); });
+  }
   function renderDetail() {
     const l = open;
     const own = !l.virtual;
+    const liked = l.kind === 'liked';
     const pics = picsOf(l.tracks.map((x) => (x.file ? {} : x)));
-    if (pics[0]) $('ldCover').src = pics[0]; else $('ldCover').removeAttribute('src');
-    $('ldKind').textContent = l.virtual ? l.kind : t(SOURCE[l.source] || 'Tu lista');
+    if (pics[0] && !liked) $('ldCover').src = noBars(pics[0]); else $('ldCover').removeAttribute('src');
+    $('ldCoverWrap').classList.toggle('liked-art', liked);
+    $('ldCoverWrap').querySelectorAll('svg').forEach((s) => s.remove());
+    if (liked) $('ldCoverWrap').insertAdjacentHTML('beforeend', HEART);
+    $('ldKind').textContent = l.virtual ? (liked ? t('Lista') : l.kind) : t(SOURCE[l.source] || 'Tu lista');
     if (document.activeElement !== $('ldName')) $('ldName').value = l.name;
     $('ldName').readOnly = !own;
+    $('ldStickyName').textContent = l.name;
     $('ldMeta').textContent = [t('{n} canciones', { n: l.tracks.length }), totalTime(l), own && l.url && l.sync && l.syncedAt ? t('se actualiza sola · {d}', { d: new Date(l.syncedAt).toLocaleDateString() }) : ''].filter(Boolean).join(' · ');
-    $('ldRefresh').classList.toggle('hidden', !own || !l.url);
-    $('ldDelete').classList.toggle('hidden', !own);
-    $('ldKeep').classList.toggle('hidden', own);
     $('ldExtra').classList.toggle('hidden', !own);
     $('ldSyncWrap').classList.toggle('hidden', !own || !l.url);
     if (own) {
       if (document.activeElement !== $('ldFolder')) $('ldFolder').value = l.folder || '';
       $('ldSync').checked = Boolean(l.sync);
     }
+    $('ldDownload').classList.toggle('hidden', !l.tracks.some((tr) => !tr.file));
     $('ldStatus').textContent = '';
+    paintHead();
+    renderTracks();
+  }
+
+  // ---- the songs of the list ----
+  function renderTracks() {
+    const l = open;
+    const own = !l.virtual;
     const ol = $('ldTracks');
     ol.innerHTML = '';
     const all = tracksOf(l);
+    const q = fold($('ldFilter').value.trim());
+    let shown = 0;
     all.forEach((tr, i) => {
+      if (q && !fold(`${tr.title} ${tr.artist || tr.channel || ''}`).includes(q)) return;
+      shown++;
       const li = document.createElement('li');
+      li.className = 'lx-row';
+      li.dataset.i = String(i);
+      const key = keyOf(tr);
+      if (key) li.dataset.key = key;
+      const n = document.createElement('button');
+      n.type = 'button';
+      n.className = 'lt-n';
+      n.tabIndex = -1;
+      n.innerHTML = `<span class="lt-num"></span>${ICONS.play}<span class="lt-eq" aria-hidden="true"><i></i><i></i><i></i></span>`;
+      n.querySelector('.lt-num').textContent = String(i + 1);
+      n.title = t('Escuchar «{t}»', { t: tr.title });
+      n.setAttribute('aria-label', n.title);
+      n.addEventListener('click', () => playAt(i));
       const main = document.createElement('button');
       main.type = 'button';
       main.className = 'lt-main';
-      main.innerHTML = '<span class="lt-n"></span><img alt="" loading="lazy"><span class="lt-text"><span class="lt-title"></span><span class="lt-sub"></span></span><span class="lt-dur"></span>';
-      main.querySelector('.lt-n').textContent = String(i + 1);
+      main.innerHTML = '<img alt="" loading="lazy"><span class="lt-text"><span class="lt-title"></span><span class="lt-sub"></span></span>';
       const img = main.querySelector('img');
-      const pic = tr.file ? library.cover(tr.file) : tr.thumbnail;
+      const pic = tr.file ? library.cover(tr.file) : tr.thumbnail ? noBars(tr.thumbnail) : null;
       if (pic) { img.src = pic; img.onerror = () => { img.style.visibility = 'hidden'; }; } else img.style.visibility = 'hidden';
       main.querySelector('.lt-title').textContent = tr.title;
       main.querySelector('.lt-sub').textContent = [tr.artist || tr.channel || '', tr.file ? t('en tu biblioteca') : ''].filter(Boolean).join(' · ');
-      main.querySelector('.lt-dur').textContent = formatDuration(tr.duration) || '';
-      main.title = t('Escuchar desde aquí');
-      main.addEventListener('click', () => player.playMixed(all, i));
-      const add = iconButton('addList', t('Añadir a la lista de reproducción'), () => player.enqueueMixed([tr]));
-      li.append(main, add);
-      if (own) {
-        const del = iconButton('remove', t('Quitar de la lista'), async () => {
-          try { open = await api(`/api/streamlists/${l.id}/tracks/${i}`, { method: 'DELETE' }); renderDetail(); } catch (err) { showToast(err.message); }
+      main.title = look.click === 'double' ? t('Doble clic o Intro para escuchar') : t('Escuchar desde aquí');
+      main.addEventListener('click', () => { if (look.click === 'single') playAt(i); });
+      main.addEventListener('dblclick', () => { if (look.click === 'double') playAt(i); });
+      li.append(n, main);
+      if (key) {
+        const on = likedKeys.has(key);
+        const like = document.createElement('button');
+        like.type = 'button';
+        like.className = `lt-like${on ? ' on' : ''}`;
+        like.tabIndex = -1;
+        like.innerHTML = HEART;
+        like.title = on ? t('Quitar de Favoritas') : t('Añadir a Favoritas');
+        like.setAttribute('aria-label', like.title);
+        like.setAttribute('aria-pressed', String(on));
+        like.addEventListener('click', () => setLike(songOf(tr), !likedKeys.has(key)));
+        li.appendChild(like);
+      } else li.appendChild(document.createElement('span')).className = 'lt-like-gap';
+      const dur = document.createElement('span');
+      dur.className = 'lt-dur';
+      dur.textContent = formatDuration(tr.duration) || '';
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'lt-more';
+      more.tabIndex = -1;
+      more.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>';
+      more.title = t('Más opciones para «{t}»', { t: tr.title });
+      more.setAttribute('aria-label', more.title);
+      more.setAttribute('aria-haspopup', 'menu');
+      more.addEventListener('click', () => ctxMenu.open(more, trackMenu(tr, i), main));
+      li.append(dur, more);
+      li.addEventListener('contextmenu', (e) => { e.preventDefault(); main.focus(); ctxMenu.open({ x: e.clientX, y: e.clientY }, trackMenu(tr, i), main); });
+      // Your own lists: drag a song to another place.
+      if (own && !q) {
+        li.draggable = true;
+        li.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/x-tubegrab-row', String(i)); li.classList.add('dragging'); });
+        li.addEventListener('dragend', () => li.classList.remove('dragging'));
+        li.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/x-tubegrab-row')) { e.preventDefault(); li.classList.add('drop'); } });
+        li.addEventListener('dragleave', () => li.classList.remove('drop'));
+        li.addEventListener('drop', (e) => {
+          e.preventDefault();
+          li.classList.remove('drop');
+          const from = Number(e.dataTransfer.getData('text/x-tubegrab-row'));
+          if (Number.isInteger(from) && from !== i) moveTrack(from, i);
         });
-        li.appendChild(del);
       }
       ol.appendChild(li);
     });
+    $('ldNoMatch').classList.toggle('hidden', shown > 0 || !q);
+    markRows();
   }
+  const playAt = (i) => { if (open) player.playMixed(tracksOf(open), i); };
+  /** The song playing, in colour with moving bars (paused: still bars); the big ▶ becomes ⏸ while this list plays. */
+  function markRows() {
+    if (!open) return;
+    const i = player.info();
+    const k = i && i.key;
+    let mine = false;
+    for (const li of $('ldTracks').children) {
+      const n = Number(li.dataset.i);
+      // By the song itself; by its place only for one still known just by name
+      // (places change when songs are moved or removed while it plays).
+      const rk = li.dataset.key;
+      const now = Boolean(i && (rk ? rk === k || rk === i.alt : !open.virtual && i.list === open.id && i.n === n));
+      li.classList.toggle('now', now);
+      li.classList.toggle('paused', now && !i.playing);
+      if (now) mine = true;
+    }
+    const playing = mine && i.playing;
+    $('ldPlay').classList.toggle('playing', playing);
+    $('ldPlay').innerHTML = playing ? ICONS.pause : ICONS.play;
+    $('ldPlay').title = playing ? t('Pausa') : t('Reproducir');
+    $('ldPlay').setAttribute('aria-label', $('ldPlay').title);
+    $('ldStickyPlay').innerHTML = $('ldPlay').innerHTML;
+    for (const b of $('ldTracks').querySelectorAll('.lt-like')) {
+      const on = likedKeys.has(b.closest('li').dataset.key);
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+  }
+  async function moveTrack(from, to) {
+    if (!open || open.virtual) return;
+    try {
+      open = await postJson(`/api/streamlists/${open.id}`, { move: { from, to } });
+      renderTracks();
+      const row = $('ldTracks').querySelector(`li[data-i="${to}"] .lt-main`);
+      if (row) row.focus();
+    } catch (err) { showToast(err.message); }
+  }
+  async function removeTrack(i) {
+    if (!open || open.virtual) return;
+    try { open = await api(`/api/streamlists/${open.id}/tracks/${i}`, { method: 'DELETE' }); renderDetail(); } catch (err) { showToast(err.message); }
+  }
+  /** Adds a song (or several) to one of your lists, or to a new one. */
+  async function addToList(items, id) {
+    const tracks = items.map((x) => ({ title: x.title, artist: x.artist || x.channel || '', duration: x.duration || null, yt: x.yt || null, query: x.query || null, thumbnail: x.thumbnail || null })).filter((x) => x.title && (x.yt || x.query));
+    if (!tracks.length) { showToast(t('Esta canción está solo en tu equipo: no se puede añadir a una lista de Escuchar.')); return; }
+    try {
+      const l = id ? await postJson(`/api/streamlists/${id}`, { add: tracks }) : null;
+      if (l) { showToast(t('Añadida a «{name}»', { name: l.name })); if (open && open.id === l.id) { open = l; renderDetail(); } }
+    } catch (err) { showToast(err.message); }
+  }
+  async function newListWith(items) {
+    const r = await ask({ title: t('Nueva lista'), input: items.length === 1 ? items[0].title : t('Mi lista'), buttons: [{ label: t('Cancelar'), value: null }, { label: t('Crear'), value: 'ok', primary: true }] });
+    if (!r || !r.value || !r.text) return;
+    await saveAsList(items.filter((x) => !x.file), r.text);
+    lists = (await api('/api/streamlists').catch(() => ({ lists }))).lists || lists;
+  }
+  async function listsMenu(items) {
+    try { lists = (await api('/api/streamlists')).lists || []; } catch { /* the ones known */ }
+    const mine = lists.filter((l) => !open || l.id !== open.id).slice(0, 30);
+    return [
+      { label: t('Nueva lista…'), icon: 'addList', onClick: () => newListWith(items) },
+      ...(mine.length ? ['-'] : []),
+      ...mine.map((l) => ({ label: l.folder ? `${l.name} · ${l.folder}` : l.name, onClick: () => addToList(items, l.id) })),
+    ];
+  }
+  /** The song's menu (right click, "…" or Shift+F10). */
+  function trackMenu(tr, i) {
+    const song = songOf(tr);
+    const liked = Boolean(song && likedKeys.has(song.key));
+    const items = [
+      { label: t('Escuchar'), icon: 'play', onClick: () => playAt(i) },
+      { label: t('Escuchar a continuación'), icon: 'top', onClick: () => player.enqueueMixed([tr], { next: true }) },
+      { label: t('Añadir a la cola'), icon: 'addList', onClick: () => player.enqueueMixed([tr]) },
+    ];
+    if (tr.yt) items.push({ label: t('Radio de la canción'), icon: 'listen', onClick: () => songRadio(tr) });
+    items.push('-');
+    if (song) items.push({ label: liked ? t('Quitar de Favoritas') : t('Añadir a Favoritas'), icon: 'star', onClick: () => setLike(song, !liked) });
+    if (!tr.file) items.push({ label: t('Añadir a una lista'), icon: 'folder', sub: () => listsMenu([tr]) });
+    if (open && !open.virtual) items.push({ label: t('Quitar de esta lista'), icon: 'remove', danger: true, onClick: () => removeTrack(i) });
+    items.push('-');
+    if (!tr.file) items.push({ label: t('Descargar'), icon: 'download', onClick: () => downloadTracks([tr]) });
+    if (tr.yt) items.push({ label: t('Copiar el enlace'), icon: 'copy', onClick: () => copyText(`https://www.youtube.com/watch?v=${tr.yt}`) });
+    return items;
+  }
+  async function copyText(s) {
+    try { await navigator.clipboard.writeText(s); showToast(t('Enlace copiado')); } catch { showToast(t('No se pudo copiar.')); }
+  }
+  async function songRadio(tr) {
+    try {
+      const items = ((await api(`/api/stream/radio?id=${tr.yt}`)).entries || []).map(fromRadio).filter((x) => /^[\w-]{11}$/.test(x.yt));
+      if (!items.length) { showToast(t('No se pudo preparar la radio ahora mismo.')); return; }
+      player.playMixed(items);
+      showToast(t('Radio de «{name}»', { name: tr.title }));
+    } catch { showToast(t('No se pudo preparar la radio ahora mismo.')); }
+  }
+  function downloadTracks(tracks) {
+    const items = tracks.filter((tr) => !tr.file);
+    if (!items.length) { showToast(t('Ya están todas en tu biblioteca.')); return; }
+    queueItems(items.map((tr) => (tr.yt ? { url: `https://www.youtube.com/watch?v=${tr.yt}`, title: tr.title } : { query: tr.query, title: tr.artist ? `${tr.artist} - ${tr.title}` : tr.title })), $('ldStatus'));
+  }
+  // The keyboard in the list: arrows, Enter, Alt+arrows (move), Delete, the menu key.
+  $('ldTracks').addEventListener('keydown', (e) => {
+    const li = e.target.closest('li.lx-row');
+    if (!li || !e.target.classList.contains('lt-main')) return;
+    const i = Number(li.dataset.i);
+    const go = (el) => { const m = el && el.querySelector('.lt-main'); if (m) { e.preventDefault(); m.focus(); m.scrollIntoView({ block: 'nearest' }); } };
+    const tr = tracksOf(open)[i];
+    if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) { e.preventDefault(); playAt(i); } else if (e.key === 'ArrowDown' && e.altKey && !open.virtual && !$('ldFilter').value) { e.preventDefault(); if (i < open.tracks.length - 1) moveTrack(i, i + 1); } else if (e.key === 'ArrowUp' && e.altKey && !open.virtual && !$('ldFilter').value) { e.preventDefault(); if (i > 0) moveTrack(i, i - 1); } else if (e.key === 'ArrowDown' && !e.ctrlKey && !e.shiftKey) go(li.nextElementSibling);
+    else if (e.key === 'ArrowUp' && !e.ctrlKey && !e.shiftKey) go(li.previousElementSibling);
+    else if (e.key === 'Home' && !e.ctrlKey) go($('ldTracks').firstElementChild);
+    else if (e.key === 'End' && !e.ctrlKey) go($('ldTracks').lastElementChild);
+    else if (e.key === 'Delete' && !open.virtual) { e.preventDefault(); removeTrack(i); } else if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') { e.preventDefault(); ctxMenu.open(e.target, trackMenu(tr, i), e.target); }
+  });
+  $('ldFilter').addEventListener('input', renderTracks);
+  $('ldFilter').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { const m = $('ldTracks').querySelector('.lt-main'); if (m) { e.preventDefault(); m.focus(); } }
+    if (e.key === 'Escape' && $('ldFilter').value) { e.preventDefault(); e.stopPropagation(); $('ldFilter').value = ''; renderTracks(); }
+  });
+
   /** Similar songs to a whole list: YouTube's mixes of a few of its songs, woven together. */
   async function listRadio(l) {
     const seeds = shuffled(l.tracks.filter((x) => x.yt)).slice(0, 3);
@@ -7585,6 +8022,29 @@ const listenUi = (() => {
     player.playMixed(out);
     showToast(t('Radio de «{name}»: {n} canciones parecidas', { name: l.name, n: out.length }));
   }
+  async function refresh() {
+    if (!open || open.virtual) return;
+    $('ldStatus').textContent = t('Actualizando…');
+    try { open = await postJson(`/api/streamlists/${open.id}/refresh`, {}); renderDetail(); showToast(t('Lista actualizada')); } catch (err) { $('ldStatus').textContent = err.message; }
+  }
+  async function remove() {
+    if (!open || open.virtual || !window.confirm(t('¿Borrar la lista «{name}»? Las canciones no estaban descargadas: no se borra ningún archivo.', { name: open.name }))) return;
+    try { await api(`/api/streamlists/${open.id}`, { method: 'DELETE' }); back(); } catch (err) { showToast(err.message); }
+  }
+  /** The list's "…" menu. */
+  function listMenu() {
+    const l = open;
+    const items = [
+      { label: t('Añadir a la cola'), icon: 'addList', onClick: () => player.enqueueMixed(tracksOf(l)) },
+      { label: t('Radio de esta lista'), icon: 'listen', onClick: () => listRadio(l) },
+    ];
+    if (l.virtual && l.tracks.some((x) => !x.file)) items.push({ label: t('Guardar como lista'), icon: 'save', onClick: () => saveAsList(l.tracks.filter((x) => !x.file), l.name) });
+    if (!l.virtual && l.tracks.length) items.push({ label: t('Añadir a otra lista'), icon: 'folder', sub: () => listsMenu(tracksOf(l)) });
+    if (!l.virtual && l.url) items.push({ label: t('Actualizar ahora desde el enlace'), icon: 'retry', onClick: refresh });
+    if (l.url) items.push({ label: t('Copiar el enlace'), icon: 'copy', onClick: () => copyText(l.url) });
+    if (!l.virtual) items.push('-', { label: t('Borrar la lista'), icon: 'remove', danger: true, onClick: remove });
+    return items;
+  }
 
   $('listenImport').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -7593,11 +8053,22 @@ const listenUi = (() => {
     const btn = $('listenImportBtn');
     btn.disabled = true;
     const before = $('listenHint').textContent;
-    $('listenHint').textContent = t('Leyendo la lista…');
+    $('listenHint').textContent = /\/user\//.test(url) ? t('Leyendo las listas del perfil… (puede tardar un poco)') : t('Leyendo la lista…');
     try {
       const l = await postJson('/api/streamlists/import', { url });
       $('listenUrl').value = '';
       $('listenHint').textContent = before;
+      if (l.profile) {
+        // A whole profile: its lists, in their folder.
+        const p = l.profile;
+        const parts = [t('{n} listas de {name}, en la carpeta «{f}»', { n: l.created.length, name: p.name, f: p.folder })];
+        if (l.skipped) parts.push(t('{n} ya las tenías', { n: l.skipped }));
+        if (l.failed) parts.push(t('{n} no se pudieron leer', { n: l.failed }));
+        showToast(parts.join(' · '));
+        if (p.total > p.shown) $('listenHint').textContent = t('Ese perfil tiene {total} listas públicas, pero Spotify solo enseña {shown} sin iniciar sesión: pega aquí el enlace de las demás, una a una.', { total: p.total, shown: p.shown });
+        await load();
+        return;
+      }
       showToast(t('«{name}»: {n} canciones', { name: l.name, n: l.tracks.length }));
       await load();
       show(l.id);
@@ -7606,33 +8077,28 @@ const listenUi = (() => {
     } finally { btn.disabled = false; }
   });
   $('ldBack').addEventListener('click', back);
-  $('ldPlay').addEventListener('click', () => open && player.playMixed(tracksOf(open)));
-  $('ldShuffle').addEventListener('click', () => open && player.playMixed(shuffled(tracksOf(open))));
-  $('ldQueue').addEventListener('click', () => open && player.enqueueMixed(tracksOf(open)));
-  $('ldRadio').addEventListener('click', () => open && listRadio(open));
-  $('ldKeep').addEventListener('click', () => open && saveAsList(open.tracks.filter((x) => !x.file), open.name));
-  $('ldDownload').addEventListener('click', () => {
+  const playOpen = () => {
     if (!open) return;
-    const items = open.tracks.filter((tr) => !tr.file);
-    if (!items.length) { showToast(t('Ya están todas en tu biblioteca.')); return; }
-    queueItems(items.map((tr) => (tr.yt ? { url: `https://www.youtube.com/watch?v=${tr.yt}`, title: tr.title } : { query: tr.query, title: tr.artist ? `${tr.artist} - ${tr.title}` : tr.title })), $('ldStatus'));
-  });
-  $('ldRefresh').addEventListener('click', async () => {
-    if (!open || open.virtual) return;
-    $('ldStatus').textContent = t('Actualizando…');
-    try { open = await postJson(`/api/streamlists/${open.id}/refresh`, {}); renderDetail(); showToast(t('Lista actualizada')); } catch (err) { $('ldStatus').textContent = err.message; }
-  });
-  $('ldDelete').addEventListener('click', async () => {
-    if (!open || open.virtual || !window.confirm(t('¿Borrar la lista «{name}»? Las canciones no estaban descargadas: no se borra ningún archivo.', { name: open.name }))) return;
-    try { await api(`/api/streamlists/${open.id}`, { method: 'DELETE' }); back(); } catch (err) { showToast(err.message); }
-  });
+    // This list is the one playing: ▶ / ⏸.
+    if ($('ldTracks').querySelector('li.now')) { player.command('toggle'); return; }
+    player.playMixed(tracksOf(open));
+  };
+  $('ldPlay').addEventListener('click', playOpen);
+  $('ldStickyPlay').addEventListener('click', playOpen);
+  $('ldShuffle').addEventListener('click', () => open && player.playMixed(shuffled(tracksOf(open))));
+  $('ldDownload').addEventListener('click', () => open && downloadTracks(open.tracks));
+  $('ldMore').addEventListener('click', () => open && ctxMenu.open($('ldMore'), listMenu(), $('ldMore')));
+  // The bar with ▶ and the name, once the header has scrolled away.
+  new IntersectionObserver(([e]) => {
+    $('ldSticky').classList.toggle('stuck', !e.isIntersecting && e.boundingClientRect.top < 0 && !$('listenDetail').classList.contains('hidden'));
+  }).observe($('ldActions'));
   let renameTimer = null;
   $('ldName').addEventListener('input', () => {
     clearTimeout(renameTimer);
     renameTimer = setTimeout(async () => {
       const name = $('ldName').value.trim();
       if (!open || open.virtual || !name) return;
-      try { open = await postJson(`/api/streamlists/${open.id}`, { name }); } catch { /* keep typing */ }
+      try { open = await postJson(`/api/streamlists/${open.id}`, { name }); $('ldStickyName').textContent = open.name; } catch { /* keep typing */ }
     }, 600);
   });
   $('ldFolder').addEventListener('change', async () => {
@@ -7653,7 +8119,13 @@ const listenUi = (() => {
     if (!window.confirm(t('¿Borrar todo lo escuchado? Se vacían «Hecho para ti» y tu resumen; tus listas y archivos no se tocan.'))) return;
     try { await api('/api/listen', { method: 'DELETE' }); showToast(t('Lo escuchado se ha borrado')); loadForYou(); } catch (err) { showToast(err.message); }
   });
-  document.addEventListener('tg:view', (e) => { if (e.detail === 'listen') { if (open && !open.virtual) show(open.id); else if (!open) load(); } });
+  document.addEventListener('tg:view', (e) => {
+    if (e.detail !== 'listen') return;
+    if (open && !open.virtual) show(open.id);
+    else if (open && open.kind === 'liked') loadLikes().then(() => { if (open && open.kind === 'liked') { open = likedList(); renderDetail(); } });
+    else if (!open) load();
+  });
+  loadLikes();
 
   /** Saves songs (search results, what's playing) as a new list. */
   async function saveAsList(items, name) {
@@ -7675,6 +8147,12 @@ const listenUi = (() => {
       if (id) {
         items = tracksOf(await api(`/api/streamlists/${id}`));
         if (Number.isInteger(start) && start < items.length) index = start;
+      } else if (kind === 'liked') {
+        await library.ensure();
+        await loadLikes();
+        items = likedList().tracks;
+        const k = items.findIndex((x) => x.key === start);
+        if (k >= 0) index = k;
       } else {
         const s = await api('/api/listen/smart');
         await library.ensure();
@@ -7693,7 +8171,187 @@ const listenUi = (() => {
       player.playMixed(items, index);
     } catch (err) { showToast(err.message); }
   }
-  return { saveAsList, load, fromLog, playFromMini };
+  /** Back to the home page of Escuchar (Alt+Shift+H). */
+  const home = () => { if (open) back(); };
+  /** Ctrl+F: the list's own search box. */
+  const focusFilter = () => { if (!open || $('listenDetail').classList.contains('hidden')) return false; $('ldFilter').focus(); $('ldFilter').select(); return true; };
+  return { saveAsList, load, fromLog, playFromMini, look: () => look, toggleLikePlaying, openLiked, home, focusFilter };
+})();
+
+// === A menu at the pointer or under a button (a song's right click, "…") ===
+// Items: { label, icon, onClick, danger, sub: async () => items } or '-'.
+const ctxMenu = (() => {
+  let box = null;
+  let back = null;
+  function close(refocus = true) {
+    if (!box) return;
+    box.remove();
+    box = null;
+    document.removeEventListener('pointerdown', outside, true);
+    document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('blur', onBlur);
+    window.removeEventListener('resize', onBlur);
+    document.removeEventListener('scroll', onScroll, true);
+    if (refocus && back && back.isConnected) back.focus();
+    back = null;
+  }
+  const outside = (e) => { if (box && !box.contains(e.target)) close(false); };
+  const onBlur = () => close(false);
+  const onScroll = (e) => { if (box && !box.contains(e.target)) close(false); };
+  function onKey(e) {
+    if (!box) return;
+    const items = [...box.querySelectorAll('[role="menuitem"]')];
+    const i = items.indexOf(document.activeElement);
+    const to = (n) => { e.preventDefault(); e.stopPropagation(); if (items.length) items[(n + items.length) % items.length].focus(); };
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === 'ArrowDown') to(i + 1);
+    else if (e.key === 'ArrowUp') to(i - 1);
+    else if (e.key === 'Home') to(0);
+    else if (e.key === 'End') to(items.length - 1);
+    else if (e.key === 'Tab') { e.preventDefault(); close(); } else if (e.key === 'ArrowRight' && document.activeElement && document.activeElement.getAttribute('aria-haspopup')) { e.preventDefault(); document.activeElement.click(); } else if (e.key === 'ArrowLeft' && box.querySelector('.ctx-back')) { e.preventDefault(); box.querySelector('.ctx-back').click(); }
+  }
+  function place(at) {
+    const r = at instanceof Element ? at.getBoundingClientRect() : { left: at.x, right: at.x, top: at.y, bottom: at.y };
+    const w = box.offsetWidth;
+    const h = box.offsetHeight;
+    let x = at instanceof Element ? r.right - w : r.left;
+    let y = r.bottom + 4;
+    if (y + h > innerHeight - 8) y = Math.max(8, (at instanceof Element ? r.top - 4 : r.top) - h);
+    x = Math.min(Math.max(8, x), innerWidth - w - 8);
+    box.style.left = `${Math.round(x)}px`;
+    box.style.top = `${Math.round(Math.max(8, y))}px`;
+  }
+  function render(items, at, parent) {
+    box.innerHTML = '';
+    if (parent) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ctx-item ctx-back';
+      b.setAttribute('role', 'menuitem');
+      b.textContent = t('← Atrás');
+      b.addEventListener('click', () => render(parent, at, null));
+      box.append(b, Object.assign(document.createElement('div'), { className: 'ctx-sep' }));
+    }
+    for (const it of items) {
+      if (it === '-') {
+        if (box.lastElementChild && !box.lastElementChild.classList.contains('ctx-sep')) box.appendChild(Object.assign(document.createElement('div'), { className: 'ctx-sep' }));
+        continue;
+      }
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `ctx-item${it.danger ? ' danger' : ''}`;
+      b.setAttribute('role', 'menuitem');
+      if (it.icon && ICONS[it.icon]) b.innerHTML = ICONS[it.icon];
+      const s = document.createElement('span');
+      s.textContent = it.label;
+      b.appendChild(s);
+      if (it.sub) {
+        b.setAttribute('aria-haspopup', 'menu');
+        const more = document.createElement('span');
+        more.className = 'ctx-more';
+        more.textContent = '›';
+        b.appendChild(more);
+      }
+      b.addEventListener('click', async () => {
+        if (it.sub) {
+          const subs = await it.sub();
+          if (box) render(subs, at, items);
+          return;
+        }
+        close();
+        it.onClick();
+      });
+      box.appendChild(b);
+    }
+    if (box.lastElementChild && box.lastElementChild.classList.contains('ctx-sep')) box.lastElementChild.remove();
+    place(at);
+    const first = box.querySelector('[role="menuitem"]');
+    if (first) first.focus();
+  }
+  function open(at, items, opener) {
+    close(false);
+    back = opener || document.activeElement;
+    box = document.createElement('div');
+    box.className = 'ctx-menu';
+    box.setAttribute('role', 'menu');
+    document.body.appendChild(box);
+    render(items, at, null);
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('resize', onBlur);
+    document.addEventListener('scroll', onScroll, true);
+  }
+  document.addEventListener('tg:view', () => close(false));
+  return { open, close, isOpen: () => Boolean(box) };
+})();
+
+// === Keyboard shortcuts for listening (desktop; they can be turned off in
+// Escuchar → Personalizar). The ones you set in Ajustes → Sistema come first. ===
+
+(() => {
+  if (!desktopApi) return;
+  document.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented || e.isComposing || !listenUi.look().keys) return;
+    if (document.querySelector('.keys-box.recording') || ctxMenu.isOpen()) return;
+    const el = document.activeElement;
+    const typing = Boolean(el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && el.type !== 'range' && el.type !== 'checkbox' || el.isContentEditable));
+    const ctrl = e.ctrlKey || e.metaKey;
+    const { altKey: alt, shiftKey: shift, key: k, code } = e;
+    // Ctrl+/ (Ctrl+? too, and Ctrl+Shift+7 on a Spanish keyboard): the shortcuts.
+    if (ctrl && !alt && (k === '/' || k === '?' || code === 'Slash' || (shift && code === 'Digit7'))) {
+      if (!document.querySelector('.modal:not(.hidden)')) { e.preventDefault(); keysHelp.open(); }
+      return;
+    }
+    // The editor has keys of its own; a dialog keeps its keyboard.
+    if (currentView === 'cv-edit' || document.querySelector('.modal:not(.hidden)')) return;
+    const nowOpen = !$('nowView').classList.contains('hidden');
+    const has = Boolean(player.current());
+    const run = (fn) => { e.preventDefault(); fn(); };
+    // Ctrl+R would reload the window: here it's repeat.
+    if (ctrl && !alt && !shift && code === 'KeyR') { run(() => { if (has) player.command('repeat'); }); return; }
+    if (ctrl && !alt && !shift && code === 'KeyL') { run(() => setView('dl-search')); return; }
+    if (ctrl && !alt && !shift && code === 'KeyF' && currentView === 'listen') { if (listenUi.focusFilter()) e.preventDefault(); return; }
+    if (alt && shift && !ctrl) {
+      const ALT = {
+        KeyF: () => listenUi.toggleLikePlaying(),
+        KeyQ: () => $('plQueueBtn').click(),
+        KeyJ: () => $('plLyricsBtn').click(),
+        KeyR: () => (nowOpen ? $('nowClose') : $('plNow')).click(),
+        KeyH: () => { setView('listen'); listenUi.home(); },
+        KeyS: () => { setView('listen'); listenUi.openLiked(); },
+      };
+      if (ALT[code]) { if (has || code === 'KeyH' || code === 'KeyS') run(ALT[code]); else e.preventDefault(); }
+      return;
+    }
+    if (typing || !has) return;
+    if (ctrl && !alt && !shift && code === 'KeyS') run(() => player.command('shuffle'));
+    else if (ctrl && !alt && !shift && k === 'ArrowRight') run(() => player.command('next'));
+    else if (ctrl && !alt && !shift && k === 'ArrowLeft') run(() => player.command('prev'));
+    else if (ctrl && !alt && !shift && k === 'ArrowUp') run(() => player.command('volup'));
+    else if (ctrl && !alt && !shift && k === 'ArrowDown') run(() => player.command('voldown'));
+    else if (ctrl && !alt && shift && k === 'ArrowDown') run(() => player.command('mute'));
+    else if (shift && !ctrl && !alt && k === 'ArrowRight' && !(el && el.type === 'range')) run(() => player.command('seekf'));
+    else if (shift && !ctrl && !alt && k === 'ArrowLeft' && !(el && el.type === 'range')) run(() => player.command('seekb'));
+    // Space: play / pause where music is (Escuchar, Biblioteca, the big "Ahora suena"),
+    // not on a button or a list row (those are theirs).
+    else if (k === ' ' && !ctrl && !alt && !shift && (currentView === 'listen' || currentView === 'library' || nowOpen) && !(el && /^(BUTTON|A|INPUT|SUMMARY)$/.test(el.tagName))) run(() => player.command('toggle'));
+  });
+})();
+
+// === Position and volume bars: filled up to where they are (drawn by the style) ===
+(() => {
+  const ranges = ['plSeek', 'plVolume', 'nowSeek', 'nowVolume'].map((id) => $(id)).filter(Boolean);
+  const paint = () => {
+    for (const r of ranges) {
+      const min = Number(r.min) || 0;
+      const max = Number(r.max) || 1;
+      const p = max > min ? Math.max(0, Math.min(100, ((Number(r.value) - min) / (max - min)) * 100)) : 0;
+      r.style.setProperty('--pct', `${p.toFixed(2)}%`);
+    }
+  };
+  for (const r of ranges) r.addEventListener('input', paint);
+  for (const m of [$('plMedia'), $('plMediaB')]) for (const ev of ['timeupdate', 'volumechange', 'loadedmetadata', 'seeked', 'emptied']) m.addEventListener(ev, paint);
+  paint();
 })();
 $('searchSaveList').addEventListener('click', () => {
   const sel = searchPicker.selected();

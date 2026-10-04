@@ -1080,7 +1080,7 @@ app.get('/api/stream/find', requireDesktop, requireClient, infoLimiter, async (r
   }
   // Remembered in its list, so it isn't looked up again.
   const n = Number(req.query.n);
-  if (streamLists && typeof req.query.list === 'string' && Number.isInteger(n)) streamLists.remember(req.query.list, n, hit);
+  if (streamLists && typeof req.query.list === 'string' && Number.isInteger(n)) streamLists.remember(req.query.list, n, hit, q);
   return res.json({ id: hit.id, title: hit.title, channel: hit.channel, duration: hit.duration, thumbnail: hit.thumbnail });
 });
 
@@ -1112,6 +1112,29 @@ app.get('/api/streamlists', requireDesktop, requireClient, (req, res) => res.jso
 app.get('/api/streamlists/:id', requireDesktop, requireClient, (req, res) => { const l = listFor(req, res); if (l) res.json(l); });
 app.post('/api/streamlists/import', requireDesktop, requireClient, infoLimiter, async (req, res) => {
   if (!importSlots.take()) return res.status(429).json(BUSY);
+  const link = String((req.body || {}).url || '').trim();
+  // A Spotify profile: each of its public playlists, in a folder of its own.
+  if (importlist.isProfileUrl(link)) {
+    try {
+      const p = await importlist.readProfile(link);
+      const have = new Set(streamLists.summary().map((l) => l.url).filter(Boolean));
+      const folder = `Spotify · ${p.name}`.slice(0, 60);
+      const created = [];
+      let skipped = 0;
+      let failed = 0;
+      for (const pl of p.playlists) {
+        if (have.has(pl.url)) { skipped++; continue; }
+        try {
+          const l = streamLists.create(await readListLink(pl.url));
+          streamLists.update(l.id, { folder });
+          created.push({ id: l.id, name: l.name, count: l.tracks.length });
+        } catch { failed++; }
+      }
+      return res.json({ profile: { name: p.name, folder, total: p.total, shown: p.playlists.length }, created, skipped, failed });
+    } catch (err) {
+      return res.status(400).json({ error: err.message && err.message.length < 200 ? err.message : 'No se pudo leer ese perfil.' });
+    } finally { importSlots.release(); }
+  }
   try {
     const l = streamLists.create(await readListLink((req.body || {}).url));
     res.json(l);
@@ -1128,6 +1151,7 @@ app.post('/api/streamlists/:id', requireDesktop, requireClient, createLimiter, (
   res.json(streamLists.update(String(req.params.id), {
     name: b.name, add: Array.isArray(b.add) ? b.add : undefined,
     folder: typeof b.folder === 'string' ? b.folder : undefined, sync: typeof b.sync === 'boolean' ? b.sync : undefined,
+    move: b.move && typeof b.move === 'object' ? { from: b.move.from, to: b.move.to } : undefined,
   }));
 });
 // "Keep it up to date": lists from a link are read again by themselves, a
@@ -1193,6 +1217,21 @@ app.get('/api/listen/summary', requireDesktop, requireClient, (req, res) => {
 });
 app.post('/api/listen/settings', requireDesktop, requireClient, (req, res) => res.json(listenLog.settings(req.body || {})));
 app.delete('/api/listen', requireDesktop, requireClient, (req, res) => { listenLog.clear(); res.json({ ok: true }); });
+
+// "Favoritas": the songs marked with the star (only on this computer).
+const { Likes } = require('./lib/likes');
+const likes = IS_DESKTOP ? new Likes(path.join(dataDir, 'likes.json')) : null;
+app.get('/api/listen/likes', requireDesktop, requireClient, (req, res) => res.json({ songs: likes.list() }));
+app.post('/api/listen/likes', requireDesktop, requireClient, createLimiter, (req, res) => {
+  const n = likes.add((req.body || {}).song);
+  if (n === null) return res.status(400).json({ error: 'Esa canción no se puede guardar.' });
+  res.json({ ok: true, count: n });
+});
+app.post('/api/listen/unlike', requireDesktop, requireClient, (req, res) => {
+  const key = String((req.body || {}).key || '');
+  if (key.length > 520) return res.status(400).json({ error: 'Esa canción no se puede quitar.' });
+  res.json({ ok: true, count: likes.remove(key) });
+});
 
 // Lyrics for a song that's playing from YouTube (LRCLIB, by its artist and title).
 app.get('/api/stream/lyrics', requireDesktop, requireClient, infoLimiter, requireStreaming, async (req, res) => {

@@ -304,10 +304,10 @@
   });
   // ---- Lists: yours and the ones made for you, to play or to pick a song from ----
   const LL = en ? {
-    tab: 'Lists', forYou: 'Made for you', yours: 'Your lists', mix: 'Daily Mix {n}', mixSub: '{a} and similar songs', top: 'Most played', lately: 'Recently played', forgotten: 'Rediscover',
+    tab: 'Lists', forYou: 'Made for you', yours: 'Your lists', liked: 'Favourites', mix: 'Daily Mix {n}', mixSub: '{a} and similar songs', top: 'Most played', lately: 'Recently played', forgotten: 'Rediscover',
     songs: '{n} songs', play: 'Play', shuffle: 'Shuffle', back: 'Back to the lists', loading: 'Loading…', none: 'No lists yet. Make them in TubeGrab → Listen.', fail: "Couldn't load the lists.", mixNote: 'Changes every day: it plays straight away.',
   } : {
-    tab: 'Listas', forYou: 'Hecho para ti', yours: 'Tus listas', mix: 'Mix diario {n}', mixSub: '{a} y canciones parecidas', top: 'Lo más escuchado', lately: 'Escuchado hace poco', forgotten: 'Redescubre',
+    tab: 'Listas', forYou: 'Hecho para ti', yours: 'Tus listas', liked: 'Favoritas', mix: 'Mix diario {n}', mixSub: '{a} y canciones parecidas', top: 'Lo más escuchado', lately: 'Escuchado hace poco', forgotten: 'Redescubre',
     songs: '{n} canciones', play: 'Reproducir', shuffle: 'Aleatorio', back: 'Volver a las listas', loading: 'Cargando…', none: 'Aún no hay listas. Hazlas en TubeGrab → Escuchar.', fail: 'No se pudieron cargar las listas.', mixNote: 'Cambia cada día: suena directamente.',
   };
   const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
@@ -354,8 +354,10 @@
     const ul = $('lists');
     message(ul, LL.loading);
     let lists = [];
+    let liked = [];
     try {
-      [smart, lists] = await Promise.all([getJson('/api/listen/smart').catch(() => null), getJson('/api/streamlists').then((r) => r.lists || [])]);
+      [smart, lists, liked] = await Promise.all([getJson('/api/listen/smart').catch(() => null), getJson('/api/streamlists').then((r) => r.lists || []),
+        getJson('/api/listen/likes').then((r) => r.songs || []).catch(() => [])]);
     } catch { message(ul, LL.fail); return; }
     ul.innerHTML = '';
     const kinds = smart ? [['top', LL.top, smart.top], ['lately', LL.lately, smart.lately], ['forgotten', LL.forgotten, smart.forgotten]].filter(([, , rows]) => rows && rows.length) : [];
@@ -374,8 +376,13 @@
           () => playList({ kind }, 0, kind !== 'lately')));
       }
     }
-    if (lists.length) {
+    if (lists.length || liked.length) {
       ul.appendChild(heading(LL.yours));
+      // Your favourites (the star), first.
+      if (liked.length) {
+        const rows = liked.map((r) => ({ title: r.title, sub: r.artist, thumb: noBars(r.thumb) || ytPic(r.yt), start: r.key }));
+        ul.appendChild(listRow(LL.liked, fill(LL.songs, { n: liked.length }), rows[0].thumb, () => showTracks({ kind: 'liked' }, LL.liked, rows), () => playList({ kind: 'liked' })));
+      }
       const sorted = [...lists.filter((l) => !l.folder), ...lists.filter((l) => l.folder).sort((a, b) => a.folder.localeCompare(b.folder))];
       for (const l of sorted) {
         ul.appendChild(listRow(l.name, [l.folder, fill(LL.songs, { n: l.count })].filter(Boolean).join(' · '), noBars(l.thumbnail),

@@ -754,3 +754,27 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - En la versión web, el botón «Descargar» del aviso «TubeGrab para Windows» abre un diálogo con las tres versiones: Instalador (recomendado), Portable y Portable ligera, con qué hace cada una, su tamaño y el archivo; cada una se descarga directamente.
 - Los tamaños y la versión salen de la última release de GitHub (`/api/desktop/latest`, solo nombres y tamaños, como mucho una consulta por hora; si GitHub no responde, se muestran los aproximados).
 - Probado en Edge: tamaños reales (163, 163 y 96 MB), enlaces directos, claro/oscuro, móvil sin desbordes, Esc y clic fuera cierran, inglés.
+
+
+---
+
+## 2026-10-04 — v3.11.0: Escuchar renovado, Favoritas, perfiles de Spotify
+
+### [Feature] Escuchar con aspecto de app de música (propio, no una copia)
+- Inicio con saludo, filtros (Todo · Listas · Hecho para ti · Artistas), accesos rápidos y tarjetas grandes; artistas en círculo. Cada lista: cabecera con el color de su portada, ▶ grande (⏸ si esa lista suena), aleatorio, descargar, «⋯» (cola, radio, guardar, añadir a otra lista, actualizar, copiar enlace, borrar), buscador y barra fija al bajar.
+- Canciones en tabla: clic selecciona y doble clic/Intro escucha (o un clic, a elegir), ↑/↓, Alt+↑/↓ y arrastrar para reordenar (`move` en el servidor), Supr quita, menú con el botón derecho o Mayús+F10. La que suena, en color con barras animadas (también si suena tu archivo descargado en su lugar).
+- Personalizar: moderno o clásico, siempre oscuro, color de la app / de la portada que suena / uno tuyo, cabecera con color, tamaño de portadas, filas compactas, saludo, artistas y atajos. Colores, nombres y estrella propios de TubeGrab (nada de los de Spotify).
+- Barra del reproductor más limpia: botón de reproducir redondo, barras de posición y volumen rellenas, puntos en los botones activos, estrella de Favoritas.
+
+### [Feature] Favoritas
+- Estrella en cada canción, en el reproductor y con Alt+Mayús+F; lista «Favoritas» en Escuchar y en el mini reproductor (`likes.json`, solo en este equipo; las mismas reglas que lo escuchado: solo claves yt:/f:, texto limpio, miniaturas solo de YouTube, máx. 5000).
+
+### [Feature] Atajos para escuchar
+- Espacio, Ctrl+←/→, Mayús+←/→, Ctrl+↑/↓, Ctrl+Mayús+↓, Ctrl+S, Ctrl+R (ya no recarga la ventana), Alt+Mayús+Q/J/R/H/S/F, Ctrl+L, Ctrl+F, Ctrl+/. No actúan en el editor ni con un diálogo abierto; los de Ajustes → Sistema van primero.
+
+### [Feature] Perfil de Spotify entero
+- Pega `open.spotify.com/user/…`: se traen las listas públicas que enseña el perfil (Spotify solo enseña las 10 primeras sin iniciar sesión; si hay más, se avisa), en la carpeta «Spotify · nombre», sin repetir las que ya tenías. Solo se leen enlaces de perfil válidos; los de cada lista los construye TubeGrab.
+
+### [Bug] El vídeo encontrado para una canción podía ir a otra
+- Al borrar (o mover) una canción mientras sonaba la lista, el vídeo de YouTube encontrado para una canción de Spotify se guardaba por su posición antigua, en su vecina. Ahora se guarda en la canción buscada con ese nombre.
+- Probado: atajos, reordenar, filtro, Favoritas (YouTube y archivo), mini reproductor, perfil con 10 listas (9 nuevas + 1 que ya estaba; repetido: 0), claro y oscuro, sin controles sin nombre. 252 pruebas.

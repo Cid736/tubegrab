@@ -91,6 +91,10 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
   - **Your music** in Statistics: your yearly summary — song of the year, minutes, songs, artists, days with music, your hour, top artists and songs, minutes per month — playable or saved as a list
   - **Sound** panel: equalizer with styles and **your own saved ones**, **same volume for every song** (measured while it plays, remembered per song), crossfade up to 12 s, **speed** 0.5–2× (keeping the pitch or not) and a **sleep timer** (minutes or "when this song ends", fading out)
   - **Last.fm** scrobbling and **Discord** "Listening to…" (with your own free keys), with the song's cover and a YouTube button for songs from YouTube
+  - **Listen**, redesigned: a greeting with quick tiles, big covers, a list page in the colour of its cover with a big ▶, songs in a table (double-click or Enter to play, drag or Alt+↑/↓ to reorder, a search box, a menu on right click: play next, add to queue, song radio, add to a list, download, copy the link) and the song playing marked with moving bars. Choose its look: modern or classic, always dark or not, your colour or the cover's, cover size, compact rows, one click or double click
+  - **Favourites**: a star on every song and in the player; the list is in Listen and in the mini player
+  - Keyboard shortcuts for listening: Space, Ctrl+←/→, Ctrl+↑/↓, Ctrl+S shuffle, Ctrl+R repeat, Alt+Shift+F favourite, Ctrl+F search in the list, Ctrl+L search… (Ctrl+/ shows them all; they can be turned off)
+  - Paste your **Spotify profile** link to bring the public lists it shows, all at once, in a folder of their own (kept up to date)
   - The mini player has a **Lists** tab: your lists (folders too) and the ones made for you (daily mixes, most played…), to play, shuffle, or open and start from any song
   - **Game mode**: when one of your games is running (by its .exe, pick it from what's open), the mini player goes over it small and see-through in a corner, and back as it was when you close the game
 - **Statistics**: downloads and conversions per month, top channels and artists, most played, library size
@@ -211,7 +215,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 ## Tests
 
 ```bash
-npm test                    # 246 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
+npm test                    # 252 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
 TG_NETWORK=1 npm test       # also real YouTube downloads
 ```
 
@@ -339,6 +343,10 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
   - **Tu música** en Estadísticas: tu resumen del año (la canción del año, minutos, canciones, artistas, días con música, tu hora, tus artistas y canciones, minutos por mes), que se puede reproducir o guardar como lista
   - Panel **Sonido**: ecualizador con estilos y **los tuyos guardados**, **mismo volumen en todas las canciones** (se mide mientras suena y se recuerda por canción), fundido de hasta 12 s, **velocidad** de 0,5 a 2× (manteniendo el tono o no) y **temporizador para dormir** (minutos o «al acabar esta canción», bajando poco a poco)
   - **Last.fm** (scrobbling) y **Discord** («Escuchando…»), con tus propias claves gratuitas, con la carátula y un botón de YouTube en las canciones de YouTube
+  - **Escuchar**, renovado: saludo con accesos rápidos, portadas grandes, la página de cada lista con el color de su portada y un ▶ grande, canciones en tabla (doble clic o Intro para escuchar, arrastrar o Alt+↑/↓ para reordenar, un buscador, menú con el botón derecho: escuchar a continuación, añadir a la cola, radio de la canción, añadir a una lista, descargar, copiar el enlace) y la que suena marcada con barras que se mueven. Elige su aspecto: moderno o clásico, siempre oscuro o no, tu color o el de la portada, tamaño de las portadas, filas compactas, un clic o doble clic
+  - **Favoritas**: una estrella en cada canción y en el reproductor; la lista está en Escuchar y en el mini reproductor
+  - Atajos de teclado para escuchar: Espacio, Ctrl+←/→, Ctrl+↑/↓, Ctrl+S aleatorio, Ctrl+R repetir, Alt+Mayús+F favorita, Ctrl+F buscar en la lista, Ctrl+L buscar… (Ctrl+/ los enseña todos; se pueden quitar)
+  - Pega el enlace de tu **perfil de Spotify** para traer de una vez las listas públicas que enseña, en su propia carpeta (y al día)
   - El mini reproductor tiene una pestaña **Listas**: las tuyas (también las de carpetas) y las hechas para ti (mixes diarios, lo más escuchado…), para reproducir, en aleatorio, o abrirlas y empezar desde cualquier canción
   - **Modo juego**: cuando uno de tus juegos está abierto (por su .exe, elígelo de lo que tienes abierto), el mini reproductor se pone encima, pequeño y transparente, en una esquina, y vuelve a como estaba al cerrar el juego
 - **Estadísticas**: descargas y conversiones por mes, canales y artistas que más, lo más escuchado y el tamaño de la biblioteca
@@ -419,7 +427,7 @@ Con la firma desaparece el aviso "Editor desconocido" de SmartScreen (al momento
 ## Pruebas
 
 ```bash
-npm test                    # 246 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
+npm test                    # 252 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
 TG_NETWORK=1 npm test       # también descargas reales de YouTube
 ```
 

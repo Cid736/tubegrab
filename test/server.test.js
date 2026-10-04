@@ -623,7 +623,8 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
     assert.equal((await api(`${p}${p.includes('?') ? '&' : '?'}client=${CLIENT}`)).status, 404, `web: ${p}`);
   }
   assert.equal((await api('/api/lyrics/translate', json({ lines: ['hello'], to: 'es' }))).status, 404, 'web: translate');
-  for (const p of ['/api/listen/smart', '/api/listen/summary']) assert.equal((await api(p)).status, 404, `web: ${p}`);
+  for (const p of ['/api/listen/smart', '/api/listen/summary', '/api/listen/likes']) assert.equal((await api(p)).status, 404, `web: ${p}`);
+  assert.equal((await api('/api/listen/unlike', json({ key: 'yt:dQw4w9WgXcQ' }))).status, 404, 'web: unlike');
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-stream-'));
   const port = await freePort();
   const { child, first } = startServer(port, { TUBEGRAB_ELECTRON: '1', TUBEGRAB_DATA_DIR: data });
@@ -675,6 +676,27 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
     assert.equal((await (await call('/api/listen/settings', json({ paused: 'yes', autoSave: 1 }))).json()).paused, false, 'only real booleans');
     assert.equal((await (await call('/api/listen', { method: 'DELETE' })).json()).ok, true);
     assert.equal((await (await call('/api/listen/smart')).json()).count, 0);
+    // v3.11: favourites: only songs it can name, kept as text, removed by key.
+    for (const song of [undefined, 'x', { key: 'yt:short', title: 'x' }, { key: '../../etc/passwd', title: 'x' }, { key: 'yt:dQw4w9WgXcQ', title: '' }, { key: `f:${'a'.repeat(600)}`, title: 'x' }]) {
+      assert.equal((await call('/api/listen/likes', json({ song }))).status, 400, JSON.stringify(song || null).slice(0, 60));
+    }
+    assert.equal((await (await call('/api/listen/likes', json({ song: { key: 'yt:dQw4w9WgXcQ', title: '<img src=x onerror=alert(1)>', thumb: 'javascript:alert(1)' } }))).json()).count, 1);
+    const favs = (await (await call('/api/listen/likes')).json()).songs;
+    assert.equal(favs[0].title, '<img src=x onerror=alert(1)>', 'kept as text');
+    assert.equal(favs[0].thumb, undefined);
+    assert.ok(fs.existsSync(path.join(data, 'likes.json')));
+    assert.equal((await call('/api/listen/unlike', json({ key: 'x'.repeat(600) }))).status, 400);
+    assert.equal((await (await call('/api/listen/unlike', json({ key: 'yt:dQw4w9WgXcQ' }))).json()).count, 0);
+    // A song moved in a list: only real places.
+    const moved = await (await call('/api/streamlists', json({ name: 'm', tracks: [{ title: 'A', yt: 'dQw4w9WgXcQ' }, { title: 'B', yt: 'kJQP7kiw5Fk' }] }))).json();
+    assert.deepEqual((await (await call(`/api/streamlists/${moved.id}`, json({ move: { from: 1, to: 0 } }))).json()).tracks.map((t) => t.title), ['B', 'A']);
+    assert.deepEqual((await (await call(`/api/streamlists/${moved.id}`, json({ move: { from: 0, to: 99 } }))).json()).tracks.map((t) => t.title), ['B', 'A']);
+    assert.deepEqual((await (await call(`/api/streamlists/${moved.id}`, json({ move: 'up' }))).json()).tracks.map((t) => t.title), ['B', 'A']);
+    await call(`/api/streamlists/${moved.id}`, { method: 'DELETE' });
+    // A Spotify profile link that isn't one: refused like any other link (nothing fetched).
+    for (const url of ['https://open.spotify.com/user/../../x', 'https://open.spotify.com/user/a%2F..%2Fb', 'http://open.spotify.com/user/x', 'https://open.spotify.com.evil.example/user/x', 'https://open.spotify.com/user/x/../../playlist']) {
+      assert.equal((await call('/api/streamlists/import', json({ url }))).status, 400, url);
+    }
   } finally {
     child.kill();
     fs.rmSync(data, { recursive: true, force: true });
