@@ -55,6 +55,27 @@
       }
     }
   });
+  // The visualizer: bars from the main window (it's the one that hears the music).
+  if (api.onPlayerLevels) {
+    const viz = $('viz');
+    const ctx = viz.getContext('2d');
+    api.onPlayerLevels((levels) => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.round(viz.clientWidth * dpr);
+      const h = Math.round(viz.clientHeight * dpr);
+      if (viz.width !== w || viz.height !== h) { viz.width = w; viz.height = h; }
+      ctx.clearRect(0, 0, w, h);
+      if (!Array.isArray(levels) || !levels.length || !w || !h) return;
+      const bw = w / levels.length;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = 3 * dpr;
+      levels.forEach((v, i) => {
+        const bh = Math.max(dpr, ((Number(v) || 0) / 255) ** 1.6 * h);
+        ctx.fillRect(i * bw + bw * 0.2, h - bh, Math.max(1, bw * 0.6), bh);
+      });
+    });
+  }
   $('play').addEventListener('click', () => api.miniCommand('toggle'));
   $('next').addEventListener('click', () => api.miniCommand('next'));
   $('prev').addEventListener('click', () => api.miniCommand('prev'));

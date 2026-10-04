@@ -52,9 +52,15 @@ test('lyrics: asks only lrclib.net, over HTTPS, with our User-Agent and no redir
 });
 
 test('lyrics: falls back to search, matching the duration; nothing / instrumental → null', async () => {
-  const list = [{ duration: 100, plainLyrics: 'otra canción' }, { duration: 356, plainLyrics: 'la buena' }];
+  const list = [{ duration: 100, plainLyrics: 'otra canción distinta' }, { duration: 356, plainLyrics: 'la buena, la de verdad' }];
   const found = await lyrics.findLyrics({ artist: 'A', title: 'B', duration: 355 }, { fetchImpl: fakeFetch({ '/api/search': { body: list } }) });
-  assert.equal(found.plain, 'la buena');
+  assert.equal(found.plain, 'la buena, la de verdad');
+  // v3.8: a junk entry («probe») is skipped for the search's best (synced first).
+  const junk = {
+    '/api/get': { body: { plainLyrics: 'probe', syncedLyrics: '[00:00.00]probe' } },
+    '/api/search': { body: [{ plainLyrics: 'test' }, { plainLyrics: 'sin tiempos pero de verdad' }, { plainLyrics: 'la letra con sus tiempos', syncedLyrics: '[00:01.00] la letra con sus tiempos' }] },
+  };
+  assert.equal((await lyrics.findLyrics({ artist: 'A', title: 'B' }, { fetchImpl: fakeFetch(junk) })).synced, '[00:01.00] la letra con sus tiempos');
   assert.equal(await lyrics.findLyrics({ artist: 'A', title: 'B' }, { fetchImpl: fakeFetch({}) }), null);
   assert.equal(await lyrics.findLyrics({ artist: 'A', title: 'B' }, { fetchImpl: fakeFetch({ '/api/get': { body: { instrumental: true } } }) }), null);
   assert.equal(await lyrics.findLyrics({ artist: '', title: 'B' }, { fetchImpl: () => { throw new Error('should not ask'); } }), null);

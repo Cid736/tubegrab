@@ -59,6 +59,9 @@ contextBridge.exposeInMainWorld('desktop', {
   onPlayerCommand: (cb) => ipcRenderer.on('player:command', (_e, cmd) => cb(cmd)),
   miniCommand: (cmd) => ipcRenderer.send('player:command', cmd),
   onPlayerState: (cb) => ipcRenderer.on('player:state', (_e, state) => cb(state)),
+  // The visualizer's bars, from the main page to the mini window.
+  playerLevels: (levels) => ipcRenderer.send('player:levels', levels),
+  onPlayerLevels: (cb) => ipcRenderer.on('player:levels', (_e, levels) => cb(levels)),
   // Disk space.
   getSpace: () => ipcRenderer.invoke('desktop:getSpace'),
   setSpace: (patch) => ipcRenderer.invoke('desktop:setSpace', patch),

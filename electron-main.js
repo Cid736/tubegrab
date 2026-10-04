@@ -806,6 +806,8 @@ function openMini() {
     clearInterval(miniTopTimer);
     miniTopTimer = null;
     miniWindow = null;
+    // Its visualizer bars stop.
+    sendToRenderer('player:command', { cmd: 'miniClosed' });
     miniGrabbed = false;
     miniHovered = false;
     // The main window was closed while the mini player kept the music going:
@@ -916,6 +918,12 @@ ipcMain.on('player:state', (event, state) => {
   if (was.active !== clean.active || was.playing !== clean.playing) updateThumbar();
   scrobbler.onState(clean);
   discord.onState(clean);
+});
+// The visualizer's bars (main page → mini window): up to 32 numbers 0–255.
+ipcMain.on('player:levels', (event, levels) => {
+  if (!isTrustedSender(event) || !mainWindow || event.sender !== mainWindow.webContents || !Array.isArray(levels)) return;
+  if (!miniWindow || miniWindow.isDestroyed() || !miniWindow.isVisible()) return;
+  miniWindow.webContents.send('player:levels', levels.slice(0, 32).map((v) => Math.max(0, Math.min(255, Math.round(Number(v) || 0)))));
 });
 const PLAYER_COMMANDS = ['toggle', 'next', 'prev', 'hello', 'stop', 'volup', 'voldown', 'mute', 'seekf', 'seekb', 'shuffle', 'repeat', 'radio', 'save'];
 ipcMain.on('player:command', (event, cmd) => {

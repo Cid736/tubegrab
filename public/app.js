@@ -4704,21 +4704,43 @@ const player = (() => {
     return { artist: (f.folder || '').split('/').pop(), track: base };
   };
 
-  // ---- equalizer (Web Audio), saved per viewer ----
+  // A song's key that survives a restart (library ids change every run).
+  const songKey = (f) => (!f ? null : isStream(f) ? (f.yt ? `yt:${f.yt}` : null) : `f:${library.relOf(f)}`);
+
+  // ---- sound (Web Audio): equalizer, same loudness, speed, sleep timer,
+  // visualizer. Saved per viewer (not the speed: every run starts at normal).
   const BANDS = [60, 230, 910, 3600, 14000];
-  const PRESETS = { flat: [0, 0, 0, 0, 0], bass: [6, 4, 0, -1, -1], vocal: [-2, -1, 3, 4, 1], rock: [4, 2, -1, 2, 4], pop: [-1, 2, 4, 2, -1], classical: [3, 1, -1, 1, 3] };
+  const PRESETS = {
+    flat: [0, 0, 0, 0, 0], bass: [6, 4, 0, -1, -1], vocal: [-2, -1, 3, 4, 1], rock: [4, 2, -1, 2, 4], pop: [-1, 2, 4, 2, -1], classical: [3, 1, -1, 1, 3],
+    electronic: [5, 3, 0, 2, 4], night: [-4, -1, 1, 1, -2],
+  };
+  const SPEEDS = [0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
   const EQ_KEY = 'tubegrab_eq';
-  let eq = { preset: 'flat', gains: [0, 0, 0, 0, 0], crossfade: 0 };
+  const okGains = (g) => Array.isArray(g) && g.length === BANDS.length && g.every((x) => Number.isFinite(x) && x >= -12 && x <= 12);
+  const eq = { preset: 'flat', gains: [0, 0, 0, 0, 0], crossfade: 0, level: false, speed: 1, pitch: true, viz: 'bars', vizMini: false, mine: [] };
   try {
     const raw = JSON.parse(localStorage.getItem(EQ_KEY));
-    if (raw && (raw.preset in PRESETS || raw.preset === 'custom')) eq.preset = raw.preset;
-    if (raw && Array.isArray(raw.gains) && raw.gains.length === 5 && raw.gains.every((g) => Number.isFinite(g) && g >= -12 && g <= 12)) eq.gains = raw.gains;
-    if (raw && [0, 2, 4, 6, 10].includes(raw.crossfade)) eq.crossfade = raw.crossfade;
+    if (raw && Array.isArray(raw.mine)) {
+      eq.mine = raw.mine.filter((p) => p && typeof p.name === 'string' && p.name.trim() && okGains(p.gains)).slice(0, 20).map((p) => ({ name: p.name.trim().slice(0, 40), gains: p.gains.slice() }));
+    }
+    if (raw && (raw.preset in PRESETS || raw.preset === 'custom' || (typeof raw.preset === 'string' && eq.mine.some((p) => `mine:${p.name}` === raw.preset)))) eq.preset = raw.preset;
+    if (raw && okGains(raw.gains)) eq.gains = raw.gains;
+    if (raw && [0, 2, 4, 6, 10, 12].includes(raw.crossfade)) eq.crossfade = raw.crossfade;
+    if (raw && ['bars', 'wave', 'off'].includes(raw.viz)) eq.viz = raw.viz;
+    if (raw) { eq.level = raw.level === true; eq.pitch = raw.pitch !== false; eq.vizMini = raw.vizMini === true; }
   } catch { /* defaults */ }
-  const saveEq = () => { try { localStorage.setItem(EQ_KEY, JSON.stringify(eq)); } catch { /* ignore */ } };
+  const saveEq = () => {
+    const { speed, ...keep } = eq;
+    try { localStorage.setItem(EQ_KEY, JSON.stringify(keep)); } catch { /* ignore */ }
+  };
   let actx = null;
   let filters = [];
-  const gains = new Map();
+  let limiter = null;
+  let master = null;             // the sleep timer fades this one out
+  let scope = null;              // what the visualizer draws
+  const gains = new Map();       // deck -> its fade (crossfades)
+  const levels = new Map();      // deck -> its loudness correction ("same volume")
+  const meters = new Map();      // deck -> what measures how loud it is
   function graph() {
     if (actx) { if (actx.state === 'suspended') actx.resume().catch(() => {}); return; }
     try {
@@ -4731,19 +4753,114 @@ const player = (() => {
         b.gain.value = eq.gains[i];
         return b;
       });
-      filters.reduce((a, b) => { a.connect(b); return b; }).connect(actx.destination);
+      limiter = actx.createDynamicsCompressor();
+      master = actx.createGain();
+      scope = actx.createAnalyser();
+      scope.fftSize = 2048;
+      scope.smoothingTimeConstant = 0.78;
+      filters.reduce((a, b) => { a.connect(b); return b; }).connect(limiter).connect(master).connect(actx.destination);
+      master.connect(scope);
       for (const m of [A, B]) {
+        const src = actx.createMediaElementSource(m);
         const g = actx.createGain();
-        actx.createMediaElementSource(m).connect(g).connect(filters[0]);
+        const lv = actx.createGain();
+        const meter = actx.createAnalyser();
+        meter.fftSize = 2048;
+        src.connect(g).connect(lv).connect(filters[0]);
+        src.connect(meter);
         gains.set(m, g);
+        levels.set(m, lv);
+        meters.set(m, meter);
       }
+      setLimiter();
     } catch { actx = null; }
   }
+  // Only on when something can push the sound over the top (louder songs, boosted bands).
+  function setLimiter() {
+    if (!limiter) return;
+    const on = eq.level || eq.gains.some((g) => g > 0);
+    limiter.threshold.value = on ? -1.5 : 0;
+    limiter.knee.value = 0;
+    limiter.ratio.value = on ? 20 : 1;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.25;
+  }
+
+  // Same volume for every song: how loud it really is, measured while it
+  // plays (the average power of what isn't silence), pulled gently towards
+  // one level; remembered per song, so next time it starts right.
+  const LEVEL_KEY = 'tubegrab_levels';
+  const TARGET_DB = -16;
+  const levelMemo = (() => { try { const o = JSON.parse(localStorage.getItem(LEVEL_KEY)); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } })();
+  const meter = { key: null, power: 0, n: 0, want: null };
+  const meterBuf = new Float32Array(2048);
+  const levelOf = (f) => { const v = levelMemo[songKey(f)]; return Number.isFinite(v) && Math.abs(v) <= 12 ? v : 0; };
+  function rememberLevel() {
+    if (!meter.key || meter.want === null || meter.n < 40) return;
+    delete levelMemo[meter.key];
+    levelMemo[meter.key] = Math.round(meter.want * 10) / 10;
+    const keys = Object.keys(levelMemo);
+    if (keys.length > 800) delete levelMemo[keys[0]];
+    try { localStorage.setItem(LEVEL_KEY, JSON.stringify(levelMemo)); } catch { /* ignore */ }
+  }
+  /** The loudness correction a deck starts a song with. */
+  function setLevel(m, f) {
+    const lv = levels.get(m);
+    if (!lv) return;
+    lv.gain.cancelScheduledValues(0);
+    lv.gain.value = eq.level && f && f.kind !== 'video' ? 10 ** (levelOf(f) / 20) : 1;
+  }
+  function measure() {
+    const f = cur();
+    if (!eq.level || !actx || !f || deck.paused || cast.active() || f.kind === 'video') return;
+    const an = meters.get(deck);
+    const lv = levels.get(deck);
+    const key = songKey(f);
+    if (!an || !lv || !key) return;
+    if (meter.key !== key) { rememberLevel(); meter.key = key; meter.power = 0; meter.n = 0; meter.want = null; $('sndLevelNow').textContent = ''; }
+    const vol = deck.muted ? 0 : deck.volume;
+    if (vol < 0.05) return;
+    an.getFloatTimeDomainData(meterBuf);
+    let sum = 0;
+    for (let i = 0; i < meterBuf.length; i++) sum += meterBuf[i] * meterBuf[i];
+    // The page's volume is applied before this point: measured without it.
+    const p = sum / meterBuf.length / (vol * vol);
+    if (p < 3e-5) return; // quieter than about -45 dB: a pause, a fade
+    meter.n = Math.min(meter.n + 1, 240);
+    meter.power += (p - meter.power) / meter.n;
+    if (meter.n < 8) return;
+    meter.want = Math.max(-12, Math.min(8, TARGET_DB - 10 * Math.log10(meter.power)));
+    lv.gain.setTargetAtTime(10 ** (meter.want / 20), actx.currentTime, 1.5);
+    $('sndLevelNow').textContent = t('Esta canción: {d} dB', { d: `${meter.want > 0 ? '+' : ''}${meter.want.toFixed(1).replace('.', ',')}` });
+  }
+  setInterval(measure, 250);
+
+  // Speed (and whether the voice keeps its pitch).
+  function applySpeed(m) {
+    m.defaultPlaybackRate = eq.speed;
+    m.playbackRate = eq.speed;
+    m.preservesPitch = eq.pitch;
+  }
+
   function applyEq() {
     filters.forEach((f, i) => { f.gain.value = eq.gains[i]; });
-    $('eqBands').querySelectorAll('input').forEach((el, i) => { el.value = String(eq.gains[i]); });
+    $('eqBands').querySelectorAll('input').forEach((el, i) => { el.value = String(eq.gains[i]); el.title = `${eq.gains[i] > 0 ? '+' : ''}${eq.gains[i]} dB`; });
+    const mine = $('eqMine');
+    mine.innerHTML = '';
+    mine.label = t('Tuyos');
+    $('eqStyles').label = t('Estilos');
+    for (const p of eq.mine) { const o = document.createElement('option'); o.value = `mine:${p.name}`; o.textContent = p.name; mine.appendChild(o); }
+    mine.hidden = !eq.mine.length;
     $('eqPreset').value = eq.preset;
+    $('eqDelete').classList.toggle('hidden', !eq.preset.startsWith('mine:'));
     $('eqCrossfade').value = String(eq.crossfade);
+    $('sndLevel').checked = eq.level;
+    $('sndSpeed').value = String(eq.speed);
+    $('sndPitch').checked = eq.pitch;
+    $('sndViz').value = eq.viz;
+    $('sndVizMini').checked = eq.vizMini;
+    $('plEqBtn').classList.toggle('on', eq.speed !== 1 || Boolean(sleep));
+    setLimiter();
     saveEq();
   }
   (() => {
@@ -4762,10 +4879,174 @@ const player = (() => {
   })();
   $('eqPreset').addEventListener('change', () => {
     eq.preset = $('eqPreset').value;
+    const mine = eq.mine.find((p) => `mine:${p.name}` === eq.preset);
     if (PRESETS[eq.preset]) eq.gains = PRESETS[eq.preset].slice();
+    else if (mine) eq.gains = mine.gains.slice();
+    applyEq();
+  });
+  $('eqSave').addEventListener('click', async () => {
+    const r = await ask({ title: t('Nombre para estas bandas:'), input: eq.preset.startsWith('mine:') ? eq.preset.slice(5) : t('Mi sonido'), buttons: [{ label: t('Cancelar'), value: null }, { label: t('Guardar'), value: 'ok', primary: true }] });
+    const name = r ? r.text.slice(0, 40) : '';
+    if (!name) return;
+    const old = eq.mine.findIndex((p) => p.name === name);
+    if (old >= 0) eq.mine.splice(old, 1);
+    else if (eq.mine.length >= 20) { showToast(t('Como mucho 20 estilos tuyos: borra alguno antes.')); return; }
+    eq.mine.push({ name, gains: eq.gains.slice() });
+    eq.preset = `mine:${name}`;
+    applyEq();
+    showToast(t('Guardado como «{name}»', { name }));
+  });
+  $('eqDelete').addEventListener('click', () => {
+    const name = eq.preset.slice(5);
+    eq.mine = eq.mine.filter((p) => p.name !== name);
+    eq.preset = 'custom';
     applyEq();
   });
   $('eqCrossfade').addEventListener('change', () => { eq.crossfade = Number($('eqCrossfade').value); applyEq(); });
+  $('sndLevel').addEventListener('change', () => {
+    eq.level = $('sndLevel').checked;
+    graph();
+    if (!eq.level) { rememberLevel(); $('sndLevelNow').textContent = ''; }
+    for (const m of [A, B]) setLevel(m, m === deck ? cur() : null);
+    meter.key = null;
+    applyEq();
+  });
+  $('sndSpeed').addEventListener('change', () => {
+    const v = Number($('sndSpeed').value);
+    eq.speed = SPEEDS.includes(v) ? v : 1;
+    for (const m of [A, B]) applySpeed(m);
+    applyEq();
+  });
+  $('sndPitch').addEventListener('change', () => { eq.pitch = $('sndPitch').checked; for (const m of [A, B]) applySpeed(m); applyEq(); });
+  $('sndViz').addEventListener('change', () => { eq.viz = $('sndViz').value; applyEq(); });
+  $('sndVizMini').addEventListener('change', () => { eq.vizMini = $('sndVizMini').checked; applyEq(); levelsToMini(); });
+
+  // ---- sleep timer: the music fades out over the last 30 s and stops ----
+  let sleep = null;              // { at: ms } or { song: true }
+  let sleepTimer = null;
+  function sleepLeft() {
+    if (!sleep) return null;
+    if (sleep.at) return (sleep.at - Date.now()) / 1000;
+    const left = deck.duration - deck.currentTime;
+    return Number.isFinite(left) ? left / (deck.playbackRate || 1) : null;
+  }
+  function unfade() {
+    if (!master || !actx) return;
+    master.gain.cancelScheduledValues(actx.currentTime);
+    master.gain.setValueAtTime(1, actx.currentTime);
+  }
+  function renderSleep() {
+    const left = sleepLeft();
+    const el = $('sndSleepLeft');
+    el.classList.toggle('hidden', !sleep);
+    if (sleep) el.textContent = sleep.song ? t('La música se parará al acabar esta canción.') : t('La música se parará dentro de {t}.', { t: formatDuration(Math.max(0, Math.ceil(left || 0))) || '0:00' });
+    $('plEqBtn').title = sleep && !sleep.song ? t('Sonido · temporizador: {t}', { t: formatDuration(Math.max(0, Math.ceil(left || 0))) }) : t('Sonido: ecualizador, velocidad y temporizador');
+  }
+  function endSleep(paused) {
+    clearInterval(sleepTimer);
+    sleepTimer = null;
+    const was = sleep;
+    sleep = null;
+    $('sndSleep').value = '0';
+    if (paused) {
+      if (!deck.paused) deck.pause();
+      // Back to full volume once paused (so the next play isn't silent).
+      setTimeout(unfade, 300);
+      showToast(t('Temporizador: música en pausa. ¡Buenas noches!'));
+    } else unfade();
+    renderSleep();
+    applyEq();
+    return was;
+  }
+  function sleepTick() {
+    if (!sleep) return;
+    const left = sleepLeft();
+    renderSleep();
+    if (left === null || deck.paused) return;
+    if (left <= 30 && master && actx && !sleep.fading) {
+      sleep.fading = true;
+      master.gain.cancelScheduledValues(actx.currentTime);
+      master.gain.setValueAtTime(master.gain.value, actx.currentTime);
+      master.gain.linearRampToValueAtTime(0.0001, actx.currentTime + Math.max(1, left));
+    }
+    // "At the end of this song" stops on 'ended'; a time, here.
+    if (sleep.at && left <= 0) endSleep(true);
+  }
+  function setSleep(v) {
+    clearInterval(sleepTimer);
+    sleepTimer = null;
+    unfade();
+    sleep = v === 'song' ? { song: true } : Number(v) > 0 ? { at: Date.now() + Number(v) * 60000 } : null;
+    if (sleep) { graph(); sleepTimer = setInterval(sleepTick, 1000); }
+    renderSleep();
+    applyEq();
+    if (sleep) showToast(sleep.song ? t('La música se parará al acabar esta canción') : t('La música se parará dentro de {n} min', { n: Number(v) }));
+  }
+  $('sndSleep').addEventListener('change', () => setSleep($('sndSleep').value));
+
+  // ---- visualizer: the "Ahora suena" view, and the mini player's bars ----
+  const freq = new Uint8Array(1024);
+  const wave = new Uint8Array(2048);
+  /** n bars (0–255) from low to high, spread like the ear hears them. */
+  function bars(n) {
+    if (!scope) return null;
+    scope.getByteFrequencyData(freq);
+    const out = new Array(n);
+    const lo = 2;
+    const hi = 600; // ~13 kHz at 44.1 kHz
+    for (let i = 0; i < n; i++) {
+      const a = Math.floor(lo * (hi / lo) ** (i / n));
+      const b = Math.max(a + 1, Math.floor(lo * (hi / lo) ** ((i + 1) / n)));
+      let m = 0;
+      for (let k = a; k < b; k++) m = Math.max(m, freq[k]);
+      out[i] = m;
+    }
+    return out;
+  }
+  function drawViz(canvas, color) {
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(canvas.clientWidth * dpr);
+    const h = Math.round(canvas.clientHeight * dpr);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    ctx.clearRect(0, 0, w, h);
+    if (eq.viz === 'off' || !scope || deck.paused) return;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    if (eq.viz === 'wave') {
+      scope.getByteTimeDomainData(wave);
+      ctx.lineWidth = 3 * dpr;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      const step = wave.length / w;
+      for (let x = 0; x < w; x += 2) {
+        const v = wave[Math.floor(x * step)] / 128 - 1;
+        const y = h * 0.6 - v * h * 0.35;
+        if (x) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+      return;
+    }
+    const n = Math.max(24, Math.min(96, Math.floor(w / (14 * dpr))));
+    const v = bars(n);
+    const bw = w / n;
+    for (let i = 0; i < n; i++) {
+      const bh = Math.max(2 * dpr, (v[i] / 255) ** 1.6 * h * 0.9);
+      const x = i * bw + bw * 0.18;
+      ctx.beginPath();
+      ctx.roundRect(x, h - bh, bw * 0.64, bh, [3 * dpr, 3 * dpr, 0, 0]);
+      ctx.fill();
+    }
+  }
+  // The mini player can't hear the music itself: a few bars, a few times a second.
+  let miniOpen = false;
+  let miniViz = null;
+  function levelsToMini() {
+    const want = eq.vizMini && miniOpen && desktopApi && desktopApi.playerLevels && !deck.paused && eq.viz !== 'off';
+    if (want && !miniViz) miniViz = setInterval(() => { const v = bars(20); if (v) desktopApi.playerLevels(v); }, 70);
+    if (!want && miniViz) { clearInterval(miniViz); miniViz = null; if (desktopApi && desktopApi.playerLevels) desktopApi.playerLevels([]); }
+  }
+
   applyEq();
 
   // ---- what's playing ----
@@ -4803,6 +5084,7 @@ const player = (() => {
     library.render();
     renderQueue();
     pushState();
+    nowView.song(f);
   }
 
   // ---- "Up next": the list from here on, to jump to, remove or reorder ----
@@ -4978,6 +5260,8 @@ const player = (() => {
     graph();
     if (gains.get(deck)) gains.get(deck).gain.value = 1;
     deck.src = srcOf(f);
+    applySpeed(deck);
+    setLevel(deck, f);
     deck.play().catch(() => {});
     show(f);
   }
@@ -4998,6 +5282,8 @@ const player = (() => {
   }
   function close() {
     cancelFade();
+    if (sleep) endSleep(false);
+    nowView.hide();
     for (const m of [A, B]) { m.pause(); m.removeAttribute('src'); m.load(); }
     list = [];
     index = -1;
@@ -5020,8 +5306,9 @@ const player = (() => {
   }
   function maybeFade() {
     const f = cur();
-    if (!eq.crossfade || fading || repeat || !actx || cast.active() || !f || f.kind === 'video') return;
-    const left = deck.duration - deck.currentTime;
+    if (!eq.crossfade || fading || repeat || !actx || cast.active() || !f || f.kind === 'video' || (sleep && sleep.song)) return;
+    // In real seconds (a faster song ends sooner).
+    const left = (deck.duration - deck.currentTime) / (deck.playbackRate || 1);
     if (!Number.isFinite(left) || left > eq.crossfade || left <= 0.3) return;
     const n = index < list.length - 1 || shuffle ? nextIndex(1) : -1;
     const next = list[n];
@@ -5033,6 +5320,9 @@ const player = (() => {
     const gTo = gains.get(to);
     to.src = srcOf(next);
     to.volume = from.volume;
+    to.muted = from.muted;
+    applySpeed(to);
+    setLevel(to, next);
     gTo.gain.setValueAtTime(0, now);
     gTo.gain.linearRampToValueAtTime(1, now + left);
     gFrom.gain.setValueAtTime(1, now);
@@ -5054,8 +5344,8 @@ const player = (() => {
 
   // ---- events (only the deck in use drives the bar) ----
   for (const m of [A, B]) {
-    m.addEventListener('play', () => { if (m === deck) { $('plPlay').classList.add('playing'); pushState(); } });
-    m.addEventListener('pause', () => { if (m === deck && !fading) { $('plPlay').classList.remove('playing'); pushState(); } });
+    m.addEventListener('play', () => { if (m === deck) { $('plPlay').classList.add('playing'); pushState(); levelsToMini(); nowView.sync(); } });
+    m.addEventListener('pause', () => { if (m === deck && !fading) { $('plPlay').classList.remove('playing'); pushState(); levelsToMini(); nowView.sync(); } });
     m.addEventListener('loadedmetadata', () => {
       if (m !== deck) return;
       $('plSeek').max = String(m.duration || 1);
@@ -5076,6 +5366,7 @@ const player = (() => {
     });
     m.addEventListener('ended', async () => {
       if (m !== deck || fading) return;
+      if (sleep && sleep.song) { endSleep(true); return; }
       if (repeat) { m.currentTime = 0; m.play().catch(() => {}); return; }
       if (index < list.length - 1 || shuffle) step(1);
       else if (radio && isStream(cur())) {
@@ -5164,19 +5455,29 @@ const player = (() => {
   // Follows the song frame by frame (not the media element's few updates a
   // second): the line being sung fills in like karaoke, the next ones come up
   // smoothly. If a version starts earlier or later than the lyrics, ± moves
-  // them (remembered per song).
+  // them (remembered per song). Shown in the bar's panel and in "Ahora suena",
+  // with the translation under each line when asked.
   const lyrics = (() => {
-    let lines = [];
+    let lines = [];              // synced: [{ t, text }]
+    let plain = [];              // without times: just the lines
+    let loaded = false;
     let at = -1;
-    let forId = null;
     let forSong = null;
     let raf = 0;
     let offset = 0;
+    let tr = null;               // the translation, one per shown line
+    let trFor = null;
+    const TR_KEY = 'tubegrab_lyrics_tr';
+    let trOn = (() => { try { return localStorage.getItem(TR_KEY) === '1'; } catch { return false; } })();
     const OFFSET_KEY = 'tubegrab_lyric_offsets';
     const offsets = (() => { try { const o = JSON.parse(localStorage.getItem(OFFSET_KEY)); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } })();
-    const keyOf = (f) => (isStream(f) ? (f.yt ? `yt:${f.yt}` : null) : f.id);
+    const boxes = () => [$('plLyricsLines'), $('nowLyricsLines')];
+    const visible = (box) => (box.id === 'plLyricsLines' ? !$('plLyrics').classList.contains('hidden') : nowView.lyricsShown());
+    const anyVisible = () => boxes().some(visible);
+    const shown = () => (lines.length ? lines.map((l) => l.text) : plain);
+    const seekTo = (sec) => { const to = Math.max(0, sec - offset); if (cast.active()) cast.seek(to); else deck.currentTime = to; };
     function saveOffset() {
-      const k = keyOf(forSong);
+      const k = songKey(forSong);
       if (!k) return;
       if (offset) offsets[k] = offset; else delete offsets[k];
       const keys = Object.keys(offsets);
@@ -5187,87 +5488,129 @@ const player = (() => {
       $('plLyricsOffset').textContent = offset ? t('Desfase {s} s', { s: `${offset > 0 ? '+' : ''}${offset.toFixed(1).replace('.', ',')}` }) : t('Sin desfase');
       $('plLyricsSync').classList.toggle('hidden', !lines.length);
     }
+    function render() {
+      const texts = shown();
+      for (const box of boxes()) {
+        box.innerHTML = '';
+        texts.forEach((text, i) => {
+          const li = document.createElement('li');
+          if (!lines.length) li.className = 'plain';
+          const words = document.createElement('span');
+          words.className = 'ly-text';
+          words.textContent = text || (lines.length ? '♪' : ' ');
+          li.appendChild(words);
+          if (tr && tr[i] && tr[i].toLowerCase() !== String(text).toLowerCase()) {
+            const under = document.createElement('span');
+            under.className = 'ly-tr';
+            under.textContent = tr[i];
+            li.appendChild(under);
+          }
+          if (lines.length) li.addEventListener('click', () => seekTo(lines[i].t));
+          box.appendChild(li);
+        });
+      }
+      at = -1;
+      const none = loaded && !texts.length;
+      $('plLyricsEmpty').classList.toggle('hidden', !none);
+      $('nowLyricsEmpty').classList.toggle('hidden', !none);
+      for (const b of ['plLyricsTr', 'nowTr']) {
+        $(b).classList.toggle('hidden', !texts.length);
+        $(b).setAttribute('aria-pressed', String(trOn));
+        $(b).classList.toggle('on', trOn);
+      }
+      showOffset();
+      if (lines.length) paint(deck.currentTime, true);
+    }
     async function load(f) {
       lines = [];
-      at = -1;
-      forId = f.id;
+      plain = [];
+      tr = null;
+      trFor = null;
+      loaded = false;
       forSong = f;
-      const k = keyOf(f);
+      const k = songKey(f);
       offset = k && Number.isFinite(offsets[k]) && Math.abs(offsets[k]) <= 30 ? offsets[k] : 0;
-      const box = $('plLyricsLines');
-      box.innerHTML = '';
-      $('plLyricsEmpty').classList.add('hidden');
       $('plLyricsHint').classList.add('hidden');
-      showOffset();
-      if (f.kind === 'video') { $('plLyricsEmpty').classList.remove('hidden'); return; }
+      render();
+      if (f.kind === 'video') { loaded = true; render(); return; }
       if (isStream(f) && !f.yt) return; // looked for once it's found on YouTube
       let res = null;
       const q = isStream(f) && f.artist ? `&a=${encodeURIComponent(tagsOf(f).artist.slice(0, 200))}&t=${encodeURIComponent(tagsOf(f).track.slice(0, 200))}${f.songDuration ? `&d=${f.songDuration}` : ''}` : '';
-      try { res = await api(isStream(f) ? `/api/stream/lyrics?id=${f.yt}${q}` : `/api/library/lyrics?id=${f.id}`); } catch { /* none */ }
-      if (forId !== f.id) return;
+      // A downloaded song without words of its own: looked up on LRCLIB too.
+      try { res = await api(isStream(f) ? `/api/stream/lyrics?id=${f.yt}${q}` : `/api/library/lyrics?id=${f.id}&online=1`); } catch { /* none */ }
+      if (forSong !== f) return;
       if (res && res.synced && res.synced.length) {
         lines = res.synced;
-        lines.forEach((l, i) => {
-          const li = document.createElement('li');
-          li.textContent = l.text || '♪';
-          li.dataset.i = String(i);
-          li.addEventListener('click', () => { const to = Math.max(0, l.t - offset); if (cast.active()) cast.seek(to); else deck.currentTime = to; });
-          box.appendChild(li);
-        });
         // A video version that's much longer than the song: its intro may push the words late.
         const dur = Number.isFinite(deck.duration) ? deck.duration : f.duration;
         if (res.duration && Number.isFinite(dur) && Math.abs(dur - res.duration) > 4) $('plLyricsHint').classList.remove('hidden');
       } else if (res && res.plain) {
-        for (const text of res.plain.split('\n')) {
-          const li = document.createElement('li');
-          li.className = 'plain';
-          li.textContent = text || ' ';
-          box.appendChild(li);
-        }
-      } else {
-        $('plLyricsEmpty').classList.remove('hidden');
+        plain = res.plain.split('\n');
       }
-      showOffset();
+      loaded = true;
+      render();
       loop();
+      if (trOn) translate(false);
+    }
+    /** The lyrics in the app's language, under each line. */
+    async function translate(asked) {
+      const f = forSong;
+      const texts = shown();
+      if (!f || !texts.length) return;
+      if (trFor === f) { render(); return; }
+      const to = prefsApi.get().lang === 'en' ? 'en' : 'es';
+      try {
+        const r = await postJson('/api/lyrics/translate', { lines: texts.slice(0, 250).map((x) => String(x).slice(0, 300)), to });
+        if (forSong !== f) return;
+        trFor = f;
+        tr = Array.isArray(r.lines) ? r.lines : null;
+        if (r.from && r.from.split('-')[0] === to) { tr = null; if (asked) showToast(t('La letra ya está en tu idioma.')); }
+        render();
+      } catch (err) { if (asked) showToast(err.message); }
+    }
+    function setTranslate(on) {
+      trOn = on;
+      try { localStorage.setItem(TR_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+      if (on) translate(true); else { tr = null; trFor = null; render(); }
     }
     function lineAt(sec) {
       let lo = 0; let hi = lines.length - 1; let found = -1;
       while (lo <= hi) { const mid = (lo + hi) >> 1; if (lines[mid].t <= sec) { found = mid; lo = mid + 1; } else hi = mid - 1; }
       return found;
     }
-    const panelOpen = () => !$('plLyrics').classList.contains('hidden');
     function paint(sec, force = false) {
       if (!lines.length) return;
       const s = sec + offset + 0.05;
       const i = lineAt(s);
-      const box = $('plLyricsLines');
-      if (i !== at || force) {
-        if (at >= 0 && box.children[at]) { box.children[at].classList.remove('on'); box.children[at].style.removeProperty('--p'); }
-        box.querySelectorAll('.past').forEach((el) => el.classList.remove('past'));
-        for (let k = Math.max(0, i - 3); k < i; k++) if (box.children[k]) box.children[k].classList.add('past');
-        at = i;
-        const el = i >= 0 ? box.children[i] : null;
-        if (el) {
-          el.classList.add('on');
-          if (panelOpen()) el.scrollIntoView({ block: 'center', behavior: prefsApi.get().reduceMotion ? 'auto' : 'smooth' });
-        }
-      }
+      const changed = i !== at || force;
       // How far into the line: the karaoke fill.
-      const el = at >= 0 ? box.children[at] : null;
-      if (el) {
-        const start = lines[at].t;
-        const end = at + 1 < lines.length ? lines[at + 1].t : start + 5;
-        const p = Math.min(1, Math.max(0, (s - start) / Math.max(0.3, Math.min(end - start, 12))));
-        el.style.setProperty('--p', `${(p * 100).toFixed(1)}%`);
+      let p = 0;
+      if (i >= 0) {
+        const start = lines[i].t;
+        const end = i + 1 < lines.length ? lines[i + 1].t : start + 5;
+        p = Math.min(1, Math.max(0, (s - start) / Math.max(0.3, Math.min(end - start, 12))));
       }
+      for (const box of boxes()) {
+        const el = i >= 0 ? box.children[i] : null;
+        if (changed) {
+          box.querySelectorAll('.on, .past').forEach((x) => { x.classList.remove('on', 'past'); x.style.removeProperty('--p'); });
+          for (let k = Math.max(0, i - 3); k < i; k++) if (box.children[k]) box.children[k].classList.add('past');
+          if (el) {
+            el.classList.add('on');
+            if (visible(box)) el.scrollIntoView({ block: 'center', behavior: prefsApi.get().reduceMotion ? 'auto' : 'smooth' });
+          }
+        }
+        if (el) el.style.setProperty('--p', `${(p * 100).toFixed(1)}%`);
+      }
+      at = i;
     }
     // Frame by frame while the words are on screen and the song plays.
     function loop() {
       cancelAnimationFrame(raf);
-      if (!lines.length || !panelOpen()) return;
+      raf = 0;
+      if (!lines.length || !anyVisible()) return;
       const tick = () => {
-        if (!lines.length || !panelOpen()) return;
-        if (cast.active()) return;
+        if (!lines.length || !anyVisible() || cast.active()) { raf = 0; return; }
         paint(deck.currentTime);
         raf = requestAnimationFrame(tick);
       };
@@ -5277,9 +5620,170 @@ const player = (() => {
     $('plLyricsEarlier').addEventListener('click', () => nudge(-0.5));
     $('plLyricsLater').addEventListener('click', () => nudge(0.5));
     $('plLyricsReset').addEventListener('click', () => { offset = 0; saveOffset(); showOffset(); paint(deck.currentTime, true); });
+    $('plLyricsTr').addEventListener('click', () => setTranslate(!trOn));
+    $('nowTr').addEventListener('click', () => setTranslate(!trOn));
     return {
       load,
-      at(sec, force = false) { if (force) { paint(sec, true); loop(); } else if (!raf || !panelOpen()) paint(sec); },
+      at(sec, force = false) { if (force) { paint(sec, true); loop(); } else if (!raf || !anyVisible()) paint(sec); },
+    };
+  })();
+
+  // ---- "Ahora suena": the song in big, its words karaoke-style, the visualizer ----
+  const nowView = (() => {
+    const view = $('nowView');
+    const NOW_KEY = 'tubegrab_now_lyrics';
+    let open = false;
+    let showLyrics = (() => { try { return localStorage.getItem(NOW_KEY) !== '0'; } catch { return true; } })();
+    let lastFocus = null;
+    let raf = 0;
+    let dragging = false;
+    let tint = 'rgba(255, 255, 255, 0.45)';
+    /** The cover's colours: its average (the background) and its most vivid one. */
+    function colours(img) {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 24;
+        c.height = 24;
+        const x = c.getContext('2d', { willReadFrequently: true });
+        x.drawImage(img, 0, 0, 24, 24);
+        const d = x.getImageData(0, 0, 24, 24).data;
+        let r = 0; let g = 0; let b = 0; let best = null; let bestScore = -1;
+        for (let i = 0; i < d.length; i += 4) {
+          r += d[i]; g += d[i + 1]; b += d[i + 2];
+          const mx = Math.max(d[i], d[i + 1], d[i + 2]);
+          const mn = Math.min(d[i], d[i + 1], d[i + 2]);
+          const score = mx ? ((mx - mn) / mx) * (mx / 255) : 0;
+          if (mx > 70 && score > bestScore) { bestScore = score; best = [d[i], d[i + 1], d[i + 2]]; }
+        }
+        const n = d.length / 4;
+        const avg = [r / n, g / n, b / n].map(Math.round);
+        return { avg, vivid: best || avg };
+      } catch { return null; } // a picture from elsewhere without permission to read it
+    }
+    function paintColours(img) {
+      const c = img ? colours(img) : null;
+      if (c) {
+        view.style.setProperty('--now-a', `rgb(${c.vivid.join(', ')})`);
+        view.style.setProperty('--now-b', `rgb(${c.avg.map((v) => Math.round(v * 0.4)).join(', ')})`);
+        tint = `rgba(${c.vivid.join(', ')}, 0.5)`;
+      } else {
+        view.style.removeProperty('--now-a');
+        view.style.removeProperty('--now-b');
+        tint = 'rgba(255, 255, 255, 0.4)';
+      }
+    }
+    function song(f) {
+      if (!f) return;
+      const tg = tagsOf(f);
+      $('nowTitle').textContent = f.kind === 'video' ? nameOf(f) : (isStream(f) && f.track) || tg.track || nameOf(f);
+      $('nowArtist').textContent = isStream(f) ? f.artist || tg.artist || f.channel || '' : tg.artist || f.folder || '';
+      $('nowFrom').textContent = isStream(f) ? t('Desde YouTube, sin descargar') : t('De tu biblioteca');
+      const box = $('nowCover');
+      box.innerHTML = f.kind === 'video' ? ICONS.video : ICONS.music;
+      $('nowBgImg').removeAttribute('src');
+      paintColours(null);
+      if (f.kind === 'video') return;
+      // A song from YouTube: its big picture (a square crop of it is the album cover).
+      const big = isStream(f) && f.yt ? `https://i.ytimg.com/vi/${f.yt}/maxresdefault.jpg` : null;
+      const img = new Image();
+      img.alt = '';
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        if (cur() !== f) return;
+        if (big && img.src === big && img.naturalWidth < 200) { img.src = coverOf(f); return; } // no big one: YouTube's grey placeholder
+        box.innerHTML = '';
+        box.appendChild(img);
+        $('nowBgImg').src = img.src;
+        paintColours(img);
+      };
+      img.onerror = () => { if (big && img.src === big) img.src = coverOf(f); };
+      img.src = big || coverOf(f);
+    }
+    function sync() {
+      if (!open) return;
+      $('nowPlay').classList.toggle('playing', $('plPlay').classList.contains('playing'));
+      for (const [mine, bar] of [['nowShuffle', 'plShuffle'], ['nowRepeat', 'plRepeat']]) {
+        const on = $(bar).getAttribute('aria-pressed') === 'true';
+        $(mine).classList.toggle('on', on);
+        $(mine).setAttribute('aria-pressed', String(on));
+      }
+      $('nowVolume').value = $('plVolume').value;
+      view.classList.toggle('no-lyrics', !showLyrics);
+      $('nowLyricsToggle').setAttribute('aria-pressed', String(showLyrics));
+      $('nowLyricsToggle').classList.toggle('on', showLyrics);
+    }
+    function tick() {
+      if (!open) { raf = 0; return; }
+      const d = Number.isFinite(deck.duration) ? deck.duration : 0;
+      if (!dragging) { $('nowSeek').max = String(d || 1); $('nowSeek').value = String(deck.currentTime || 0); $('nowTime').textContent = formatDuration(Math.floor(deck.currentTime || 0)) || '0:00'; }
+      $('nowDur').textContent = formatDuration(Math.round(d)) || '0:00';
+      drawViz($('nowViz'), tint);
+      raf = requestAnimationFrame(tick);
+    }
+    function show() {
+      const f = cur();
+      if (!f || open) return;
+      open = true;
+      lastFocus = document.activeElement;
+      view.classList.remove('hidden');
+      document.body.classList.add('now-open');
+      graph();
+      song(f);
+      sync();
+      $('nowClose').focus();
+      lyrics.at(deck.currentTime, true);
+      raf = requestAnimationFrame(tick);
+    }
+    function hide() {
+      if (!open) return;
+      open = false;
+      cancelAnimationFrame(raf);
+      raf = 0;
+      if (document.fullscreenElement === view) document.exitFullscreen().catch(() => {});
+      view.classList.add('hidden');
+      document.body.classList.remove('now-open');
+      if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+    }
+    $('plNow').addEventListener('click', show);
+    $('plLyricsBig').addEventListener('click', show);
+    $('nowClose').addEventListener('click', hide);
+    $('nowFull').addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      else view.requestFullscreen().catch(() => {});
+    });
+    $('nowPlay').addEventListener('click', () => toggle());
+    $('nowPrev').addEventListener('click', () => step(-1));
+    $('nowNext').addEventListener('click', () => step(1));
+    $('nowShuffle').addEventListener('click', () => { $('plShuffle').click(); sync(); });
+    $('nowRepeat').addEventListener('click', () => { $('plRepeat').click(); sync(); });
+    $('nowVolume').addEventListener('input', () => setVolume(Number($('nowVolume').value)));
+    $('nowSeek').addEventListener('input', () => { dragging = true; $('nowTime').textContent = formatDuration(Math.floor(Number($('nowSeek').value))) || '0:00'; });
+    $('nowSeek').addEventListener('change', () => {
+      const v = Number($('nowSeek').value);
+      if (cast.active()) cast.seek(v); else { cancelFade(); deck.currentTime = v; }
+      dragging = false;
+    });
+    $('nowLyricsToggle').addEventListener('click', () => {
+      showLyrics = !showLyrics;
+      try { localStorage.setItem(NOW_KEY, showLyrics ? '1' : '0'); } catch { /* ignore */ }
+      sync();
+      lyrics.at(deck.currentTime, true);
+    });
+    // Esc closes it; Tab stays inside while it's open.
+    view.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !document.fullscreenElement) { e.preventDefault(); hide(); return; }
+      if (e.key !== 'Tab') return;
+      const items = [...view.querySelectorAll('button:not(.hidden), input')].filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+    return {
+      show, hide, sync,
+      song: (f) => { if (open) song(f); },
+      lyricsShown: () => open && showLyrics,
+      isOpen: () => open,
     };
   })();
 
@@ -5353,6 +5857,7 @@ const player = (() => {
   // ---- mini player window (desktop) ----
   let pushTimer = null;
   function pushState() {
+    nowView.sync();
     if (!desktopApi || !desktopApi.playerState) return;
     const f = cur();
     const tg = f ? tagsOf(f) : { artist: '', track: '' };
@@ -5376,6 +5881,9 @@ const player = (() => {
   }
   /** One player command (keyboard shortcuts, mini window, taskbar, tray). */
   function command(cmd, value, items) {
+    // The mini window opened / closed: its visualizer bars start / stop.
+    if (cmd === 'hello' || cmd === 'miniClosed') { miniOpen = cmd === 'hello'; levelsToMini(); }
+    if (cmd === 'miniClosed') return;
     // From the mini window's search: play from YouTube now, or add to the list.
     if (cmd === 'stream' && Array.isArray(items)) { const songs = asStreams(items); if (songs.length) play(songs, Math.min(value || 0, songs.length - 1)); return; }
     if (cmd === 'enqueue' && Array.isArray(items)) { enqueue(asStreams(items)); return; }

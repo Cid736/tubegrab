@@ -1481,3 +1481,112 @@ video::cue { background: rgba(0, 0, 0, 0.7); color: #fff; font-family: "Segoe UI
 .picker-head .row-actions { flex-wrap: wrap; justify-content: flex-end; }
 .listen-cover { background: linear-gradient(135deg, var(--accent-light), var(--accent-2)); }
 #listenHome .section-header { margin-top: 18px; }
+
+/* ===== v3.8: Sonido panel, "Ahora suena", translated lyrics ===== */
+.sound-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; max-width: 900px; margin: 0 auto; }
+@container (max-width: 720px) { .sound-grid { grid-template-columns: minmax(0, 1fr); } }
+.sound-col { min-width: 0; }
+.player-eq .sound-grid .row { max-width: none; margin: 0; min-height: 40px; }
+.sound-inline { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.sound-hint { margin: -4px 0 6px; font-size: 11px; }
+.player-eq .eq-bands { padding-top: 10px; }
+.player-panel.player-eq { max-height: 55vh; }
+.player-right .ed-btn#plEqBtn.on { color: var(--accent); }
+
+/* The cover in the bar opens "Ahora suena" */
+.player-now-btn { position: relative; flex: none; padding: 0; border: 0; background: none; border-radius: 8px; cursor: pointer; color: inherit; }
+.player-now-btn .player-icon { display: grid; }
+.player-now-ico { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 8px; background: rgba(0, 0, 0, 0.45); color: #fff; opacity: 0; transition: opacity 0.15s ease; }
+.player-now-ico svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.player-now-btn:hover .player-now-ico, .player-now-btn:focus-visible .player-now-ico { opacity: 1; }
+
+/* Lyrics lines: the words (karaoke fill) and, when asked, the translation under them */
+.lyrics-lines li.on { color: inherit; background: none; -webkit-background-clip: border-box; background-clip: border-box; }
+.lyrics-lines li .ly-text { display: inline-block; max-width: 100%; }
+.lyrics-lines li.on .ly-text {
+  color: transparent;
+  background: linear-gradient(90deg, var(--accent) 0, var(--accent) var(--p, 0%), var(--text) var(--p, 0%), var(--text) 100%);
+  -webkit-background-clip: text; background-clip: text;
+}
+.lyrics-lines li.plain .ly-text { color: inherit; background: none; }
+.lyrics-lines .ly-tr { display: block; font-size: 0.82em; font-weight: 400; font-style: italic; color: var(--text-2); margin-top: 1px; }
+.link-btn.on { background: var(--accent-soft); }
+
+/* "Ahora suena": over everything, always dark, coloured by the cover */
+.now-view {
+  --now-a: var(--accent); --now-b: #111;
+  position: fixed; inset: 0; z-index: 900; display: flex; flex-direction: column; overflow: hidden;
+  color: #fff; background: var(--now-b);
+  animation: now-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes now-in { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+:root[data-motion="reduce"] .now-view { animation: none; }
+.now-bg { position: absolute; inset: 0; z-index: 0; background: radial-gradient(120% 90% at 20% 10%, color-mix(in srgb, var(--now-a) 55%, transparent), transparent 60%), linear-gradient(160deg, var(--now-b), #050505); }
+.now-bg img { position: absolute; inset: -12%; width: 124%; height: 124%; object-fit: cover; filter: blur(70px) saturate(1.5) brightness(0.55); opacity: 0.85; }
+.now-bg img:not([src]) { display: none; }
+.now-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.55)); }
+.now-viz { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 32%; z-index: 1; pointer-events: none; opacity: 0.6; }
+.now-top, .now-main, .now-controls { position: relative; z-index: 2; }
+.now-top { display: flex; align-items: center; gap: 10px; padding: 14px 20px; }
+.now-from { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.75; }
+.now-btn { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.12); color: #fff; cursor: pointer; transition: background 0.15s ease, transform 0.15s ease; }
+.now-btn:hover { background: rgba(255, 255, 255, 0.22); }
+.now-btn:active { transform: scale(0.94); }
+.now-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.now-btn.on { background: rgba(255, 255, 255, 0.9); color: #111; }
+.now-btn:focus-visible, .now-chip:focus-visible, .now-view input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.now-chip { border: 0; border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600; background: rgba(255, 255, 255, 0.12); color: #fff; cursor: pointer; }
+.now-chip:hover { background: rgba(255, 255, 255, 0.22); }
+.now-chip.on { background: #fff; color: #111; }
+.now-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.4fr); gap: 48px; align-items: center; padding: 8px 6vw 0; }
+.now-view.no-lyrics .now-main { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+.now-view.no-lyrics .now-lyrics { display: none; }
+.now-art { display: flex; flex-direction: column; gap: 18px; min-width: 0; align-items: flex-start; }
+.now-view.no-lyrics .now-art { align-items: center; text-align: center; }
+.now-cover { width: min(100%, 46vh, 460px); aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: rgba(255, 255, 255, 0.1); display: grid; place-items: center; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); }
+.now-cover img { width: 100%; height: 100%; object-fit: cover; }
+.now-cover svg { width: 34%; height: 34%; fill: none; stroke: rgba(255, 255, 255, 0.7); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.now-meta { min-width: 0; max-width: 100%; }
+.now-title { margin: 0; font-family: var(--font-display); font-size: clamp(22px, 3vw, 34px); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+.now-artist { margin: 6px 0 0; font-size: clamp(14px, 1.6vw, 18px); opacity: 0.75; }
+.now-lyrics { height: 100%; min-height: 0; overflow-y: auto; scrollbar-width: none; mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent); padding: 20vh 0; }
+.now-lyrics::-webkit-scrollbar { display: none; }
+.now-lines { text-align: left; padding-right: 5%; }
+.now-lines li { margin-inline: 0; padding: 8px 0; font-family: var(--font-display); font-size: clamp(20px, 2.6vw, 34px); font-weight: 800; line-height: 1.25; color: rgba(255, 255, 255, 0.38); opacity: 1; transform-origin: left center; }
+.now-lines li.past { opacity: 0.55; }
+.now-lines li:hover { color: rgba(255, 255, 255, 0.7); }
+.now-lines li.on { transform: scale(1.02); font-size: clamp(20px, 2.6vw, 34px); font-weight: 800; }
+.now-lines li.on .ly-text { background: linear-gradient(90deg, #fff 0, #fff var(--p, 0%), rgba(255, 255, 255, 0.42) var(--p, 0%), rgba(255, 255, 255, 0.42) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.now-lines li.plain { color: rgba(255, 255, 255, 0.85); font-size: clamp(18px, 2vw, 26px); }
+.now-lines .ly-tr { color: rgba(255, 255, 255, 0.6); font-size: 0.6em; font-weight: 500; }
+.now-empty { margin: 0; opacity: 0.7; font-size: 18px; }
+.now-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); grid-template-rows: auto auto; gap: 10px 20px; align-items: center; padding: 16px 6vw 26px; }
+.now-seek { grid-column: 1 / -1; color: rgba(255, 255, 255, 0.8); font-size: 12px; }
+.now-seek input, .now-vol input { accent-color: #fff; }
+.now-buttons { grid-column: 2; display: flex; align-items: center; gap: 14px; }
+.now-play { width: 60px; height: 60px; background: #fff; color: #111; }
+.now-play:hover { background: #fff; transform: scale(1.04); }
+.now-play svg { width: 26px; height: 26px; fill: currentColor; stroke: none; }
+.now-play .ed-ico-pause, .now-play.playing .ed-ico-play { display: none; }
+.now-play.playing .ed-ico-pause { display: block; }
+.now-vol { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 8px; }
+.now-vol svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.8; }
+.now-vol input { width: 120px; }
+body.now-open { overflow: hidden; }
+@media (max-width: 760px) {
+  .now-main { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 0 16px; align-content: start; }
+  .now-art { flex-direction: row; align-items: center; }
+  .now-cover { width: 96px; flex: none; border-radius: 10px; }
+  .now-title { font-size: 20px; }
+  .now-lyrics { padding: 8vh 0; }
+  .now-controls { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 20px; }
+  .now-buttons { grid-column: 1; justify-content: center; }
+  .now-vol { grid-column: 1; justify-self: center; }
+  .now-top { padding: 12px 16px; }
+}
+@media (forced-colors: active) {
+  .now-view { background: Canvas; color: CanvasText; }
+  .now-bg, .now-viz { display: none; }
+  .now-lines li, .now-lines li.on .ly-text { color: CanvasText; background: none; }
+  .now-lines li.on { outline: 2px solid Highlight; }
+}

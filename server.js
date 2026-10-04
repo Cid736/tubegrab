@@ -944,18 +944,56 @@ app.post('/api/library/meta', requireDesktop, requireClient, createLimiter, (req
   return res.json(meta);
 });
 
-// Lyrics for the player: the synced .lrc next to the song, else the words in its tags.
+// Lyrics for the player: the synced .lrc next to the song, else the words in
+// its tags, else (when asked, v3.8) LRCLIB by the song's artist and title,
+// like a song from YouTube.
+const onlineLyrics = new Map(); // full path -> { synced, plain, duration } | null
 app.get('/api/library/lyrics', requireDesktop, requireClient, infoLimiter, async (req, res) => {
   const file = library.resolve(req.query.id);
   if (!file) return res.status(404).json({ error: 'No se encuentra el archivo.' });
   const synced = library.syncedLyrics(req.query.id);
   if (synced && synced.length) return res.json({ synced, plain: null });
+  let t = null;
+  try { t = await tags.readTags(currentFfmpegPath(), file, path.basename(file)); } catch { t = null; }
+  if (t && t.tags.lyrics) return res.json({ synced: null, plain: t.tags.lyrics });
+  if (req.query.online !== '1') return res.json({ synced: null, plain: null });
+  if (onlineLyrics.has(file)) return res.json(onlineLyrics.get(file) || { synced: null, plain: null });
+  // Artist and title from the tags, else from "Artist - Title.mp3".
+  const base = path.basename(file).replace(/\.[^.]+$/, '').replace(/\s*\[[\w-]{6,}\]$/, '').replace(/^\d{1,3}[\s.\-_]+/, '');
+  const m = /^(.+?)\s+[-–—]\s+(.+)$/.exec(base);
+  const artist = ((t && t.tags.artist) || (m ? m[1] : '')).split(/[,;&]/)[0].trim();
+  const title = (t && t.tags.title) || (m ? m[2] : '');
+  if (!artist || !title) return res.json({ synced: null, plain: null });
   try {
-    const t = await tags.readTags(currentFfmpegPath(), file, path.basename(file));
-    return res.json({ synced: null, plain: t.tags.lyrics || null });
+    const { findLyrics } = require('./lib/lyrics');
+    const d = t && Number(t.duration) > 0 ? Number(t.duration) : null;
+    const found = await findLyrics({ artist, title, album: t && t.tags.album, duration: d }) || await findLyrics({ artist, title });
+    const lrc = found && found.synced ? require('./lib/library').parseLrc(found.synced) : null;
+    const out = found ? { synced: lrc && lrc.length ? lrc : null, plain: found.plain || null, duration: found.duration || null, online: true } : null;
+    onlineLyrics.set(file, out);
+    if (onlineLyrics.size > 500) onlineLyrics.delete(onlineLyrics.keys().next().value);
+    return res.json(out || { synced: null, plain: null });
   } catch {
+    // No connection: asked again next time.
     return res.json({ synced: null, plain: null });
   }
+});
+
+// The lyrics in your language, line by line (the player's "Traducir").
+const { Translator, cleanLines, LANGS: TR_LANGS } = require('./lib/translate');
+const translator = IS_DESKTOP ? new Translator({ file: path.join(dataDir, 'lyrics-translations.json') }) : null;
+const translateSlots = slots(2);
+app.post('/api/lyrics/translate', requireDesktop, requireClient, infoLimiter, async (req, res) => {
+  const body = req.body || {};
+  const lines = cleanLines(body.lines);
+  if (!lines) return res.status(400).json({ error: 'Letra no válida.' });
+  if (!TR_LANGS.includes(body.to)) return res.status(400).json({ error: 'Idioma no válido.' });
+  if (!translateSlots.take()) return res.status(429).json(BUSY);
+  try {
+    return res.json(await translator.translate(lines, body.to));
+  } catch (err) {
+    return res.status(502).json({ error: `No se pudo traducir: ${err.message && err.message.length < 150 ? err.message : 'sin conexión'}` });
+  } finally { translateSlots.release(); }
 });
 
 // === Listening without downloading (desktop app) ===

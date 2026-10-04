@@ -85,6 +85,8 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
   - **Escuchar** page: paste a Spotify, Apple Music or YouTube playlist link and it stays as a list of yours (play, shuffle, add to what's playing, download all, update from the link)
   - **Up next** list (jump, remove, save as a list), **radio** with YouTube's mix of similar songs, and a **mini player that searches and plays** by itself, with volume, shuffle, repeat and radio; as an **overlay** over a game: see-through, always on top, fixed in place, clicks passing through, compact, in a corner
   - **Lyrics in step**: followed frame by frame, the line being sung fills in like karaoke, and − / + moves them if a version starts earlier or later (remembered per song)
+  - **Now playing**: the cover in big over its own colours, the lyrics karaoke-style, a visualizer (bars or wave, also in the mini player) and full screen; **lyrics translated** line by line into your language; downloaded songs without lyrics get them from LRCLIB too
+  - **Sound** panel: equalizer with styles and **your own saved ones**, **same volume for every song** (measured while it plays, remembered per song), crossfade up to 12 s, **speed** 0.5–2× (keeping the pitch or not) and a **sleep timer** (minutes or "when this song ends", fading out)
   - **Last.fm** scrobbling and **Discord** "Listening to…" (with your own free keys)
 - **Statistics**: downloads and conversions per month, top channels and artists, most played, library size
 - **Disk space** (desktop): a warning when the disk runs low, and an optional limit for the downloads folder (warn, or move the oldest files to the Recycle Bin — never favourites)
@@ -204,7 +206,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 ## Tests
 
 ```bash
-npm test                    # 237 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
+npm test                    # 241 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
 TG_NETWORK=1 npm test       # also real YouTube downloads
 ```
 
@@ -326,6 +328,8 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
   - Página **Escuchar**: pega el enlace de una playlist de Spotify, Apple Music o YouTube y se queda como una lista tuya (reproducir, aleatorio, añadir a lo que suena, descargar todo, actualizar desde el enlace)
   - Lista **A continuación** (saltar, quitar, guardar como lista), **radio** con la mezcla de canciones parecidas de YouTube, y un **mini reproductor que busca y reproduce** él solo, con volumen, aleatorio, repetir y radio; como **overlay** sobre un juego: transparente, siempre encima, fijo, dejando pasar los clics, compacto, en una esquina
   - **Letra a la par**: se sigue fotograma a fotograma, la línea que se canta se rellena como en un karaoke, y con − / + se ajusta si una versión empieza antes o después (se recuerda por canción)
+  - **Ahora suena**: la carátula en grande sobre sus propios colores, la letra como en un karaoke, un visualizador (barras u onda, también en el mini reproductor) y pantalla completa; **la letra traducida** línea a línea a tu idioma; las canciones descargadas sin letra también la buscan en LRCLIB
+  - Panel **Sonido**: ecualizador con estilos y **los tuyos guardados**, **mismo volumen en todas las canciones** (se mide mientras suena y se recuerda por canción), fundido de hasta 12 s, **velocidad** de 0,5 a 2× (manteniendo el tono o no) y **temporizador para dormir** (minutos o «al acabar esta canción», bajando poco a poco)
   - **Last.fm** (scrobbling) y **Discord** («Escuchando…»), con tus propias claves gratuitas
 - **Estadísticas**: descargas y conversiones por mes, canales y artistas que más, lo más escuchado y el tamaño de la biblioteca
 - **Espacio en disco** (escritorio): aviso cuando queda poco y un límite opcional para la carpeta de descargas (avisar, o mover lo más antiguo a la papelera; nunca los favoritos)
@@ -405,7 +409,7 @@ Con la firma desaparece el aviso "Editor desconocido" de SmartScreen (al momento
 ## Pruebas
 
 ```bash
-npm test                    # 237 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
+npm test                    # 241 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
 TG_NETWORK=1 npm test       # también descargas reales de YouTube
 ```
 

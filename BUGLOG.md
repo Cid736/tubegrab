@@ -658,3 +658,30 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 ### [UI] Los atajos dentro del juego: saber si llegan
 - Al cambiar el volumen, la canción o la pausa, el mini reproductor lo enseña un momento encima («🔊 Volumen 35 %»), así se ve desde el juego. En Ajustes → Sistema, «Último atajo recibido» dice si Windows ha entregado el atajo, para probarlo con el juego delante. Se explica que las teclas sueltas solo valen dentro de TubeGrab y que algunos drivers gráficos usan Ctrl+Alt+flechas.
 - Silenciar pasa a `Ctrl+Alt+0` por defecto: `Ctrl+Alt+M` lo suele tener otro programa en Windows (salía en rojo).
+
+
+---
+
+## 2026-10-04 — v3.8.0: sonido, «Ahora suena» y letras traducidas
+
+### [Feature] Panel «Sonido» (antes «Ecualizador»)
+- **Mismo volumen en todas las canciones:** mide lo fuerte que suena cada canción mientras suena (la potencia media de lo que no es silencio, sin contar el volumen de la app) y la lleva poco a poco a un mismo nivel (−12 a +8 dB), con un limitador para que nada sature. Se recuerda por canción, así la siguiente vez empieza ya corregida. Probado con un tono a −43 dB (+8 dB) y una canción normal (+5,5 dB, igual con el volumen al 50 % que al 100 %).
+- **Velocidad** 0,5–2× con «mantener el tono»; el fundido entre canciones cuenta en segundos reales a esa velocidad. Fundido de hasta 12 s.
+- **Temporizador para dormir:** 15 min a 2 h o «al acabar esta canción»; los últimos 30 s bajan poco a poco y luego se pausa (y el volumen vuelve a su sitio para la próxima vez).
+- **Estilos propios del ecualizador** (hasta 20), más «Electrónica» y «Noche».
+
+### [Feature] «Ahora suena»
+- Al pulsar la carátula de la barra (o «En grande» en la letra): la carátula en grande (de YouTube, la imagen grande recortada al cuadrado), el fondo con sus colores, la letra como karaoke, controles, volumen, visualizador (barras u onda) y pantalla completa. Esc cierra, Tab no se sale de la vista y el foco vuelve a donde estaba.
+- El visualizador también puede salir en el mini reproductor: la ventana principal le manda unas barras unas 14 veces por segundo, solo mientras está abierto y suena.
+
+### [Feature] Letras
+- **Traducir:** la letra en tu idioma debajo de cada línea (Google Translate, solo las palabras de la canción; los estribillos se mandan una vez y cada letra se guarda traducida en el equipo). Si ya está en tu idioma, lo dice.
+- **Canciones descargadas sin letra:** se busca en LRCLIB por artista y título (de las etiquetas o del nombre «Artista - Título»).
+
+### [Bug] Letras basura de LRCLIB
+- **Causa:** cualquiera puede subir letras a LRCLIB y la entrada principal de «Never Gonna Give You Up» decía solo «probe»: salía una línea en vez de la letra.
+- **Fix:** una entrada con menos de 3 líneas y menos de 10 letras no se da por buena; se usa la mejor de la búsqueda (primero las sincronizadas). Test con una entrada «probe».
+
+### [Bug] El desfase de la letra de las canciones descargadas se perdía al reiniciar
+- **Causa:** se guardaba por el id del archivo, que cambia en cada arranque.
+- **Fix:** se guarda por la ruta dentro de la carpeta de descargas (igual que el volumen recordado).

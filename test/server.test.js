@@ -622,6 +622,7 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
   for (const p of ['/api/stream/audio?id=dQw4w9WgXcQ', '/api/stream/info?id=dQw4w9WgXcQ', '/api/streamlists', '/api/stream/find?q=x']) {
     assert.equal((await api(`${p}${p.includes('?') ? '&' : '?'}client=${CLIENT}`)).status, 404, `web: ${p}`);
   }
+  assert.equal((await api('/api/lyrics/translate', json({ lines: ['hello'], to: 'es' }))).status, 404, 'web: translate');
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-stream-'));
   const port = await freePort();
   const { child, first } = startServer(port, { TUBEGRAB_ELECTRON: '1', TUBEGRAB_DATA_DIR: data });
@@ -653,6 +654,12 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
     assert.equal((await (await call('/api/streamlists')).json()).lists.length, 1);
     assert.ok(fs.existsSync(path.join(data, 'stream-lists.json')));
     assert.equal((await (await call(`/api/streamlists/${made.id}`, { method: 'DELETE' })).json()).ok, true);
+    // v3.8: the lyrics' translation only takes a short list of short lines, to a known language.
+    for (const body of [{}, { lines: 'hola', to: 'es' }, { lines: [], to: 'es' }, { lines: ['x'.repeat(301)], to: 'es' }, { lines: Array(251).fill('a'), to: 'es' },
+      { lines: [5], to: 'es' }, { lines: ['hello'], to: 'xx' }, { lines: ['hello'], to: '../es' }, { lines: Array(100).fill('a'.repeat(200)), to: 'es' }]) {
+      assert.equal((await call('/api/lyrics/translate', json(body))).status, 400, JSON.stringify(body).slice(0, 80));
+    }
+    assert.equal((await call(`/api/library/lyrics?online=1&id=${'a'.repeat(32)}`)).status, 404);
   } finally {
     child.kill();
     fs.rmSync(data, { recursive: true, force: true });
