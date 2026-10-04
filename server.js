@@ -243,6 +243,28 @@ app.get('/api/config', async (req, res) => {
   res.json(IS_DESKTOP ? configView() : { ...configView(), proxy: '', acoustidKey: '' });
 });
 
+// The desktop app's downloads (the web page's "Descargar"): their sizes, from
+// the latest GitHub release, asked at most once an hour. Names and sizes only.
+const APP_FILES = ['TubeGrab-Setup.exe', 'TubeGrab.exe', 'TubeGrab-Lite.exe'];
+let appRelease = { at: 0, data: null };
+app.get('/api/desktop/latest', infoLimiter, async (req, res) => {
+  if (!appRelease.data || Date.now() - appRelease.at > 3600e3) {
+    try {
+      const r = await require('./lib/netfetch').json('https://api.github.com/repos/Cid736/tubegrab/releases/latest', { timeoutMs: 8000, headers: { Accept: 'application/vnd.github+json' } });
+      const sizes = {};
+      for (const a of Array.isArray(r && r.assets) ? r.assets : []) {
+        if (a && APP_FILES.includes(a.name) && Number.isFinite(a.size) && a.size > 0) sizes[a.name] = a.size;
+      }
+      const version = typeof r.tag_name === 'string' && /^v?\d+\.\d+\.\d+$/.test(r.tag_name) ? r.tag_name.replace(/^v/, '') : null;
+      appRelease = { at: Date.now(), data: { version, sizes } };
+    } catch {
+      // Not reachable now: the page shows rough sizes, asked again in 5 minutes.
+      appRelease = { at: Date.now() - 3300e3, data: appRelease.data || { version: null, sizes: {} } };
+    }
+  }
+  res.json(appRelease.data);
+});
+
 app.post('/api/config', (req, res) => {
   if (!IS_DESKTOP) return res.status(403).json({ error: 'Solo en la app de escritorio.' });
   const body = req.body || {};

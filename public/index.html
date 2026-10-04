@@ -2228,6 +2228,33 @@
     </div>
   </div>
 
+  <!-- The desktop app: which of the three to download -->
+  <div class="modal hidden" id="getAppModal" role="dialog" aria-modal="true" aria-labelledby="getAppTitle">
+    <div class="modal-card get-app">
+      <h2 id="getAppTitle">Descargar TubeGrab para Windows</h2>
+      <p class="hint" id="getAppVersion">Elige una. Las tres son la misma app.</p>
+      <ul class="get-app-list">
+        <li><a class="get-app-opt" data-file="TubeGrab-Setup.exe" href="https://github.com/Cid736/tubegrab/releases/latest/download/TubeGrab-Setup.exe" rel="noopener">
+          <span class="get-app-head"><span class="get-app-name">Instalador</span><span class="get-app-tag">Recomendado</span><span class="get-app-size" data-approx="170">~170 MB</span></span>
+          <span class="get-app-desc">Se instala solo para tu usuario (sin permisos de administrador), con accesos en el menú Inicio y el escritorio. Lleva todo dentro y se actualiza sola.</span>
+          <span class="get-app-file">TubeGrab-Setup.exe</span>
+        </a></li>
+        <li><a class="get-app-opt" data-file="TubeGrab.exe" href="https://github.com/Cid736/tubegrab/releases/latest/download/TubeGrab.exe" rel="noopener">
+          <span class="get-app-head"><span class="get-app-name">Portable</span><span class="get-app-size" data-approx="170">~170 MB</span></span>
+          <span class="get-app-desc">Un solo .exe, sin instalar: lo abres desde donde quieras (también un USB). Lleva todo dentro.</span>
+          <span class="get-app-file">TubeGrab.exe</span>
+        </a></li>
+        <li><a class="get-app-opt" data-file="TubeGrab-Lite.exe" href="https://github.com/Cid736/tubegrab/releases/latest/download/TubeGrab-Lite.exe" rel="noopener">
+          <span class="get-app-head"><span class="get-app-name">Portable ligera</span><span class="get-app-size" data-approx="100">~100 MB</span></span>
+          <span class="get-app-desc">Igual que la portable pero más pequeña: la primera vez que la abres descarga ffmpeg y yt-dlp (unos 130 MB más, comprobados con SHA-256).</span>
+          <span class="get-app-file">TubeGrab-Lite.exe</span>
+        </a></li>
+      </ul>
+      <p class="footnote">Windows puede avisar de «Editor desconocido» porque la app no tiene firma de pago: pulsa «Más información» y «Ejecutar de todas formas». Todas las versiones en <a href="https://github.com/Cid736/tubegrab/releases" target="_blank" rel="noopener">GitHub</a>.</p>
+      <div class="modal-actions"><button class="btn" id="getAppClose" type="button">Cerrar</button></div>
+    </div>
+  </div>
+
   <!-- A question with a text box (Electron has no window.prompt) -->
   <div class="modal hidden" id="askModal" role="dialog" aria-modal="true" aria-labelledby="askTitle">
     <div class="modal-card">

@@ -763,6 +763,19 @@
     'YouTube no dio el sonido de este vídeo.': "YouTube didn’t give this video’s sound.",
     'YouTube no dejó escuchar este vídeo ahora mismo.': "YouTube didn’t let this video play right now.",
     'Vídeo no válido.': "Invalid video.",
+    // --- v3.10.2 (the web page's "Descargar": the three downloads) ---
+    'Descargar TubeGrab para Windows': 'Download TubeGrab for Windows',
+    'Elige una. Las tres son la misma app.': 'Pick one. All three are the same app.',
+    'Versión {v}. Elige una: las tres son la misma app.': 'Version {v}. Pick one: all three are the same app.',
+    'Instalador': 'Installer',
+    'Recomendado': 'Recommended',
+    'Se instala solo para tu usuario (sin permisos de administrador), con accesos en el menú Inicio y el escritorio. Lleva todo dentro y se actualiza sola.': 'Installs just for your user (no administrator rights), with shortcuts in the Start menu and on the desktop. Everything included, and it updates itself.',
+    'Portable': 'Portable',
+    'Un solo .exe, sin instalar: lo abres desde donde quieras (también un USB). Lleva todo dentro.': 'A single .exe, nothing to install: open it from anywhere (a USB stick too). Everything included.',
+    'Portable ligera': 'Light portable',
+    'Igual que la portable pero más pequeña: la primera vez que la abres descarga ffmpeg y yt-dlp (unos 130 MB más, comprobados con SHA-256).': 'Like the portable one but smaller: the first time you open it, it downloads ffmpeg and yt-dlp (about 130 MB more, checked with SHA-256).',
+    'Windows puede avisar de «Editor desconocido» porque la app no tiene firma de pago: pulsa «Más información» y «Ejecutar de todas formas». Todas las versiones en': 'Windows may warn about an “Unknown publisher” because the app has no paid signature: click “More info” and “Run anyway”. Every version on',
+
     // --- v3.10.0 (game mode, the phone's music, Discord) ---
     'Modo juego': 'Game mode',
     'Modo juego automático': 'Automatic game mode',

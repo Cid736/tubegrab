@@ -26,7 +26,7 @@ test('the editor, tags, queue, download settings and download form are fully tra
   const known = new Set(keys);
   const same = new Set(['MP4', 'MKV', 'MOV', 'WEBM', 'MP3', 'M4A', 'V1', 'A1', 'Original', 'Logo', 'Editor', 'SponsorBlock', 'cookies.txt',
     '4:5 (Instagram)', '9:16 vertical (TikTok, Reels, Shorts)', '1', '2', '3', '4', '5', '6', 'M4A (AAC)', 'OPUS', 'OGG', '48 kHz', '44,1 kHz', 'English', 'Mac', 'Windows', 'TubeGrab', 'GitHub', 'https://ntfy.sh', 'Ctrl', 'Esc', 'Supr', '?', '{artist} - {title}',
-    'BPM', '9:16', '1:1', '4:5', '16:9', 'tubegrab "https://youtu.be/…" --mp3', 'tubegrab "https://youtu.be/…" --video=1080 --out=D:\\Vídeos']);
+    'BPM', 'TubeGrab-Setup.exe', 'TubeGrab.exe', 'TubeGrab-Lite.exe', '9:16', '1:1', '4:5', '16:9', 'tubegrab "https://youtu.be/…" --mp3', 'tubegrab "https://youtu.be/…" --video=1080 --out=D:\\Vídeos']);
   const missing = [];
   for (const entry of SECTIONS) {
     const [marker, end] = Array.isArray(entry) ? entry : [entry, '</section>'];

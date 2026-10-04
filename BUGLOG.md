@@ -744,3 +744,13 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - Con «dejar pasar los clics» y «fijarlo aquí» activados, todos los clics lo atravesaban; como el ajuste se guarda, seguía igual tras reiniciar. La salida (mantener Ctrl y mover el ratón encima, Ctrl+Alt+O o la bandeja) no se veía.
 - Ahora, al abrirlo tú (botón, atajo), siempre empieza usable con el ratón; volver a pulsar el botón del mini en TubeGrab con él abierto también lo hace usable. Solo el modo juego lo abre dejando pasar los clics, si así lo elegiste. Los textos explican que hay que mover el ratón con Ctrl pulsado.
 - Probado con el estado atascado guardado en disco: se abre usable; activado con él abierto, el botón lo desactiva.
+
+
+---
+
+## 2026-10-04 — v3.10.3: la web explica las tres descargas
+
+### [Feature] «Descargar» en la web: las tres opciones
+- En la versión web, el botón «Descargar» del aviso «TubeGrab para Windows» abre un diálogo con las tres versiones: Instalador (recomendado), Portable y Portable ligera, con qué hace cada una, su tamaño y el archivo; cada una se descarga directamente.
+- Los tamaños y la versión salen de la última release de GitHub (`/api/desktop/latest`, solo nombres y tamaños, como mucho una consulta por hora; si GitHub no responde, se muestran los aproximados).
+- Probado en Edge: tamaños reales (163, 163 y 96 MB), enlaces directos, claro/oscuro, móvil sin desbordes, Esc y clic fuera cierran, inglés.

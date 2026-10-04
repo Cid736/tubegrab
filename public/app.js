@@ -152,6 +152,46 @@ if (isElectronApp) {
   document.body.classList.add('is-desktop-app');
 } else {
   $('btnDesktopDownload').href = 'https://github.com/Cid736/tubegrab/releases/latest';
+  // "Descargar": the three kinds to choose from, what each is and how big.
+  const modal = $('getAppModal');
+  let back = null;
+  let sized = false;
+  const mb = (bytes) => `${Math.round(bytes / 1048576)} MB`;
+  const close = () => {
+    modal.classList.add('hidden');
+    document.removeEventListener('keydown', onKey, true);
+    if (back) back.focus();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
+    if (e.key !== 'Tab') return;
+    // The keyboard stays in the dialog while it's open.
+    const els = [...modal.querySelectorAll('a[href], button')];
+    const i = els.indexOf(document.activeElement);
+    if (e.shiftKey && i <= 0) { e.preventDefault(); els[els.length - 1].focus(); }
+    else if (!e.shiftKey && i === els.length - 1) { e.preventDefault(); els[0].focus(); }
+  };
+  $('btnDesktopDownload').addEventListener('click', (e) => {
+    e.preventDefault();
+    back = document.activeElement;
+    modal.classList.remove('hidden');
+    document.addEventListener('keydown', onKey, true);
+    modal.querySelector('.get-app-opt').focus();
+    if (sized) return;
+    fetch('/api/desktop/latest').then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (!d) return;
+      sized = Boolean(d.version);
+      for (const a of modal.querySelectorAll('.get-app-opt')) {
+        const size = d.sizes && d.sizes[a.dataset.file];
+        if (size) a.querySelector('.get-app-size').textContent = mb(size);
+      }
+      if (d.version) $('getAppVersion').textContent = t('Versión {v}. Elige una: las tres son la misma app.', { v: d.version });
+    }).catch(() => {});
+  });
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  $('getAppClose').addEventListener('click', close);
+  // Chosen: the download starts, and the dialog goes.
+  for (const a of modal.querySelectorAll('.get-app-opt')) a.addEventListener('click', () => setTimeout(close, 300));
 }
 
 // === App updater (desktop app only) ===
