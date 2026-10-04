@@ -1801,14 +1801,43 @@
           </div>
           <div class="status-message" id="ntfyStatus" role="status"></div>
 
+          <div class="section-header desktop-only"><h2>Modo juego</h2></div>
+          <div class="group desktop-only" id="gameModeGroup">
+            <label class="row switch"><span class="row-label">Modo juego automático <small>al abrir uno de tus juegos, el mini reproductor se pone encima, pequeño y transparente, en una esquina; al cerrarlo vuelve a como estaba</small></span><input type="checkbox" id="gmEnabled"><span class="switch-ui"></span></label>
+            <div class="row gm-games-row">
+              <span class="row-label">Tus juegos <small id="gmStatus">el programa del juego (.exe)</small></span>
+              <div class="gm-games">
+                <ul class="gm-list" id="gmList" aria-label="Tus juegos"></ul>
+                <form class="gm-add" id="gmAdd">
+                  <input id="gmName" type="text" maxlength="64" placeholder="juego.exe" aria-label="Programa del juego (.exe)" spellcheck="false" autocomplete="off">
+                  <button class="btn" type="submit">Añadir</button>
+                  <button class="btn" id="gmPick" type="button">Elegir de lo que está abierto</button>
+                </form>
+                <ul class="gm-apps hidden" id="gmApps" aria-label="Programas abiertos"></ul>
+              </div>
+            </div>
+            <label class="row"><span class="row-label">Opacidad del mini reproductor</span><input type="range" id="gmOpacity" min="0.2" max="1" step="0.05" aria-label="Opacidad del mini reproductor"></label>
+            <label class="row"><span class="row-label">Esquina</span>
+              <select id="gmCorner">
+                <option value="tl">Arriba a la izquierda</option>
+                <option value="tr">Arriba a la derecha</option>
+                <option value="bl">Abajo a la izquierda</option>
+                <option value="br">Abajo a la derecha</option>
+              </select>
+            </label>
+            <label class="row switch"><span class="row-label">Compacto <small>una sola fila</small></span><input type="checkbox" id="gmCompact"><span class="switch-ui"></span></label>
+            <label class="row switch"><span class="row-label">Dejar pasar los clics <small>el ratón va al juego; para usar el mini reproductor, Ctrl, Alt+Tab o Ctrl+Alt+O</small></span><input type="checkbox" id="gmThrough"><span class="switch-ui"></span></label>
+          </div>
+          <p class="footnote desktop-only">Funciona con el juego en «ventana sin bordes». En pantalla completa «exclusiva» Windows no deja mostrar nada encima: ahí usa los atajos de teclado.</p>
+
           <div class="section-header desktop-only"><h2>Control desde el móvil</h2></div>
           <div class="group desktop-only">
-            <label class="row switch"><span class="row-label">Mandar descargas desde el móvil <small>por tu WiFi, sin instalar nada</small></span><input type="checkbox" id="remoteEnabled"><span class="switch-ui"></span></label>
+            <label class="row switch"><span class="row-label">Descargas y música desde el móvil <small>por tu WiFi, sin instalar nada</small></span><input type="checkbox" id="remoteEnabled"><span class="switch-ui"></span></label>
             <div class="row ntfy-setup hidden" id="remoteBody">
               <img class="ntfy-qr" id="remoteQr" alt="Código QR para emparejar el móvil">
               <div class="row-text">
                 <span class="row-label">Escanéalo con la cámara del móvil</span>
-                <span class="row-sub row-sub-wrap">Se abre una página para pegar enlaces: se descargan en este PC y se guardan en tu carpeta. Añádela a la pantalla de inicio del móvil para tenerla a mano. Tiene que estar en la misma WiFi.</span>
+                <span class="row-sub row-sub-wrap">Se abre una página para pegar enlaces: se descargan en este PC y se guardan en tu carpeta. En «Música» ves lo que suena y lo controlas: pausa, siguiente, volumen o escribir una canción para que suene. Añádela a la pantalla de inicio del móvil para tenerla a mano. Tiene que estar en la misma WiFi.</span>
                 <code class="share-url" id="remoteUrl"></code>
                 <div class="ntfy-actions"><button class="link-btn" id="remoteReset" type="button">Desconectar los móviles (código nuevo)</button></div>
               </div>

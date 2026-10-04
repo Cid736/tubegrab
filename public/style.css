@@ -1634,3 +1634,18 @@ body.now-open { overflow: hidden; }
 .stat-rank li.stat-playable { cursor: pointer; border-radius: 8px; }
 .stat-rank li.stat-playable:hover, .stat-rank li.stat-playable:focus-visible { background: var(--hover); }
 @media (max-width: 560px) { .wr-hero { flex-direction: column; align-items: flex-start; } }
+
+/* ===== v3.10: game mode ===== */
+.gm-games-row { align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+.gm-games { flex: 1 1 320px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.gm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.gm-list li { display: inline-flex; align-items: center; gap: 2px; padding: 2px 2px 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--text); font-size: 12px; font-weight: 600; }
+.gm-list .queue-btn { width: 24px; height: 24px; }
+.gm-add { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.gm-add input { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 7px; border: 1px solid var(--hairline); background: var(--inset); color: var(--text); width: 170px; }
+.gm-apps { list-style: none; margin: 0; padding: 4px; max-height: 240px; overflow-y: auto; border-radius: 10px; background: var(--inset); }
+.gm-apps.hidden { display: none; }
+.gm-app { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.gm-app:hover, .gm-app:focus-visible { background: var(--hover); }
+.gm-app small { color: var(--text-2); font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gm-empty { padding: 8px 10px; font-size: 12px; color: var(--text-2); }

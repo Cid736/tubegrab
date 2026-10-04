@@ -75,6 +75,11 @@ contextBridge.exposeInMainWorld('desktop', {
   // Mini player: dragged around by the page itself.
   miniMove: (dx, dy) => ipcRenderer.send('mini:move', { dx, dy }),
   onMiniPrefs: (cb) => ipcRenderer.on('mini:prefs', (_e, p) => cb(p)),
+  // Game mode: the mini player over your games.
+  getGameMode: () => ipcRenderer.invoke('desktop:getGameMode'),
+  setGameMode: (patch) => ipcRenderer.invoke('desktop:setGameMode', patch),
+  listApps: () => ipcRenderer.invoke('desktop:listApps'),
+  onGameMode: (cb) => ipcRenderer.on('desktop:gameMode', (_e, s) => cb(s)),
   // Keyboard shortcuts (also in the background).
   getShortcuts: () => ipcRenderer.invoke('desktop:getShortcuts'),
   setShortcuts: (patch) => ipcRenderer.invoke('desktop:setShortcuts', patch),

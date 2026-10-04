@@ -5938,7 +5938,7 @@ const player = (() => {
       playing: f ? !deck.paused : false, time: deck.currentTime || 0, duration: Number.isFinite(deck.duration) ? deck.duration : 0,
       cover: f && f.kind !== 'video' ? coverOf(f) : null,
       volume: A.volume, muted: A.muted,
-      streaming: isStream(f), shuffle, repeat, radio,
+      streaming: isStream(f), shuffle, repeat, radio, yt: f && isStream(f) ? f.yt : null,
       upNext: list.map((x, n) => ({ title: nameOf(x), sub: isStream(x) ? x.channel : x.folder || '', n })).slice(index + 1, index + 31),
     });
   }
@@ -5951,11 +5951,20 @@ const player = (() => {
     $('plCastBtn').classList.add('hidden');
   }
   const mixed = (items) => items.map((x) => (x && x.file ? x.file : asStreams([x])[0])).filter(Boolean);
+  async function playQuery(q) {
+    try {
+      const r = await api(`/api/stream/find?q=${encodeURIComponent(q.slice(0, 200))}`);
+      play(asStreams([{ id: r.id, title: r.title, channel: r.channel, thumbnail: r.thumbnail, duration: r.duration }]), 0);
+      showToast(t('Desde el móvil: «{t}»', { t: r.title }));
+    } catch (err) { showToast(err.message); }
+  }
   /** One player command (keyboard shortcuts, mini window, taskbar, tray). */
   function command(cmd, value, items) {
     // The mini window opened / closed: its visualizer bars start / stop.
     if (cmd === 'hello' || cmd === 'miniClosed') { miniOpen = cmd === 'hello'; levelsToMini(); }
     if (cmd === 'miniClosed') return;
+    // From the phone: a song by its name, found on YouTube and played.
+    if (cmd === 'playQuery' && typeof value === 'string') { playQuery(value); return; }
     // From the mini window's search: play from YouTube now, or add to the list.
     if (cmd === 'stream' && Array.isArray(items)) { const songs = asStreams(items); if (songs.length) play(songs, Math.min(value || 0, songs.length - 1)); return; }
     if (cmd === 'enqueue' && Array.isArray(items)) { enqueue(asStreams(items)); return; }
@@ -7977,4 +7986,80 @@ const autoBackup = (() => {
   setTimeout(check, 60 * 1000);
   setInterval(check, 6 * 3600 * 1000);
   return { check };
+})();
+
+// === Ajustes → Sistema: game mode (desktop): the mini player over your games ===
+(() => {
+  if (!desktopApi || !desktopApi.getGameMode) return;
+  let state = null;
+  function render(s) {
+    if (!s) return;
+    if (s.error) { showToast(s.error); return; }
+    state = s;
+    $('gmEnabled').checked = s.enabled;
+    $('gmOpacity').value = String(s.opacity);
+    $('gmOpacity').title = `${Math.round(s.opacity * 100)} %`;
+    $('gmCorner').value = s.corner;
+    $('gmCompact').checked = s.compact;
+    $('gmThrough').checked = s.through;
+    $('gmStatus').textContent = s.running ? t('ahora: «{g}» está abierto, el mini reproductor está encima', { g: s.running }) : s.games.length ? t('se comprueba cada pocos segundos') : t('el programa del juego (.exe)');
+    const ul = $('gmList');
+    ul.innerHTML = '';
+    for (const g of s.games) {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = g;
+      li.appendChild(name);
+      li.appendChild(iconButton('remove', t('Quitar «{g}»', { g }), () => save({ games: state.games.filter((x) => x !== g) })));
+      ul.appendChild(li);
+    }
+  }
+  const save = async (patch) => render(await desktopApi.setGameMode(patch));
+  function add(name) {
+    const n = String(name || '').trim().toLowerCase();
+    if (!n) return;
+    const exe = n.endsWith('.exe') ? n : `${n}.exe`;
+    if (state && state.games.includes(exe)) return;
+    save({ games: [...(state ? state.games : []), exe] });
+  }
+  $('gmEnabled').addEventListener('change', () => save({ enabled: $('gmEnabled').checked }));
+  $('gmOpacity').addEventListener('change', () => save({ opacity: Number($('gmOpacity').value) }));
+  $('gmCorner').addEventListener('change', () => save({ corner: $('gmCorner').value }));
+  $('gmCompact').addEventListener('change', () => save({ compact: $('gmCompact').checked }));
+  $('gmThrough').addEventListener('change', () => save({ through: $('gmThrough').checked }));
+  $('gmAdd').addEventListener('submit', (e) => { e.preventDefault(); add($('gmName').value); $('gmName').value = ''; });
+  $('gmPick').addEventListener('click', async () => {
+    const box = $('gmApps');
+    box.innerHTML = '';
+    box.classList.remove('hidden');
+    const wait = document.createElement('li');
+    wait.className = 'gm-empty';
+    wait.textContent = t('Mirando qué hay abierto…');
+    box.appendChild(wait);
+    const apps = await desktopApi.listApps();
+    box.innerHTML = '';
+    if (!apps.length) { wait.textContent = t('No se ha encontrado nada abierto. Abre el juego y vuelve a probar.'); box.appendChild(wait); return; }
+    for (const a of apps) {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'gm-app';
+      const strong = document.createElement('strong');
+      strong.textContent = a.exe;
+      const small = document.createElement('small');
+      small.textContent = a.title;
+      b.append(strong, small);
+      b.addEventListener('click', () => { add(a.exe); box.classList.add('hidden'); });
+      li.appendChild(b);
+      box.appendChild(li);
+    }
+  });
+  if (desktopApi.onGameMode) {
+    desktopApi.onGameMode(({ running }) => {
+      showToast(running ? t('Modo juego: «{g}» abierto, el mini reproductor va encima', { g: running }) : t('Modo juego: terminado, el mini reproductor vuelve a como estaba'));
+      desktopApi.getGameMode().then(render);
+    });
+  }
+  document.addEventListener('tg:view', (e) => { if (e.detail === 'set-system') desktopApi.getGameMode().then(render); });
+  desktopApi.getGameMode().then(render);
 })();

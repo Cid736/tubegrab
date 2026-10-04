@@ -910,6 +910,8 @@ ipcMain.on('player:state', (event, state) => {
     // What comes next (the mini window's "Up next"), titles only.
     upNext: Array.isArray(state.upNext) ? state.upNext.slice(0, 30).map((x) => ({ title: text(x && x.title, 200), sub: text(x && x.sub, 120), n: Number.isInteger(x && x.n) ? x.n : -1 })) : [],
     streaming: state.streaming === true, shuffle: state.shuffle === true, repeat: state.repeat === true, radio: state.radio === true,
+    // The YouTube video of a song playing from YouTube (Discord's "Listen on YouTube").
+    yt: typeof state.yt === 'string' && /^[A-Za-z0-9_-]{11}$/.test(state.yt) ? state.yt : null,
   };
   clean.active = Boolean(clean.title);
   const was = playerNow;
@@ -918,7 +920,32 @@ ipcMain.on('player:state', (event, state) => {
   if (was.active !== clean.active || was.playing !== clean.playing) updateThumbar();
   scrobbler.onState(clean);
   discord.onState(clean);
+  playerToServer(clean);
 });
+// The phone's music page (the server's own page on the WiFi) sees it too:
+// titles, times, volume and a YouTube cover only, when something changes.
+let playerToServerLast = '';
+function playerToServer(st) {
+  if (!serverProcess || !serverProcess.connected) return;
+  const state = {
+    title: st.title, artist: st.artist || st.sub, playing: st.playing, muted: st.muted, time: st.time, duration: st.duration, volume: st.volume,
+    cover: st.cover && YT_THUMB_RE.test(st.cover) ? st.cover : null, upNext: st.upNext.slice(0, 5).map((x) => ({ title: x.title })),
+  };
+  const sig = JSON.stringify({ ...state, time: Math.round(state.time / 10) });
+  if (sig === playerToServerLast) return;
+  playerToServerLast = sig;
+  try { serverProcess.send({ type: 'player-state', state }); } catch { /* restarting */ }
+}
+// What the phone may ask the player for (the server checked it; checked again here).
+const PHONE_COMMANDS = ['prev', 'toggle', 'next', 'voldown', 'volup', 'mute'];
+function phoneCommand(c) {
+  if (!c || typeof c !== 'object') return;
+  if (PHONE_COMMANDS.includes(c.cmd)) sendToRenderer('player:command', { cmd: c.cmd });
+  else if (c.cmd === 'playQuery' && typeof c.q === 'string') {
+    const q = c.q.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+    if (q && q.length <= 200) sendToRenderer('player:command', { cmd: 'playQuery', value: q });
+  }
+}
 // The visualizer's bars (main page → mini window): up to 32 numbers 0–255.
 ipcMain.on('player:levels', (event, levels) => {
   if (!isTrustedSender(event) || !mainWindow || event.sender !== mainWindow.webContents || !Array.isArray(levels)) return;
@@ -1235,6 +1262,9 @@ const discord = (() => {
       type: 2,
       details: (st.track || st.title).slice(0, 120),
       ...(st.artist ? { state: st.artist.slice(0, 120) } : {}),
+      // A song from YouTube: its picture and a button to listen to it there.
+      ...(st.cover && YT_THUMB_RE.test(st.cover) ? { assets: { large_image: st.cover, large_text: (st.artist || st.title).slice(0, 120) } } : {}),
+      ...(st.yt ? { buttons: [{ label: 'YouTube', url: `https://www.youtube.com/watch?v=${st.yt}` }] } : {}),
       timestamps: st.duration ? { start: Math.round(Date.now() - st.time * 1000), end: Math.round(Date.now() + (st.duration - st.time) * 1000) } : { start: Math.round(Date.now() - st.time * 1000) },
     } : null;
     const sig = JSON.stringify(activity && { ...activity, timestamps: undefined, t: Math.round(st.time / 15) });
@@ -1244,6 +1274,131 @@ const discord = (() => {
   }
   return { onState: (st) => push(st), close };
 })();
+// === Game mode: while one of your games is running, the mini player goes over
+// it as an overlay (small, see-through, in a corner) and back as it was after ===
+// Which games: by their .exe, checked every few seconds with Windows' own
+// task list (only names are read; nothing touches the game).
+const gameMode = (() => {
+  const GAME_RE = /^[\w .()&+-]{1,60}\.exe$/i;
+  const CORNERS = ['tl', 'tr', 'bl', 'br'];
+  // Never "games": Windows itself and this app.
+  const NOT_GAMES = new Set(['explorer.exe', 'svchost.exe', 'dwm.exe', 'csrss.exe', 'winlogon.exe', 'tubegrab pro.exe', 'tubegrab.exe', 'electron.exe', 'tasklist.exe']);
+  let timer = null;
+  let active = null;
+  let checking = false;
+  const conf = () => {
+    const g = getSettings().gameMode || {};
+    return {
+      enabled: g.enabled === true,
+      games: Array.isArray(g.games) ? [...new Set(g.games.filter((x) => typeof x === 'string' && GAME_RE.test(x) && !NOT_GAMES.has(x.toLowerCase())).map((x) => x.toLowerCase()))].slice(0, 30) : [],
+      opacity: Number.isFinite(g.opacity) ? Math.min(1, Math.max(0.2, g.opacity)) : 0.8,
+      corner: CORNERS.includes(g.corner) ? g.corner : 'tr',
+      compact: g.compact !== false,
+      through: g.through === true,
+    };
+  };
+  const view = () => ({ ...conf(), running: active });
+  /** The names of the programs running now (lower case), or null if Windows didn't say. */
+  function running(cb) {
+    execFile('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 15000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+      if (err) return cb(null);
+      const names = new Set();
+      for (const line of String(stdout).split(/\r?\n/)) { const m = /^"([^"]+)"/.exec(line); if (m) names.add(m[1].toLowerCase()); }
+      return cb(names);
+    });
+  }
+  function begin(name, c) {
+    const g = getSettings().gameMode || {};
+    // What to put back afterwards (kept on disk, in case the app is closed mid-game).
+    const pos = getSettings().miniPos;
+    saveSettings({ gameMode: { ...g, restore: { prefs: miniPrefs(), pos: pos && Number.isInteger(pos.x) && Number.isInteger(pos.y) ? { x: pos.x, y: pos.y } : null, wasOpen: Boolean(miniWindow && !miniWindow.isDestroyed()) } } });
+    active = name;
+    setMiniPrefs({ opacity: c.opacity, compact: c.compact, onTop: true, clickThrough: c.through, noFocus: true });
+    openMini();
+    setTimeout(() => snapMini(c.corner), 900);
+    sendToRenderer('desktop:gameMode', { running: name });
+  }
+  function end() {
+    const g = { ...(getSettings().gameMode || {}) };
+    const r = g.restore && typeof g.restore === 'object' ? g.restore : null;
+    delete g.restore;
+    saveSettings({ gameMode: g });
+    active = null;
+    if (r && r.prefs && typeof r.prefs === 'object') setMiniPrefs(r.prefs);
+    const pos = r && r.pos && Number.isInteger(r.pos.x) && Number.isInteger(r.pos.y) ? { x: r.pos.x, y: r.pos.y } : null;
+    if (pos) saveSettings({ miniPos: pos });
+    const open = miniWindow && !miniWindow.isDestroyed();
+    // Opened only for the game: closed again (unless it's what keeps the music going).
+    if (open && r && !r.wasOpen && !closedBehindMini) miniWindow.close();
+    else if (open && pos) miniWindow.setPosition(pos.x, pos.y);
+    sendToRenderer('desktop:gameMode', { running: null });
+  }
+  function tick() {
+    const c = conf();
+    if (checking || process.platform !== 'win32') return;
+    if (!c.enabled || !c.games.length) { if (active) end(); return; }
+    checking = true;
+    running((names) => {
+      checking = false;
+      if (!names) return;
+      const found = c.games.find((x) => names.has(x)) || null;
+      if (found && !active) begin(found, c);
+      else if (!found && active) end();
+    });
+  }
+  function start() {
+    // Closed during a game last time: the mini player as it was.
+    if ((getSettings().gameMode || {}).restore) end();
+    clearInterval(timer);
+    timer = setInterval(tick, 8000);
+    tick();
+  }
+  function set(patch) {
+    const g = { ...(getSettings().gameMode || {}) };
+    if (typeof patch.enabled === 'boolean') g.enabled = patch.enabled;
+    if (Array.isArray(patch.games)) {
+      const games = patch.games.slice(0, 30).filter((x) => typeof x === 'string').map((x) => x.trim().toLowerCase());
+      if (games.some((x) => !GAME_RE.test(x))) return { error: 'Escribe el nombre del programa del juego, terminado en .exe (por ejemplo, valorant.exe).' };
+      if (games.some((x) => NOT_GAMES.has(x))) return { error: 'Ese programa es de Windows o de TubeGrab, no un juego.' };
+      g.games = [...new Set(games)];
+    }
+    if (Number.isFinite(patch.opacity)) g.opacity = Math.min(1, Math.max(0.2, Math.round(patch.opacity * 20) / 20));
+    if (CORNERS.includes(patch.corner)) g.corner = patch.corner;
+    if (typeof patch.compact === 'boolean') g.compact = patch.compact;
+    if (typeof patch.through === 'boolean') g.through = patch.through;
+    saveSettings({ gameMode: g });
+    // A change while a game is on: start over with the new settings.
+    if (active) end();
+    tick();
+    return view();
+  }
+  /** The programs with a window open now (to pick a game from). */
+  function apps() {
+    return new Promise((resolve) => {
+      if (process.platform !== 'win32') { resolve([]); return; }
+      const ps = 'Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Path } | Select-Object ProcessName, MainWindowTitle | ConvertTo-Json -Compress';
+      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true, timeout: 20000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
+        if (err) { resolve([]); return; }
+        let list = [];
+        try { list = JSON.parse(String(stdout).trim() || '[]'); } catch { list = []; }
+        if (!Array.isArray(list)) list = [list];
+        const seen = new Set();
+        const out = [];
+        for (const p of list) {
+          const exe = `${String((p && p.ProcessName) || '').slice(0, 56)}.exe`.toLowerCase();
+          if (!GAME_RE.test(exe) || NOT_GAMES.has(exe) || seen.has(exe)) continue;
+          seen.add(exe);
+          out.push({ exe, title: String((p && p.MainWindowTitle) || '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 120) });
+        }
+        resolve(out.slice(0, 60));
+      });
+    });
+  }
+  return { start, set, view, apps };
+})();
+ipcMain.handle('desktop:getGameMode', (event) => (isTrustedSender(event) ? gameMode.view() : null));
+ipcMain.handle('desktop:setGameMode', (event, patch) => (isTrustedSender(event) && patch && typeof patch === 'object' ? gameMode.set(patch) : null));
+ipcMain.handle('desktop:listApps', (event) => (isTrustedSender(event) ? gameMode.apps() : []));
 ipcMain.handle('desktop:getDiscord', (event) => { if (!isTrustedSender(event)) return null; const d = getSettings().discord || {}; return { enabled: d.enabled === true, appId: /^\d{15,22}$/.test(String(d.appId || '')) ? String(d.appId) : '' }; });
 ipcMain.handle('desktop:setDiscord', (event, patch) => {
   if (!isTrustedSender(event) || !patch || typeof patch !== 'object') return null;
@@ -2016,6 +2171,8 @@ function startServer(port, enginePath, retriesLeft = 2) {
       if (msg.type === 'listening' && msg.port === port) {
         clearTimeout(timer);
         resolve(port);
+      } else if (msg.type === 'player-command') {
+        phoneCommand(msg.cmd);
       } else if (msg.type === 'port-in-use') {
         clearTimeout(timer);
         handedOff = true;
@@ -2118,6 +2275,7 @@ function createWindow() {
   setupTray();
   applyClipboardWatch();
   applyShortcuts();
+  gameMode.start();
   // The taskbar buttons are lost when the window is hidden and shown again.
   mainWindow.on('show', updateThumbar);
   mainWindow.on('show', () => { closedBehindMini = false; });

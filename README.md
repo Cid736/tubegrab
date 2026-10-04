@@ -90,7 +90,8 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
   - Lists in **folders**, with a **mosaic** of four covers; lists from Spotify / Apple Music / YouTube **keep themselves up to date**; a song you already downloaded **plays from your file** (also offline), and optionally the songs you play most are **downloaded by themselves**
   - **Your music** in Statistics: your yearly summary — song of the year, minutes, songs, artists, days with music, your hour, top artists and songs, minutes per month — playable or saved as a list
   - **Sound** panel: equalizer with styles and **your own saved ones**, **same volume for every song** (measured while it plays, remembered per song), crossfade up to 12 s, **speed** 0.5–2× (keeping the pitch or not) and a **sleep timer** (minutes or "when this song ends", fading out)
-  - **Last.fm** scrobbling and **Discord** "Listening to…" (with your own free keys)
+  - **Last.fm** scrobbling and **Discord** "Listening to…" (with your own free keys), with the song's cover and a YouTube button for songs from YouTube
+  - **Game mode**: when one of your games is running (by its .exe, pick it from what's open), the mini player goes over it small and see-through in a corner, and back as it was when you close the game
 - **Statistics**: downloads and conversions per month, top channels and artists, most played, library size
 - **Disk space** (desktop): a warning when the disk runs low, and an optional limit for the downloads folder (warn, or move the oldest files to the Recycle Bin — never favourites)
 - **Command line**: `tubegrab "link" --mp3` (Settings → System installs the command); also `node cli.js` / `npm run cli` from the repository
@@ -98,7 +99,7 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - **Browser extension** (Chrome, Edge, Brave, Opera): a button on YouTube and "Download with TubeGrab" in the right-click menu open the link in the app (see `extension/README.md`)
 - **Backup**: export settings, history and subscriptions to a file and import them on another PC
 - **Automatic backup** (desktop) into a folder of yours (OneDrive, a drive…) every day, week or month, keeping the last 8; **notifications with buttons** ("Open", "Show in folder")
-- **Control from your phone** (desktop): scan a QR and a page on your WiFi lets you send links to download on the PC and follow them
+- **Control from your phone** (desktop): scan a QR and a page on your WiFi lets you send links to download on the PC and follow them, and **control the music**: see what's playing with its cover, play / pause, next, volume, or type a song and it plays on the PC
 - **Phone notifications** (desktop): a message on your phone through the free ntfy app when a long task finishes (or fails)
 - **Your own look**: any accent colour and your own background picture (with its own veil and blur) or **three colours of your own**; a short **tour** on first launch (and in Settings → About)
   - **Quick styles** in one click (Midnight, Paper, Neon, Terminal, Forest, Sunset, Compact) and a **style code** to copy your look to another computer
@@ -209,7 +210,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 ## Tests
 
 ```bash
-npm test                    # 245 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
+npm test                    # 246 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
 TG_NETWORK=1 npm test       # also real YouTube downloads
 ```
 
@@ -234,7 +235,7 @@ MIT. Privacy, terms of use and third-party components: [LEGAL.md](LEGAL.md#engli
 
 Security reviews are AI-assisted (Claude, Anthropic) and run on significant changes to check for injection risks, insecure defaults and dependency vulnerabilities. Findings are tracked in [`BUGLOG.md`](BUGLOG.md).
 
-**Last review:** 2026-10-04 (review #17, v3.7.4: accessibility audit of every page with real keyboard navigation, plus three bugs fixed in the player and the mini player). Before: (review #16, v3.7.1): listening without downloading and the Spotify lists checked with attack tests (only YouTube's media servers, ids and links validated, lists cleaned, at most 3 yt-dlp at once). Before that: (review #15, v3.5.0) — everything new in 3.5 reviewed with attack tests: fetching podcasts, Spotify/Apple pages and MusicBrainz only ever reaches public addresses (checked by the connection itself, also through redirects and IPv4-in-IPv6 tricks, which were the bug fixed here); fpcalc never opens an upload (our whitelisted ffmpeg makes a WAV for it); imported songs become plain YouTube searches after `--`; the proxy is validated before yt-dlp sees it; screen recording only right after you pick a screen, never the microphone or camera; the Last.fm secret never reaches the page; the queue file and tasks are checked again when read. Details in BUGLOG.md.
+**Last review:** 2026-10-04 (review #18, v3.10.0: everything new in 3.8–3.10 with attack tests — the phone's music page only for the paired phone and our own form, titles escaped, still no scripts and pictures only from YouTube; the lyrics' translation and the listening history only take short, checked data; game mode only ever reads program names; the visualizer's bars only from the main window; an accessibility audit of every new view, with the keyboard). Before: (review #17, v3.7.4: accessibility audit of every page with real keyboard navigation, plus three bugs fixed in the player and the mini player). Before: (review #16, v3.7.1): listening without downloading and the Spotify lists checked with attack tests (only YouTube's media servers, ids and links validated, lists cleaned, at most 3 yt-dlp at once). Before that: (review #15, v3.5.0) — everything new in 3.5 reviewed with attack tests: fetching podcasts, Spotify/Apple pages and MusicBrainz only ever reaches public addresses (checked by the connection itself, also through redirects and IPv4-in-IPv6 tricks, which were the bug fixed here); fpcalc never opens an upload (our whitelisted ffmpeg makes a WAV for it); imported songs become plain YouTube searches after `--`; the proxy is validated before yt-dlp sees it; screen recording only right after you pick a screen, never the microphone or camera; the Last.fm secret never reaches the page; the queue file and tasks are checked again when read. Details in BUGLOG.md.
 
 **Review #13:** 2026-10-01 (v3.3.0) — v3.1–v3.3 reviewed with attack tests: phone control only on the WiFi address, for a phone paired by QR, with Host/Origin checks; file-name templates only from our own tags (no `/`, `..`, `%(`…); "start now" desktop-only so nobody can bypass a shared server's limits; tampered prefs (colour, background, template) never reach the page. Found and fixed during testing: an infinite loop in the download button text and a stale size estimate. 0 known vulnerabilities; all dependencies current.
 
@@ -336,7 +337,8 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
   - Listas en **carpetas**, con un **mosaico** de cuatro carátulas; las de Spotify / Apple Music / YouTube **se mantienen al día solas**; una canción que ya descargaste **suena de tu archivo** (también sin Internet) y, si quieres, las que más escuchas **se descargan solas**
   - **Tu música** en Estadísticas: tu resumen del año (la canción del año, minutos, canciones, artistas, días con música, tu hora, tus artistas y canciones, minutos por mes), que se puede reproducir o guardar como lista
   - Panel **Sonido**: ecualizador con estilos y **los tuyos guardados**, **mismo volumen en todas las canciones** (se mide mientras suena y se recuerda por canción), fundido de hasta 12 s, **velocidad** de 0,5 a 2× (manteniendo el tono o no) y **temporizador para dormir** (minutos o «al acabar esta canción», bajando poco a poco)
-  - **Last.fm** (scrobbling) y **Discord** («Escuchando…»), con tus propias claves gratuitas
+  - **Last.fm** (scrobbling) y **Discord** («Escuchando…»), con tus propias claves gratuitas, con la carátula y un botón de YouTube en las canciones de YouTube
+  - **Modo juego**: cuando uno de tus juegos está abierto (por su .exe, elígelo de lo que tienes abierto), el mini reproductor se pone encima, pequeño y transparente, en una esquina, y vuelve a como estaba al cerrar el juego
 - **Estadísticas**: descargas y conversiones por mes, canales y artistas que más, lo más escuchado y el tamaño de la biblioteca
 - **Espacio en disco** (escritorio): aviso cuando queda poco y un límite opcional para la carpeta de descargas (avisar, o mover lo más antiguo a la papelera; nunca los favoritos)
 - **Línea de comandos**: `tubegrab "enlace" --mp3` (Ajustes → Sistema instala el comando); también `node cli.js` / `npm run cli` desde el repositorio
@@ -344,7 +346,7 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - **Extensión del navegador** (Chrome, Edge, Brave, Opera): un botón en YouTube y «Descargar con TubeGrab» en el menú del botón derecho abren el enlace en la app (ver `extension/README.md`)
 - **Copia de seguridad**: exporta ajustes, historial y suscripciones a un archivo e impórtalos en otro PC
 - **Copia automática** (app de escritorio) en una carpeta tuya (OneDrive, un disco…) cada día, semana o mes, guardando las 8 últimas; **avisos con botones** («Abrir», «Mostrar en la carpeta»)
-- **Control desde el móvil** (escritorio): escaneas un QR y una página en tu WiFi te deja mandar enlaces para que se descarguen en el PC y ver cómo van
+- **Control desde el móvil** (escritorio): escaneas un QR y una página en tu WiFi te deja mandar enlaces para que se descarguen en el PC y ver cómo van, y **controlar la música**: lo que suena con su carátula, pausa, siguiente, volumen o escribir una canción para que suene en el PC
 - **Avisos en el móvil** (escritorio): un aviso en el móvil, con la app gratuita ntfy, cuando termina (o falla) una tarea larga
 - **A tu gusto**: cualquier color de énfasis y tu propia imagen de fondo (con su velo y su desenfoque) o **tres colores tuyos**; una **presentación** corta la primera vez (y en Ajustes → Acerca de)
   - **Estilos rápidos** de un clic (Medianoche, Papel, Neón, Terminal, Bosque, Atardecer, Compacto) y un **código de estilo** para llevar tu aspecto a otro equipo
@@ -415,7 +417,7 @@ Con la firma desaparece el aviso "Editor desconocido" de SmartScreen (al momento
 ## Pruebas
 
 ```bash
-npm test                    # 245 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
+npm test                    # 246 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
 TG_NETWORK=1 npm test       # también descargas reales de YouTube
 ```
 
@@ -427,7 +429,7 @@ Para vídeos con restricciones, añade un archivo `cookies.txt` (formato Netscap
 
 Las revisiones de seguridad son asistidas por IA (Claude, Anthropic) y se ejecutan en cambios significativos para detectar riesgos de inyección, configuraciones inseguras y vulnerabilidades en dependencias. Los hallazgos se registran en [`BUGLOG.md`](BUGLOG.md).
 
-**Última revisión:** 2026-10-04 (revisión 17, v3.7.4: auditoría de accesibilidad de todas las páginas con el teclado de verdad, y tres fallos corregidos en el reproductor y el mini reproductor). Antes: (revisión 16, v3.7.1): escuchar sin descargar y las listas de Spotify revisados con pruebas de ataque (solo los servidores de medios de YouTube, ids y enlaces validados, listas limpiadas, como mucho 3 yt-dlp a la vez). Antes: (revisión 15, v3.5.0) — todo lo nuevo de la 3.5 revisado con pruebas de ataque: los podcasts, las páginas de Spotify/Apple y MusicBrainz solo llegan a direcciones públicas (lo comprueba la propia conexión, también tras redirecciones y con trucos de IPv4 dentro de IPv6, que era el fallo corregido aquí); fpcalc nunca abre lo que se sube (nuestro ffmpeg con lista blanca le prepara un WAV); las canciones importadas son búsquedas de YouTube en texto plano después de `--`; el proxy se valida antes de llegar a yt-dlp; grabar la pantalla solo justo después de elegirla, nunca el micrófono ni la cámara; el secreto de Last.fm nunca llega a la página; el archivo de la cola y las tareas se vuelven a validar al leerlos. Detalles en BUGLOG.md.
+**Última revisión:** 2026-10-04 (revisión 18, v3.10.0: todo lo nuevo de la 3.8 a la 3.10 con pruebas de ataque: la página de música del móvil solo para el móvil emparejado y nuestro formulario, títulos escapados, sigue sin scripts y con imágenes solo de YouTube; la traducción de letras y el historial de escuchas solo aceptan datos cortos y comprobados; el modo juego solo lee nombres de programas; las barras del visualizador solo vienen de la ventana principal; auditoría de accesibilidad de cada vista nueva, con el teclado). Antes: (revisión 17, v3.7.4: auditoría de accesibilidad de todas las páginas con el teclado de verdad, y tres fallos corregidos en el reproductor y el mini reproductor). Antes: (revisión 16, v3.7.1): escuchar sin descargar y las listas de Spotify revisados con pruebas de ataque (solo los servidores de medios de YouTube, ids y enlaces validados, listas limpiadas, como mucho 3 yt-dlp a la vez). Antes: (revisión 15, v3.5.0) — todo lo nuevo de la 3.5 revisado con pruebas de ataque: los podcasts, las páginas de Spotify/Apple y MusicBrainz solo llegan a direcciones públicas (lo comprueba la propia conexión, también tras redirecciones y con trucos de IPv4 dentro de IPv6, que era el fallo corregido aquí); fpcalc nunca abre lo que se sube (nuestro ffmpeg con lista blanca le prepara un WAV); las canciones importadas son búsquedas de YouTube en texto plano después de `--`; el proxy se valida antes de llegar a yt-dlp; grabar la pantalla solo justo después de elegirla, nunca el micrófono ni la cámara; el secreto de Last.fm nunca llega a la página; el archivo de la cola y las tareas se vuelven a validar al leerlos. Detalles en BUGLOG.md.
 
 **Revisión 13:** 2026-10-01 (v3.3.0) — v3.1–v3.3 revisadas con pruebas de ataque: el control desde el móvil solo en la dirección de la WiFi, para un móvil emparejado por QR, comprobando Host y Origin; las plantillas de nombre solo con nuestras etiquetas (sin `/`, `..`, `%(`…); «Empezar ya» solo en escritorio para que nadie se salte los límites de un servidor compartido; las preferencias manipuladas (color, fondo, plantilla) nunca llegan a la página. Encontrado y corregido al probar: un bucle infinito en el texto del botón de descarga y un tamaño estimado que no se actualizaba. 0 vulnerabilidades conocidas; dependencias al día.
 

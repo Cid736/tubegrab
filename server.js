@@ -1402,6 +1402,8 @@ app.post('/api/watch', requireDesktop, requireClient, (req, res) => {
 });
 // From the main process: the folder was chosen in its dialog.
 process.on('message', (msg) => {
+  // What the app's player is playing (for the phone's music page).
+  if (msg && msg.type === 'player-state' && remote) { remote.setPlayer(msg.state); return; }
   if (msg && msg.type === 'watch-reload' && watcher) {
     const enabled = watcher.config.enabled;
     watcher.config = watcher.load();
@@ -1525,6 +1527,12 @@ const remote = IS_DESKTOP ? new RemoteServer({
   addDownloads: addDownloadsFromPhone,
   listJobs: (clientId) => jobs.listFor(clientId),
   listProfiles: (clientId) => profiles.list(clientId).profiles.map((p) => ({ id: p.id, name: p.name })),
+  // The music: asked of the app (the main process checks it again and hands it to the player).
+  playerCommand: (cmd) => {
+    if (!process.send || !process.connected) return false;
+    process.send({ type: 'player-command', cmd });
+    return true;
+  },
 }) : null;
 async function remoteView(state) {
   if (!state.pairUrl) return state;

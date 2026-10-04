@@ -702,3 +702,25 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - **Radio de una lista:** las mezclas de YouTube de tres de sus canciones, entrelazadas, sin repetir las de la lista (las tres a la vez: unos 4 s en vez de 12).
 - **Suena tu archivo:** una canción de YouTube que ya tienes descargada (mismo artista y título) suena desde tu biblioteca, también sin Internet. Se puede desactivar.
 - **Guardar solas las que más escucho** (desactivado por defecto): la quinta vez que suena una canción de YouTube se descarga en MP3, una sola vez, y nunca si ya la tenías.
+
+
+---
+
+## 2026-10-04 — v3.10.0: modo juego, la música desde el móvil, Discord; revisión 18
+
+### [Feature] Modo juego automático (Ajustes → Sistema)
+- Tus juegos por su programa (`.exe`), escritos o elegidos de lo que tienes abierto. Cada 8 s se mira la lista de procesos de Windows (`tasklist`, solo nombres; nada toca el juego). Al abrirse uno, el mini reproductor se pone encima con tu opacidad, compacto y en tu esquina (y dejando pasar los clics si quieres); al cerrarlo, vuelve a como estaba (se guarda en disco por si se cierra la app a mitad de partida) y se cierra si solo se abrió para el juego.
+- Probado con el Bloc de notas haciendo de juego: se abre compacto arriba a la derecha y al cerrarlo vuelve todo a su sitio.
+
+### [Feature] La música desde el móvil
+- La página del móvil tiene «Música»: lo que suena con su carátula de YouTube, el tiempo y el volumen; ⏮ ⏯ ⏭, volumen y silencio; y «Buscar una canción»: escribes el nombre y suena en el PC (en su propia página, porque la de música se recarga sola). Probado: pausa, −10 % de volumen y «Despacito» sonando en 4 s.
+- La ventana principal le cuenta al servidor lo que suena (solo títulos, tiempos, volumen y la carátula de YouTube, cuando cambia algo); lo que pide el móvil lo comprueba el servidor y otra vez la app.
+
+### [Feature] Discord
+- Las canciones de YouTube muestran su carátula y un botón «YouTube» en tu perfil.
+
+### [Seguridad] Revisión 18 (todo lo nuevo de la 3.8 a la 3.10)
+- **Página de música del móvil:** solo con la cookie del emparejamiento; solo nuestro formulario (Origin y tipo de contenido); acciones de una lista fija, el texto de búsqueda limpio y como mucho 200 caracteres, cuerpos de más de 2 KB cortados; títulos y «a continuación» escapados; la política sigue sin permitir scripts e imágenes solo de `i.ytimg.com`. Pruebas de ataque nuevas en `test/remote.test.js`.
+- **Historial de escuchas y traducción:** solo canciones con clave válida (`yt:` + id o `f:` + ruta), textos cortos y sin caracteres de control, miniaturas solo de YouTube; un archivo manipulado se lee con cuidado (test). La traducción solo acepta 250 líneas cortas a un idioma de la lista.
+- **Modo juego:** `tasklist` y PowerShell con argumentos fijos (nada de lo que escribes llega a una línea de comandos); nombres validados (`*.exe`, sin rutas) y nunca programas de Windows o de TubeGrab.
+- **Accesibilidad:** auditoría de todas las páginas, del panel Sonido, la letra, «A continuación», «Ahora suena» y una lista hecha para ti: nada sin nombre ni sin etiqueta; en «Ahora suena» el tabulador no se sale y Esc cierra.

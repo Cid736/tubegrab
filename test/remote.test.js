@@ -128,3 +128,62 @@ test('remembered across restarts (same code and port), and a corrupt file is ign
   fs.writeFileSync(file, '{"token":"../x","clientId":"nope","enabled":true}');
   assert.equal(new RemoteServer(opts).config.enabled, false);
 });
+
+// v3.10: the music page — what's playing (escaped), the player's buttons and
+// "play a song by its name", only for the paired phone and our own form.
+test('music: what is playing, the buttons, a song by its name, and the attacks', async () => {
+  const sent = [];
+  const { server } = makeServer({ playerCommand: (cmd) => { sent.push(cmd); return true; } });
+  const st = await server.enable(CLIENT);
+  const { port } = server;
+  const token = st.pairUrl.split('/pair/')[1];
+  try {
+    const formHeaders = (jar) => ({ 'Content-Type': 'application/x-www-form-urlencoded', ...jar });
+    assert.equal((await request(port, 'GET', '/music')).status, 401, 'not paired');
+    assert.equal((await request(port, 'POST', '/music', { headers: formHeaders({}), body: 'a=toggle' })).status, 401, 'not paired: nothing pressed');
+    assert.equal(sent.length, 0);
+    const ok = await request(port, 'GET', `/pair/${token}`);
+    const jar = { Cookie: ok.headers['set-cookie'][0].split(';')[0] };
+    // Nothing playing yet
+    const empty = await request(port, 'GET', '/music', { headers: jar });
+    assert.equal(empty.status, 200);
+    assert.match(empty.body, /No suena nada/);
+    // Something playing: titles escaped, only YouTube covers, the policy allows those only
+    server.setPlayer({ title: '<script>alert(1)</script>', artist: 'A&B', playing: true, time: 61, duration: 200, volume: 0.4, cover: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', upNext: [{ title: '<b>siguiente</b>' }] });
+    const page = await request(port, 'GET', '/music', { headers: jar });
+    assert.ok(!page.body.includes('<script>alert'), 'title escaped');
+    assert.ok(page.body.includes('&lt;b&gt;siguiente'), 'up next escaped');
+    assert.ok(page.body.includes('A&amp;B'));
+    assert.ok(page.body.includes('src="https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"'));
+    assert.match(page.body, /Volumen 40 %/);
+    assert.match(page.headers['content-security-policy'], /img-src https:\/\/i\.ytimg\.com/);
+    assert.ok(!/script-src/.test(page.headers['content-security-policy']), 'still no scripts at all');
+    server.setPlayer({ title: 'x', cover: 'https://evil.example/x.jpg' });
+    assert.ok(!(await request(port, 'GET', '/music', { headers: jar })).body.includes('evil.example'), 'other pictures never shown');
+    // The buttons
+    for (const a of ['prev', 'toggle', 'next', 'voldown', 'volup', 'mute']) {
+      const r = await request(port, 'POST', '/music', { headers: formHeaders(jar), body: `a=${a}` });
+      assert.equal(r.status, 303);
+      assert.equal(r.headers.location, '/music?m=ok');
+    }
+    assert.deepEqual(sent.map((c) => c.cmd), ['prev', 'toggle', 'next', 'voldown', 'volup', 'mute']);
+    // Unknown actions do nothing; a song by name is cleaned and capped
+    for (const body of ['a=quit', 'a=stream&items=x', 'a=', 'a=play&q=']) await request(port, 'POST', '/music', { headers: formHeaders(jar), body });
+    assert.equal(sent.length, 6, 'nothing else reached the player');
+    const q = await request(port, 'POST', '/music', { headers: formHeaders(jar), body: new URLSearchParams({ a: 'play', q: `  despacito\u0000\r\n${'x'.repeat(300)}` }).toString() });
+    assert.equal(q.headers.location, '/music?m=looking');
+    assert.equal(sent[6].cmd, 'playQuery');
+    assert.ok(sent[6].q.startsWith('despacito') && sent[6].q.length <= 200 && !/[\u0000-\u001f]/.test(sent[6].q));
+    // Another site can't press the buttons (origin), nor send something else than our form
+    assert.equal((await request(port, 'POST', '/music', { headers: { ...formHeaders(jar), Origin: 'http://evil.example' }, body: 'a=toggle' })).status, 403);
+    assert.equal((await request(port, 'POST', '/music', { headers: { 'Content-Type': 'application/json', ...jar }, body: '{"a":"toggle"}' })).status, 415);
+    assert.equal((await request(port, 'POST', '/music', { headers: formHeaders(jar), body: `a=play&q=${'y'.repeat(5000)}` }).catch(() => ({ status: 0 }))).status !== 303, true, 'too big: dropped');
+    assert.equal(sent.length, 7);
+    // The search page: its own page, without reloading itself
+    const search = await request(port, 'GET', '/music/search', { headers: jar });
+    assert.equal(search.status, 200);
+    assert.ok(!/http-equiv="refresh"/.test(search.body));
+  } finally {
+    server.disable();
+  }
+});
