@@ -685,3 +685,20 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 ### [Bug] El desfase de la letra de las canciones descargadas se perdía al reiniciar
 - **Causa:** se guardaba por el id del archivo, que cambia en cada arranque.
 - **Fix:** se guarda por la ruta dentro de la carpeta de descargas (igual que el volumen recordado).
+
+
+---
+
+## 2026-10-04 — v3.9.0: hecho para ti, tu música, listas en carpetas
+
+### [Feature] Lo que escuchas (solo en este equipo)
+- Cada canción, al dejar de sonar, se apunta con los segundos que sonó de verdad (a 1,5× cuentan los segundos reales); una «escucha» son 30 s o media canción. `lib/listenlog.js` → `listen-history.json`, como mucho 60 000 escuchas y 3 años. Se escribe al momento (la app puede cerrarse en cualquier instante) y se puede pausar o borrar en Escuchar → Opciones.
+- **Hecho para ti** (Escuchar): mixes diarios de tus tres artistas de los últimos 60 días (la mezcla de YouTube de su canción que más pones, con las tuyas suyas intercaladas; cambia cada día), lo más escuchado (90 días), escuchado hace poco y redescubre (lo que ponías y lleva un mes sin sonar). Tus artistas, cada uno con su radio.
+- **Tu música** (Estadísticas): el resumen de un año o de siempre, en tu zona horaria; las canciones se pueden reproducir desde ahí y el top guardarse como lista.
+
+### [Feature] Listas
+- **Carpetas** (escribe una nueva o elige una que ya tengas) y **mosaico** de cuatro carátulas.
+- **Se mantienen al día solas:** las que vienen de un enlace se vuelven a leer a los 3 min de arrancar y luego cada 3 h si llevan 12 h sin leerse, una cada vez. Los vídeos ya encontrados se conservan.
+- **Radio de una lista:** las mezclas de YouTube de tres de sus canciones, entrelazadas, sin repetir las de la lista (las tres a la vez: unos 4 s en vez de 12).
+- **Suena tu archivo:** una canción de YouTube que ya tienes descargada (mismo artista y título) suena desde tu biblioteca, también sin Internet. Se puede desactivar.
+- **Guardar solas las que más escucho** (desactivado por defecto): la quinta vez que suena una canción de YouTube se descarga en MP3, una sola vez, y nunca si ya la tenías.

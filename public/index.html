@@ -565,9 +565,24 @@
             <p class="hint" id="listenHint">Tus listas se quedan aquí y cada canción suena directo desde YouTube cuando le toca, sin descargar nada. En Spotify: los tres puntos de la playlist → Compartir → Copiar enlace (la playlist tiene que ser pública).</p>
 
             <div class="listen-home" id="listenHome">
+              <div class="listen-for-you hidden" id="listenForYou">
+                <div class="section-header"><h2>Hecho para ti</h2><span class="hint">Con lo que escuchas, solo en este equipo</span></div>
+                <div class="listen-grid-row" id="forYouCards"></div>
+                <div class="section-header hidden" id="forYouArtistsHead"><h2>Tus artistas</h2><span class="hint">La radio de cada uno</span></div>
+                <div class="artist-chips" id="forYouArtists"></div>
+              </div>
               <div class="section-header"><h2>Tus listas</h2></div>
               <div class="listen-grid" id="listenGrid"></div>
               <p class="hint hidden" id="listenEmpty">Aún no tienes listas. Pega arriba el enlace de una playlist, o guarda los resultados de Buscar con «Guardar como lista».</p>
+              <details class="more-look listen-opts" id="listenOpts">
+                <summary>Opciones de Escuchar</summary>
+                <div class="group">
+                  <label class="row switch"><span class="row-label">Si ya la tengo descargada, que suene mi archivo <small>también sin Internet</small></span><input type="checkbox" id="loLocal" checked><span class="switch-ui"></span></label>
+                  <label class="row switch"><span class="row-label">Guardar solas las que más escucho <small>la quinta vez que suena una de YouTube, se descarga en MP3</small></span><input type="checkbox" id="loAuto"><span class="switch-ui"></span></label>
+                  <label class="row switch"><span class="row-label">Recordar lo que escucho <small>para «Hecho para ti» y tu resumen en Estadísticas; solo en este equipo</small></span><input type="checkbox" id="loLog" checked><span class="switch-ui"></span></label>
+                  <div class="row"><span class="row-label">Lo escuchado <small id="loCount"></small></span><button class="btn" id="loClear" type="button">Borrar lo escuchado</button></div>
+                </div>
+              </details>
             </div>
 
             <div class="listen-detail hidden" id="listenDetail">
@@ -577,13 +592,20 @@
                   <span class="listen-kind" id="ldKind"></span>
                   <input class="listen-name" id="ldName" type="text" maxlength="150" aria-label="Nombre de la lista" spellcheck="false">
                   <span class="listen-meta" id="ldMeta"></span>
+                  <div class="listen-extra" id="ldExtra">
+                    <label class="ld-folder"><span>Carpeta</span><input id="ldFolder" type="text" maxlength="60" list="ldFolders" placeholder="Sin carpeta" spellcheck="false" autocomplete="off"></label>
+                    <datalist id="ldFolders"></datalist>
+                    <label class="ld-sync hidden" id="ldSyncWrap"><input type="checkbox" id="ldSync"> Mantener al día (se actualiza sola desde el enlace)</label>
+                  </div>
                   <div class="listen-actions">
                     <button class="btn btn-primary" id="ldPlay" type="button">▶ Reproducir</button>
                     <button class="btn" id="ldShuffle" type="button">Aleatorio</button>
                     <button class="btn" id="ldQueue" type="button">Añadir a lo que suena</button>
+                    <button class="btn" id="ldRadio" type="button">Radio de esta lista</button>
                     <button class="btn" id="ldDownload" type="button">Descargar todo</button>
                     <button class="btn" id="ldRefresh" type="button">Actualizar</button>
                     <button class="btn" id="ldDelete" type="button">Borrar</button>
+                    <button class="btn hidden" id="ldKeep" type="button">Guardar como lista</button>
                   </div>
                 </div>
                 <button class="link-btn" id="ldBack" type="button">← Tus listas</button>
@@ -1259,6 +1281,40 @@
 
         <!-- ===== Estadísticas ===== -->
         <section class="view hidden" data-views="stats" id="statsSection">
+          <div class="desktop-only stat-music" id="statMusic">
+            <div class="section-header"><h2>Tu música</h2><select id="statYear" aria-label="Año"></select></div>
+            <div class="wrapped hidden" id="wrapped">
+              <div class="wr-hero">
+                <img class="wr-cover" id="wrCover" alt="">
+                <div class="wr-hero-text">
+                  <span class="wr-kicker" id="wrKicker"></span>
+                  <strong class="wr-song" id="wrSong"></strong>
+                  <span class="wr-artist" id="wrArtist"></span>
+                  <div class="wr-actions">
+                    <button class="btn btn-primary" id="wrPlay" type="button">▶ Reproducir tu top</button>
+                    <button class="btn" id="wrSave" type="button">Guardar como lista</button>
+                  </div>
+                </div>
+              </div>
+              <div class="stat-tiles" id="wrTiles"></div>
+              <div class="stat-cols">
+                <div>
+                  <div class="section-header"><h2>Tus artistas</h2></div>
+                  <div class="group list-group"><ol class="stat-rank" id="wrArtists"></ol></div>
+                </div>
+                <div>
+                  <div class="section-header"><h2>Tus canciones</h2></div>
+                  <div class="group list-group"><ol class="stat-rank" id="wrSongs"></ol></div>
+                </div>
+              </div>
+              <div class="section-header"><h2>Minutos por mes</h2><span class="hint" id="wrMonthsNote"></span></div>
+              <div class="group stat-chart-card">
+                <div class="stat-chart" id="wrMonths" role="img" aria-label="Minutos escuchados por mes"></div>
+              </div>
+            </div>
+            <p class="hint hidden" id="wrEmpty">Aún no hay nada: lo que escuches en el reproductor aparecerá aquí, con tus canciones y artistas del año. Se guarda solo en este equipo.</p>
+            <div class="section-header"><h2>Descargas</h2></div>
+          </div>
           <div class="stat-tiles" id="statTiles"></div>
           <div class="section-header"><h2>Por mes</h2><span class="hint" id="statMonthsNote"></span></div>
           <div class="group stat-chart-card">

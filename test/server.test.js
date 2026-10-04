@@ -623,6 +623,7 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
     assert.equal((await api(`${p}${p.includes('?') ? '&' : '?'}client=${CLIENT}`)).status, 404, `web: ${p}`);
   }
   assert.equal((await api('/api/lyrics/translate', json({ lines: ['hello'], to: 'es' }))).status, 404, 'web: translate');
+  for (const p of ['/api/listen/smart', '/api/listen/summary']) assert.equal((await api(p)).status, 404, `web: ${p}`);
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-stream-'));
   const port = await freePort();
   const { child, first } = startServer(port, { TUBEGRAB_ELECTRON: '1', TUBEGRAB_DATA_DIR: data });
@@ -660,6 +661,20 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
       assert.equal((await call('/api/lyrics/translate', json(body))).status, 400, JSON.stringify(body).slice(0, 80));
     }
     assert.equal((await call(`/api/library/lyrics?online=1&id=${'a'.repeat(32)}`)).status, 404);
+    // v3.9: what you listen to: only songs it can name, kept in the data folder, summaries of it.
+    for (const body of [{}, { song: 'x', secs: 60 }, { song: { key: 'yt:short', title: 'x' }, secs: 60 }, { song: { key: 'yt:dQw4w9WgXcQ', title: 'x' }, secs: 'a lot' },
+      { song: { key: 'yt:dQw4w9WgXcQ', title: 'x' }, secs: 1e9 }, { song: { key: '../../etc', title: 'x' }, secs: 60 }]) {
+      assert.equal((await (await call('/api/listen/log', json(body))).json()).ok, false, JSON.stringify(body));
+    }
+    assert.equal((await (await call('/api/listen/log', json({ song: { key: 'yt:dQw4w9WgXcQ', title: '<b>Never</b>', artist: 'Rick', thumb: 'javascript:alert(1)' }, secs: 90 }))).json()).plays, 1);
+    const smartNow = await (await call('/api/listen/smart')).json();
+    assert.equal(smartNow.top[0].title, '<b>Never</b>', 'kept as text');
+    assert.equal(smartNow.top[0].thumb, undefined, 'only YouTube thumbnails');
+    assert.equal((await (await call('/api/listen/summary?year=abcd&tz=99999')).json()).plays, 1, 'a bad year or zone: everything, UTC');
+    assert.ok(fs.existsSync(path.join(data, 'listen-history.json')));
+    assert.equal((await (await call('/api/listen/settings', json({ paused: 'yes', autoSave: 1 }))).json()).paused, false, 'only real booleans');
+    assert.equal((await (await call('/api/listen', { method: 'DELETE' })).json()).ok, true);
+    assert.equal((await (await call('/api/listen/smart')).json()).count, 0);
   } finally {
     child.kill();
     fs.rmSync(data, { recursive: true, force: true });

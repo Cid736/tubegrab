@@ -86,6 +86,9 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
   - **Up next** list (jump, remove, save as a list), **radio** with YouTube's mix of similar songs, and a **mini player that searches and plays** by itself, with volume, shuffle, repeat and radio; as an **overlay** over a game: see-through, always on top, fixed in place, clicks passing through, compact, in a corner
   - **Lyrics in step**: followed frame by frame, the line being sung fills in like karaoke, and − / + moves them if a version starts earlier or later (remembered per song)
   - **Now playing**: the cover in big over its own colours, the lyrics karaoke-style, a visualizer (bars or wave, also in the mini player) and full screen; **lyrics translated** line by line into your language; downloaded songs without lyrics get them from LRCLIB too
+  - **Made for you** in Listen, from what you play (kept only on this computer, can be paused or wiped): **daily mixes** of your top artists, **most played**, **recently played**, **rediscover**, and each artist's radio; **radio of a whole list**
+  - Lists in **folders**, with a **mosaic** of four covers; lists from Spotify / Apple Music / YouTube **keep themselves up to date**; a song you already downloaded **plays from your file** (also offline), and optionally the songs you play most are **downloaded by themselves**
+  - **Your music** in Statistics: your yearly summary — song of the year, minutes, songs, artists, days with music, your hour, top artists and songs, minutes per month — playable or saved as a list
   - **Sound** panel: equalizer with styles and **your own saved ones**, **same volume for every song** (measured while it plays, remembered per song), crossfade up to 12 s, **speed** 0.5–2× (keeping the pitch or not) and a **sleep timer** (minutes or "when this song ends", fading out)
   - **Last.fm** scrobbling and **Discord** "Listening to…" (with your own free keys)
 - **Statistics**: downloads and conversions per month, top channels and artists, most played, library size
@@ -206,7 +209,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 ## Tests
 
 ```bash
-npm test                    # 241 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
+npm test                    # 245 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
 TG_NETWORK=1 npm test       # also real YouTube downloads
 ```
 
@@ -329,6 +332,9 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
   - Lista **A continuación** (saltar, quitar, guardar como lista), **radio** con la mezcla de canciones parecidas de YouTube, y un **mini reproductor que busca y reproduce** él solo, con volumen, aleatorio, repetir y radio; como **overlay** sobre un juego: transparente, siempre encima, fijo, dejando pasar los clics, compacto, en una esquina
   - **Letra a la par**: se sigue fotograma a fotograma, la línea que se canta se rellena como en un karaoke, y con − / + se ajusta si una versión empieza antes o después (se recuerda por canción)
   - **Ahora suena**: la carátula en grande sobre sus propios colores, la letra como en un karaoke, un visualizador (barras u onda, también en el mini reproductor) y pantalla completa; **la letra traducida** línea a línea a tu idioma; las canciones descargadas sin letra también la buscan en LRCLIB
+  - **Hecho para ti** en Escuchar, con lo que escuchas (solo en este equipo, se puede pausar o borrar): **mixes diarios** de tus artistas, **lo más escuchado**, **escuchado hace poco**, **redescubre** y la radio de cada artista; **radio de una lista entera**
+  - Listas en **carpetas**, con un **mosaico** de cuatro carátulas; las de Spotify / Apple Music / YouTube **se mantienen al día solas**; una canción que ya descargaste **suena de tu archivo** (también sin Internet) y, si quieres, las que más escuchas **se descargan solas**
+  - **Tu música** en Estadísticas: tu resumen del año (la canción del año, minutos, canciones, artistas, días con música, tu hora, tus artistas y canciones, minutos por mes), que se puede reproducir o guardar como lista
   - Panel **Sonido**: ecualizador con estilos y **los tuyos guardados**, **mismo volumen en todas las canciones** (se mide mientras suena y se recuerda por canción), fundido de hasta 12 s, **velocidad** de 0,5 a 2× (manteniendo el tono o no) y **temporizador para dormir** (minutos o «al acabar esta canción», bajando poco a poco)
   - **Last.fm** (scrobbling) y **Discord** («Escuchando…»), con tus propias claves gratuitas
 - **Estadísticas**: descargas y conversiones por mes, canales y artistas que más, lo más escuchado y el tamaño de la biblioteca
@@ -409,7 +415,7 @@ Con la firma desaparece el aviso "Editor desconocido" de SmartScreen (al momento
 ## Pruebas
 
 ```bash
-npm test                    # 241 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
+npm test                    # 245 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
 TG_NETWORK=1 npm test       # también descargas reales de YouTube
 ```
 

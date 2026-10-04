@@ -1590,3 +1590,47 @@ body.now-open { overflow: hidden; }
   .now-lines li, .now-lines li.on .ly-text { color: CanvasText; background: none; }
   .now-lines li.on { outline: 2px solid Highlight; }
 }
+
+/* ===== v3.9: made for you, folders, mosaics, your yearly summary ===== */
+.listen-grid { display: block; margin-top: 0; }
+.listen-grid-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; margin-top: 12px; }
+.listen-folder { display: flex; align-items: center; gap: 8px; margin: 22px 0 0; font-size: 14px; font-weight: 650; color: var(--text); }
+.listen-folder svg { width: 16px; height: 16px; fill: none; stroke: var(--text-2); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.listen-art { position: relative; }
+.listen-mosaic { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; width: 100%; height: 100%; }
+.listen-mosaic img { width: 100%; height: 100%; object-fit: cover; }
+.listen-card:hover .listen-mosaic img { transform: none; }
+.listen-tag { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 10px 9px; font-size: 14px; font-weight: 800; line-height: 1.15; text-align: left; color: #fff;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.72)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.listen-tag::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--accent); }
+.listen-tag.tint-2::before { background: #ff375f; }
+.listen-tag.tint-3::before { background: #30d158; }
+.for-you-card .listen-art img { filter: saturate(1.1); }
+.listen-for-you .section-header { margin-top: 18px; }
+.artist-chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.artist-chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px 4px 4px; border: 0; border-radius: 999px; background: var(--group); box-shadow: inset 0 0 0 0.5px var(--hairline); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.artist-chip:hover { background: var(--hover); }
+.artist-chip img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--inset); }
+.listen-opts { margin-top: 26px; }
+.listen-extra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 6px; font-size: 12px; color: var(--text-2); }
+.ld-folder { display: inline-flex; align-items: center; gap: 6px; }
+.ld-folder input { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--hairline); background: var(--inset); color: var(--text); width: 160px; }
+.ld-sync { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.ld-sync.hidden { display: none; }
+
+/* Your music: the song of the year, then the numbers */
+.stat-music { margin-bottom: 8px; }
+.stat-music .section-header select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 7px; border: 1px solid var(--hairline); background: var(--group); color: var(--text); }
+.wr-hero { display: flex; align-items: center; gap: 20px; padding: 18px; border-radius: 16px; margin-bottom: 14px; color: #fff;
+  background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 75%, #000), #121212 70%); box-shadow: var(--shadow-float); }
+.wr-cover { width: 120px; height: 120px; flex: none; border-radius: 10px; object-fit: cover; background: rgba(255, 255, 255, 0.12); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4); }
+.wr-cover:not([src]) { visibility: hidden; }
+.wr-hero-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wr-kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
+.wr-song { font-family: var(--font-display); font-size: 24px; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+.wr-artist { font-size: 13px; opacity: 0.8; }
+.wr-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.wr-hero .btn:not(.btn-primary) { background: rgba(255, 255, 255, 0.16); color: #fff; }
+.stat-rank li.stat-playable { cursor: pointer; border-radius: 8px; }
+.stat-rank li.stat-playable:hover, .stat-rank li.stat-playable:focus-visible { background: var(--hover); }
+@media (max-width: 560px) { .wr-hero { flex-direction: column; align-items: flex-start; } }

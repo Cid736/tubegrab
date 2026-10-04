@@ -1103,8 +1103,29 @@ app.post('/api/streamlists', requireDesktop, requireClient, createLimiter, (req,
 app.post('/api/streamlists/:id', requireDesktop, requireClient, createLimiter, (req, res) => {
   if (!listFor(req, res)) return;
   const b = req.body || {};
-  res.json(streamLists.update(String(req.params.id), { name: b.name, add: Array.isArray(b.add) ? b.add : undefined }));
+  res.json(streamLists.update(String(req.params.id), {
+    name: b.name, add: Array.isArray(b.add) ? b.add : undefined,
+    folder: typeof b.folder === 'string' ? b.folder : undefined, sync: typeof b.sync === 'boolean' ? b.sync : undefined,
+  }));
 });
+// "Keep it up to date": lists from a link are read again by themselves, a
+// few minutes after start and then every few hours (one at a time; a list
+// that can't be read now just waits for the next round).
+async function syncLists() {
+  if (!streamLists) return;
+  for (const id of streamLists.dueForSync()) {
+    const l = streamLists.get(id);
+    if (!l || !importSlots.take()) continue;
+    try {
+      const fresh = await readListLink(l.url);
+      if (fresh.tracks.length) streamLists.update(id, { tracks: fresh.tracks });
+    } catch { /* next round */ } finally { importSlots.release(); }
+  }
+}
+if (IS_DESKTOP) {
+  setTimeout(() => { syncLists(); }, 3 * 60 * 1000).unref();
+  setInterval(() => { syncLists(); }, 3 * 3600 * 1000).unref();
+}
 app.post('/api/streamlists/:id/refresh', requireDesktop, requireClient, infoLimiter, async (req, res) => {
   const l = listFor(req, res);
   if (!l) return;
@@ -1123,6 +1144,33 @@ app.delete('/api/streamlists/:id/tracks/:n', requireDesktop, requireClient, (req
   return res.json(l);
 });
 app.delete('/api/streamlists/:id', requireDesktop, requireClient, (req, res) => res.json({ ok: streamLists.remove(String(req.params.id)) }));
+
+// === What you listen to (desktop app): lists made from it, the yearly summary ===
+const { ListenLog } = require('./lib/listenlog');
+const listenLog = IS_DESKTOP ? new ListenLog(path.join(dataDir, 'listen-history.json')) : null;
+const AUTO_SAVE_PLAYS = 5;
+app.post('/api/listen/log', requireDesktop, requireClient, createLimiter, (req, res) => {
+  const b = req.body || {};
+  const plays = listenLog.add(b.song, b.secs);
+  // "Keep the songs I play most": the fifth time one from YouTube is heard, it's downloaded (once).
+  if (plays !== null && plays >= AUTO_SAVE_PLAYS && listenLog.autoSave && b.song.key.startsWith('yt:')) {
+    const t = listenLog.tracks.get(b.song.key);
+    const url = `https://www.youtube.com/watch?v=${b.song.key.slice(3)}`;
+    if (t && !t.saved) {
+      listenLog.markSaved(b.song.key);
+      if (!alreadyFor(req.clientId, url)) postDownload(req.clientId, { urls: [url], mode: 'audio', audioFormat: 'mp3' });
+    }
+  }
+  res.json({ ok: plays !== null, plays });
+});
+app.get('/api/listen/smart', requireDesktop, requireClient, (req, res) => res.json(listenLog.smart()));
+app.get('/api/listen/summary', requireDesktop, requireClient, (req, res) => {
+  const year = /^\d{4}$/.test(String(req.query.year || '')) ? Number(req.query.year) : null;
+  const tz = Number.isInteger(Number(req.query.tz)) && Math.abs(Number(req.query.tz)) <= 840 ? Number(req.query.tz) : 0;
+  res.json(listenLog.summary(year, tz));
+});
+app.post('/api/listen/settings', requireDesktop, requireClient, (req, res) => res.json(listenLog.settings(req.body || {})));
+app.delete('/api/listen', requireDesktop, requireClient, (req, res) => { listenLog.clear(); res.json({ ok: true }); });
 
 // Lyrics for a song that's playing from YouTube (LRCLIB, by its artist and title).
 app.get('/api/stream/lyrics', requireDesktop, requireClient, infoLimiter, requireStreaming, async (req, res) => {
