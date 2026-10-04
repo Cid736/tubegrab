@@ -827,3 +827,21 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 
 ### [Bug] Al revisar, las canciones borradas no se olvidaban si no había nada nuevo que leer
 - 264 pruebas.
+
+
+---
+
+## 2026-10-05 — v3.14.0: Ctrl+K, el menú del Explorador, tu biblioteca en el móvil
+
+### [Feature] Ctrl+K
+- Un cuadro para ir a cualquier sitio: secciones, ajustes (los del buscador de Ajustes), tus listas de Escuchar, las canciones de tu biblioteca y acciones (mini reproductor, Revisar, Duplicados, Favoritas, Ahora suena, Personalizar Escuchar, atajos). ↑/↓, Intro, Esc; combobox accesible.
+
+### [Feature] Menú del botón derecho del Explorador (Windows)
+- Ajustes → Sistema → «Menú del botón derecho»: «Convertir a MP3 / Comprimir / Abrir en el editor con TubeGrab» en audios y vídeos. Un solo `.reg` importado en HKCU (sin administrador), quitado al desactivarlo; se vuelve a escribir si la app portátil cambia de sitio. En Windows 11, en «Mostrar más opciones».
+- El archivo llega como `exe --tg-file=<acción> -- "%1"`: después de `--`, nada puede tomarse como opción; solo un archivo de audio/vídeo real. El proceso principal pasa la ruta al servidor con un pase de un solo uso (10 min) y la página solo recibe el pase: ninguna página puede pedir una ruta.
+- MP3: se convierte en el sitio, como la carpeta vigilada (el original no se toca). Comprimir / editor: la sección se abre con el archivo cargado.
+- Probado: registro escrito y borrado; MP3 hecho desde una segunda instancia; el editor abre el vídeo; `win.ini` ignorado.
+
+### [Feature] Tu biblioteca en el móvil
+- Nueva pestaña «En el móvil» en la página del teléfono: tu música (y vídeos) con buscador; suena en el móvil desde el PC, con saltos por rangos de bytes y la siguiente al acabar (un script de 1 línea con nonce; CSP con `media-src 'self'` solo en esa página). Solo con el móvil emparejado y solo archivos de la biblioteca.
+- 265 pruebas.

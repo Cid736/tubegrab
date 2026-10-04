@@ -92,6 +92,9 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
   - **Sound** panel: equalizer with styles and **your own saved ones**, **same volume for every song** (measured while it plays, remembered per song), crossfade up to 12 s, **speed** 0.5–2× (keeping the pitch or not) and a **sleep timer** (minutes or "when this song ends", fading out)
   - **Last.fm** scrobbling and **Discord** "Listening to…" (with your own free keys), with the song's cover and a YouTube button for songs from YouTube
   - **Listen**, redesigned: a greeting with quick tiles, big covers, a list page in the colour of its cover with a big ▶, songs in a table (double-click or Enter to play, drag or Alt+↑/↓ to reorder, a search box, a menu on right click: play next, add to queue, song radio, add to a list, download, copy the link) and the song playing marked with moving bars. Choose its look: modern or classic, always dark or not, your colour or the cover's, cover size, compact rows, one click or double click
+  - **Ctrl+K**: one box to go anywhere — a section, a setting, one of your lists, a song of your library, or something to do
+  - **The Explorer's right-click menu** (Settings → System): "Convert to MP3", "Compress" and "Open in the editor" on your audio and video files, without opening TubeGrab first
+  - **Your library on the phone** (Control from your phone → On the phone): your songs play on the phone, from the PC, over the WiFi, one after another
   - **Review the library** (Library → Review): low-quality songs to download again better, missing artist / title / cover filled in from MusicBrainz, lyrics found for the songs without them, albums checked for missing songs (and downloaded), and what takes up the most space or hasn't been opened in months
   - Each download is checked (it opens, lasts what it should, its end decodes) and downloaded again once if it arrived damaged; in music mode a music video can come as the song's **official audio**
   - **New from your artists**: new songs by the ones you listen to most, in Listen and as a Windows notice
@@ -222,7 +225,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 ## Tests
 
 ```bash
-npm test                    # 264 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
+npm test                    # 265 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
 TG_NETWORK=1 npm test       # also real YouTube downloads
 ```
 
@@ -351,6 +354,9 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
   - Panel **Sonido**: ecualizador con estilos y **los tuyos guardados**, **mismo volumen en todas las canciones** (se mide mientras suena y se recuerda por canción), fundido de hasta 12 s, **velocidad** de 0,5 a 2× (manteniendo el tono o no) y **temporizador para dormir** (minutos o «al acabar esta canción», bajando poco a poco)
   - **Last.fm** (scrobbling) y **Discord** («Escuchando…»), con tus propias claves gratuitas, con la carátula y un botón de YouTube en las canciones de YouTube
   - **Escuchar**, renovado: saludo con accesos rápidos, portadas grandes, la página de cada lista con el color de su portada y un ▶ grande, canciones en tabla (doble clic o Intro para escuchar, arrastrar o Alt+↑/↓ para reordenar, un buscador, menú con el botón derecho: escuchar a continuación, añadir a la cola, radio de la canción, añadir a una lista, descargar, copiar el enlace) y la que suena marcada con barras que se mueven. Elige su aspecto: moderno o clásico, siempre oscuro o no, tu color o el de la portada, tamaño de las portadas, filas compactas, un clic o doble clic
+  - **Ctrl+K**: un cuadro para ir a cualquier cosa — una sección, un ajuste, una de tus listas, una canción de tu biblioteca o algo que hacer
+  - **Menú del botón derecho del Explorador** (Ajustes → Sistema): «Convertir a MP3», «Comprimir» y «Abrir en el editor» sobre tus audios y vídeos, sin abrir antes TubeGrab
+  - **Tu biblioteca en el móvil** (Control desde el móvil → En el móvil): tus canciones suenan en el móvil, desde el PC, por la WiFi, una detrás de otra
   - **Revisar la biblioteca** (Biblioteca → Revisar): canciones de poca calidad para volver a bajarlas mejor, artista / título / carátula que faltan desde MusicBrainz, letras para las que no tienen, álbumes comprobados para bajar las canciones que faltan, y lo que más ocupa o no abres desde hace meses
   - Cada descarga se comprueba (se abre, dura lo que debe, su final se lee bien) y se repite una vez si llegó dañada; en modo música un videoclip puede bajarse como el **audio oficial** de la canción
   - **Novedades de tus artistas**: canciones nuevas de los que más escuchas, en Escuchar y con un aviso de Windows
@@ -441,7 +447,7 @@ Con la firma desaparece el aviso "Editor desconocido" de SmartScreen (al momento
 ## Pruebas
 
 ```bash
-npm test                    # 264 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
+npm test                    # 265 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
 TG_NETWORK=1 npm test       # también descargas reales de YouTube
 ```
 

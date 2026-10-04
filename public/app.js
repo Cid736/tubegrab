@@ -559,7 +559,9 @@ const settingsSearch = (() => {
     if (e.key === 'Enter') { const first = list.querySelector('button'); if (first) first.click(); }
     if (e.key === 'Escape') { input.value = ''; list.classList.add('hidden'); }
   });
-  return { build };
+  /** Every setting, for Ctrl+K. */
+  const all = () => { if (!index) build(); return index; };
+  return { build, all, go, TAB };
 })();
 
 // === Own accent colour and own background picture ===
@@ -8596,7 +8598,7 @@ const listenUi = (() => {
   const home = () => { if (open) back(); };
   /** Ctrl+F: the list's own search box. */
   const focusFilter = () => { if (!open || $('listenDetail').classList.contains('hidden')) return false; $('ldFilter').focus(); $('ldFilter').select(); return true; };
-  return { saveAsList, load, fromLog, playFromMini, look: () => look, toggleLikePlaying, openLiked, home, focusFilter };
+  return { saveAsList, load, fromLog, playFromMini, look: () => look, toggleLikePlaying, openLiked, home, focusFilter, openList: (id) => show(id) };
 })();
 
 // === A menu at the pointer or under a button (a song's right click, "…") ===
@@ -9016,6 +9018,160 @@ const libReview = (() => {
   return { open };
 })();
 
+// === Ctrl+K: one box to go anywhere — a section, a setting, one of your
+// lists, a song of your library, or something to do ===
+const palette = (() => {
+  const modal = $('cmdModal');
+  const input = $('cmdInput');
+  const list = $('cmdList');
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  let items = [];
+  let shown = [];
+  let at = 0;
+  let back = null;
+  let lists = [];
+  const KIND = { view: 'Sección', setting: 'Ajuste', list: 'Lista', song: 'Canción', action: 'Hacer' };
+  function sources() {
+    const out = [];
+    for (const [view, info] of Object.entries(VIEWS)) {
+      if (info.desktop && !desktopApi) continue;
+      if (view.startsWith('set-') && view !== 'set-appearance') continue;
+      out.push({ kind: 'view', label: t(info.title), sub: t(info.sub || ''), run: () => setView(view) });
+    }
+    for (const s of settingsSearch.all()) out.push({ kind: 'setting', label: s.name, sub: t(settingsSearch.TAB[s.view]), run: () => settingsSearch.go(s) });
+    const action = (label, run, desk = false) => { if (!desk || desktopApi) out.push({ kind: 'action', label, sub: '', run }); };
+    action(t('Atajos de teclado'), () => keysHelp.open());
+    action(t('Mini reproductor'), () => desktopApi.openMini(), true);
+    action(t('Revisar la biblioteca'), () => { setView('library'); libReview.open && libReview.open(); }, true);
+    action(t('Buscar duplicados'), () => { setView('library'); $('libDupes').click(); }, true);
+    action(t('Favoritas'), () => { setView('listen'); listenUi.openLiked && listenUi.openLiked(); }, true);
+    action(t('Ahora suena'), () => { if (player.current()) $('plNow').click(); });
+    action(t('Personalizar Escuchar'), () => { setView('listen'); listenUi.home && listenUi.home(); setTimeout(() => { $('listenOpts').open = true; $('listenOpts').scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 300); }, true);
+    for (const l of lists) out.push({ kind: 'list', label: l.name, sub: [l.folder, t('{n} canciones', { n: l.count })].filter(Boolean).join(' · '), run: () => { setView('listen'); listenUi.openList(l.id); } });
+    if (desktopApi) {
+      for (const f of library.files().slice(0, 5000)) {
+        out.push({ kind: 'song', label: f.name.replace(/\.[^.]+$/, ''), sub: f.folder || t('Biblioteca'), run: () => player.play([f], 0) });
+      }
+    }
+    for (const it of out) it.key = fold(`${it.label} ${it.sub}`);
+    return out;
+  }
+  function filter() {
+    const q = fold(input.value.trim());
+    const words = q.split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      shown = items.filter((i) => i.kind === 'view' || i.kind === 'action').slice(0, 30);
+    } else {
+      const score = (i) => (fold(i.label).startsWith(q) ? 0 : fold(i.label).includes(q) ? 1 : 2) + { action: 0, view: 0.1, list: 0.2, setting: 0.3, song: 0.4 }[i.kind];
+      shown = items.filter((i) => words.every((w) => i.key.includes(w))).sort((a, b) => score(a) - score(b)).slice(0, 40);
+    }
+    at = 0;
+    paint();
+  }
+  function paint() {
+    list.innerHTML = '';
+    shown.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.id = `cmd-${i}`;
+      li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', String(i === at));
+      li.className = i === at ? 'on' : '';
+      li.innerHTML = '<span class="cmd-label"></span><span class="cmd-sub"></span><span class="cmd-kind"></span>';
+      li.querySelector('.cmd-label').textContent = it.label;
+      li.querySelector('.cmd-sub').textContent = it.sub;
+      li.querySelector('.cmd-kind').textContent = t(KIND[it.kind]);
+      li.addEventListener('mousemove', () => { if (at !== i) { at = i; mark(); } });
+      li.addEventListener('click', () => pick(i));
+      list.appendChild(li);
+    });
+    if (!shown.length) {
+      const li = document.createElement('li');
+      li.className = 'cmd-empty';
+      li.textContent = t('Nada con esas palabras.');
+      list.appendChild(li);
+    }
+    input.setAttribute('aria-activedescendant', shown.length ? `cmd-${at}` : '');
+  }
+  function mark() {
+    [...list.children].forEach((li, i) => { li.classList.toggle('on', i === at); li.setAttribute('aria-selected', String(i === at)); });
+    input.setAttribute('aria-activedescendant', shown.length ? `cmd-${at}` : '');
+    const li = list.children[at];
+    if (li) li.scrollIntoView({ block: 'nearest' });
+  }
+  function pick(i) {
+    const it = shown[i];
+    if (!it) return;
+    close(false);
+    it.run();
+  }
+  async function open() {
+    if (!modal.classList.contains('hidden')) { input.select(); return; }
+    back = document.activeElement;
+    modal.classList.remove('hidden');
+    input.value = '';
+    items = sources();
+    filter();
+    input.focus();
+    // Your lists, read now (and the songs, if the library wasn't read yet).
+    if (desktopApi) {
+      try { lists = (await api('/api/streamlists')).lists || []; } catch { lists = []; }
+      await library.ensure();
+      if (!modal.classList.contains('hidden')) { items = sources(); filter(); }
+    }
+  }
+  function close(refocus = true) {
+    modal.classList.add('hidden');
+    if (refocus && back && back.isConnected) back.focus();
+  }
+  input.addEventListener('input', filter);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (shown.length) { at = (at + 1) % shown.length; mark(); } } else if (e.key === 'ArrowUp') { e.preventDefault(); if (shown.length) { at = (at - 1 + shown.length) % shown.length; mark(); } } else if (e.key === 'Enter') { e.preventDefault(); pick(at); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+  });
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.code === 'KeyK' && currentView !== 'cv-edit') {
+      if (document.querySelector('.modal:not(.hidden)') && modal.classList.contains('hidden')) return;
+      e.preventDefault();
+      open();
+    }
+  });
+  return { open, close };
+})();
+
+// === A file from the Explorer's right-click menu (desktop) ===
+if (desktopApi && desktopApi.onFileAction) {
+  desktopApi.onFileAction(async ({ action, token, name, size }) => {
+    if (!/^[a-f0-9]{32}$/.test(String(token)) || !['mp3', 'compress', 'edit'].includes(action)) return;
+    if (action === 'mp3') {
+      try { await postJson('/api/local/convert', { token }); setView('queue'); showToast(t('«{n}» se está convirtiendo a MP3', { n: name })); } catch (err) { showToast(err.message); }
+      return;
+    }
+    if (size > 4 * 1024 ** 3) { showToast(t('Ese archivo es demasiado grande para abrirlo aquí.')); return; }
+    showToast(t('Abriendo «{n}»…', { n: name }));
+    try {
+      const res = await fetch(`/api/local/file?token=${token}`, { headers: { 'x-client-id': CLIENT_ID } });
+      if (!res.ok) throw new Error(ts((await res.json().catch(() => ({}))).error) || t('No se pudo abrir ese archivo.'));
+      const blob = await res.blob();
+      const file = new File([blob], String(name).slice(0, 255), { type: blob.type });
+      if (action === 'compress') { setView('cv-compress'); setCompressFiles([file]); } else { setView('cv-edit'); editor.load(file); }
+    } catch (err) { showToast(err.message); }
+  });
+}
+// Ajustes → Sistema: the Explorer's menu.
+(async () => {
+  if (!desktopApi || !desktopApi.getExplorerMenu) return;
+  const s = await desktopApi.getExplorerMenu().catch(() => null);
+  if (!s || !s.available) return;
+  $('explorerRow').classList.remove('hidden');
+  $('optExplorer').checked = s.on;
+  $('optExplorer').addEventListener('change', async () => {
+    const on = $('optExplorer').checked;
+    $('explorerStatus').textContent = t('Cambiando el menú…');
+    const r = await desktopApi.setExplorerMenu(on).catch(() => null);
+    $('optExplorer').checked = Boolean(r && r.on);
+    $('explorerStatus').textContent = r && r.error ? ts(r.error) : r && r.on ? t('Listo: botón derecho sobre un audio o un vídeo (en Windows 11, «Mostrar más opciones»).') : t('Quitado del menú del Explorador.');
+  });
+})();
 $('searchSaveList').addEventListener('click', () => {
   const sel = searchPicker.selected();
   listenUi.saveAsList(sel.length ? sel : searchPicker.all(), $('searchInput').value.trim() || t('Mi lista'));

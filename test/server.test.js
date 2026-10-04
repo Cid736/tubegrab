@@ -625,6 +625,7 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
   assert.equal((await api('/api/lyrics/translate', json({ lines: ['hello'], to: 'es' }))).status, 404, 'web: translate');
   for (const p of ['/api/listen/smart', '/api/listen/summary', '/api/listen/likes', '/api/listen/news', '/api/library/review']) assert.equal((await api(p)).status, 404, `web: ${p}`);
   assert.equal((await api('/api/listen/unlike', json({ key: 'yt:dQw4w9WgXcQ' }))).status, 404, 'web: unlike');
+  assert.equal((await api('/api/local/file?token=0')).status, 404, 'web: local files');
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-stream-'));
   const port = await freePort();
   const { child, first } = startServer(port, { TUBEGRAB_ELECTRON: '1', TUBEGRAB_DATA_DIR: data });
@@ -728,6 +729,11 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
     assert.equal((await (await call('/api/library/review/fix', json({ ids: ['a'.repeat(32)] }))).json()).missing, 1, 'an id not in the library: nothing touched');
     for (const body of [{}, { artist: 'Queen' }, { album: 'x' }, { artist: ' ', album: ' ' }]) assert.equal((await call('/api/library/review/album', json(body))).status, 400, JSON.stringify(body));
     assert.ok(Array.isArray((await (await call('/api/listen/news')).json()).news));
+    // v3.14: a file from the Explorer only with the main process's one-time pass (never a path from the page).
+    for (const token of ['', 'x', '0'.repeat(32), '../../etc/passwd', 'C:\\Windows\\win.ini']) {
+      assert.equal((await call(`/api/local/file?token=${encodeURIComponent(token)}`)).status, 404, token);
+      assert.equal((await call('/api/local/convert', json({ token, file: 'C:\\Windows\\win.ini' }))).status, 404, token);
+    }
     // Chapters: only of files in the library.
     for (const id of ['', '../../etc/passwd', 'a'.repeat(32), 'C:%5CWindows%5Cwin.ini']) assert.equal((await call(`/api/library/chapters?id=${id}`)).status, 404, id);
   } finally {

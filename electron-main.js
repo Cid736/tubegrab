@@ -1663,6 +1663,66 @@ function cliRequestFrom(argv) {
   return req;
 }
 let pendingCli = cliRequestFrom(process.argv);
+
+// === The Explorer's right-click menu (Windows): "Convertir a MP3 / Comprimir /
+// Abrir en el editor con TubeGrab" on audio and video files. Registered for
+// this user only (no administrator); taken away when turned off. ===
+const EXPLORER_AUDIO = ['mp3', 'm4a', 'wav', 'flac', 'ogg', 'opus', 'aac', 'wma'];
+const EXPLORER_VIDEO = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'wmv', 'm4v'];
+const EXPLORER_ACTIONS = {
+  mp3: { es: 'Convertir a MP3 con TubeGrab', en: 'Convert to MP3 with TubeGrab', exts: [...EXPLORER_AUDIO, ...EXPLORER_VIDEO].filter((e) => e !== 'mp3') },
+  compress: { es: 'Comprimir con TubeGrab', en: 'Compress with TubeGrab', exts: EXPLORER_VIDEO },
+  edit: { es: 'Abrir en el editor de TubeGrab', en: 'Open in the TubeGrab editor', exts: [...EXPLORER_AUDIO, ...EXPLORER_VIDEO] },
+};
+/** "exe --tg-file=<action> -- <file>": the file only after "--" (never read as an option), and only a real media file. */
+function fileActionFrom(argv) {
+  const end = argv.indexOf('--');
+  if (end === -1) return null;
+  const m = argv.slice(0, end).map((x) => /^--tg-file=(mp3|compress|edit)$/.exec(String(x))).find(Boolean);
+  const file = argv[end + 1];
+  if (!m || typeof file !== 'string' || file.length > 1000 || !path.isAbsolute(file) || /[\u0000-\u001f]/.test(file)) return null;
+  let st;
+  try { st = fs.statSync(file); } catch { return null; }
+  const ext = path.extname(file).slice(1).toLowerCase();
+  if (!st.isFile() || !EXPLORER_ACTIONS[m[1]].exts.includes(ext)) return null;
+  return { action: m[1], file, name: path.basename(file), size: st.size };
+}
+let pendingFileAction = fileActionFrom(process.argv);
+/** The page gets a one-time pass for that file (the server knows the file; the page, only the pass). */
+function deliverFileAction(req) {
+  const token = crypto.randomBytes(16).toString('hex');
+  try { if (serverProcess && serverProcess.connected) serverProcess.send({ type: 'local-file', token, file: req.file }); } catch { return; }
+  showWindow();
+  sendToRenderer('desktop:fileAction', { action: req.action, token, name: req.name, size: req.size });
+}
+const regEsc = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+function explorerMenu(on) {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') { resolve({ available: false, on: false }); return; }
+    const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+    if (/["%\r\n]/.test(exe)) { resolve({ available: true, on: false, error: 'ruta no válida' }); return; }
+    const lang = /^es/i.test(app.getLocale()) ? 'es' : 'en';
+    const lines = ['Windows Registry Editor Version 5.00', ''];
+    for (const [action, a] of Object.entries(EXPLORER_ACTIONS)) {
+      for (const ext of a.exts) {
+        const key = `HKEY_CURRENT_USER\\Software\\Classes\\SystemFileAssociations\\.${ext}\\shell\\TubeGrab.${action}`;
+        if (!on) { lines.push(`[-${key}]`, ''); continue; }
+        const cmd = app.isPackaged ? `"${exe}" --tg-file=${action} -- "%1"` : `"${exe}" "${app.getAppPath()}" --tg-file=${action} -- "%1"`;
+        lines.push(`[${key}]`, `"MUIVerb"="${regEsc(a[lang])}"`, `"Icon"="${regEsc(`"${exe}",0`)}"`, '', `[${key}\\command]`, `@="${regEsc(cmd)}"`, '');
+      }
+    }
+    const file = path.join(app.getPath('temp'), `tubegrab-menu-${crypto.randomBytes(4).toString('hex')}.reg`);
+    try { fs.writeFileSync(file, `\ufeff${lines.join('\r\n')}\r\n`, 'utf16le'); } catch (err) { resolve({ available: true, on: !on, error: err.message }); return; }
+    execFile('reg', ['import', file], { windowsHide: true, timeout: 20000 }, (err) => {
+      fs.rm(file, { force: true }, () => {});
+      if (err) { resolve({ available: true, on: !on, error: 'No se pudo cambiar el menú del Explorador.' }); return; }
+      saveSettings({ explorerMenu: on ? { exe } : null });
+      resolve({ available: true, on });
+    });
+  });
+}
+ipcMain.handle('desktop:getExplorerMenu', (event) => (isTrustedSender(event) ? { available: process.platform === 'win32', on: Boolean(getSettings().explorerMenu) } : null));
+ipcMain.handle('desktop:setExplorerMenu', (event, on) => (isTrustedSender(event) ? explorerMenu(on === true) : null));
 function deliverCli(req) {
   sendToRenderer('desktop:cliDownload', req);
 }
@@ -2310,6 +2370,7 @@ function createWindow() {
       // over once the page is there to receive it.
       if (pendingProtocolUrl) mainWindow.webContents.once('did-finish-load', () => { deliverProtocolUrl(pendingProtocolUrl); pendingProtocolUrl = null; });
       if (pendingCli) mainWindow.webContents.once('did-finish-load', () => { setTimeout(() => { deliverCli(pendingCli); pendingCli = null; }, 1500); });
+      if (pendingFileAction) mainWindow.webContents.once('did-finish-load', () => { setTimeout(() => { deliverFileAction(pendingFileAction); pendingFileAction = null; }, 1500); });
       mainWindow.webContents.once('did-finish-load', () => setTimeout(() => checkSpace().catch(() => {}), 10000));
     }
     checkForUpdates().finally(() => { if (updateState.status !== 'error') scheduleUpdateCheck(UPDATE_PERIOD_MS); });
@@ -2334,6 +2395,9 @@ if (!app.requestSingleInstanceLock()) {
   // (It may be hidden in the tray.) A tubegrab:// link opened while running
   // arrives here too.
   app.on('second-instance', (_event, argv) => {
+    // A file from the Explorer's menu.
+    const fileAction = fileActionFrom(argv);
+    if (fileAction) { deliverFileAction(fileAction); return; }
     const cli = cliRequestFrom(argv);
     // From the command line: queued without bringing the window forward.
     if (cli) { deliverCli(cli); return; }
@@ -2342,6 +2406,8 @@ if (!app.requestSingleInstanceLock()) {
     if (url) deliverProtocolUrl(url);
   });
   app.on('ready', registerProtocol);
+  // The Explorer's menu, pointing at this .exe (a portable one may have moved).
+  app.on('ready', () => { const m = getSettings().explorerMenu; const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath; if (m && m.exe !== exe && app.isPackaged) explorerMenu(true); });
   app.on('ready', createWindow);
 }
 

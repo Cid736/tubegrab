@@ -68,6 +68,9 @@ contextBridge.exposeInMainWorld('desktop', {
   onSpace: (cb) => ipcRenderer.on('desktop:space', (_e, state) => cb(state)),
   // Command line.
   onCliDownload: (cb) => ipcRenderer.on('desktop:cliDownload', (_e, req) => cb(req)),
+  onFileAction: (cb) => ipcRenderer.on('desktop:fileAction', (_e, req) => cb(req)),
+  getExplorerMenu: () => ipcRenderer.invoke('desktop:getExplorerMenu'),
+  setExplorerMenu: (on) => ipcRenderer.invoke('desktop:setExplorerMenu', on === true),
   getCli: () => ipcRenderer.invoke('desktop:getCli'),
   installCli: (on) => ipcRenderer.invoke('desktop:installCli', on),
   // Watch folder.

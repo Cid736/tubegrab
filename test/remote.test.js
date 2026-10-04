@@ -187,3 +187,51 @@ test('music: what is playing, the buttons, a song by its name, and the attacks',
     server.disable();
   }
 });
+
+test('v3.14: your library on the phone — only paired, only library files, seeking by ranges, names escaped', async () => {
+  const song = path.join(work, 'song.mp3');
+  fs.writeFileSync(song, Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 256)));
+  const ID = 'a'.repeat(32);
+  const lib = [
+    { id: ID, name: '<img src=x onerror=alert(1)>.mp3', folder: 'Rock', kind: 'audio' },
+    { id: 'b'.repeat(32), name: 'Despacito.mp3', folder: '', kind: 'audio' },
+    { id: 'c'.repeat(32), name: 'notes.txt', folder: '', kind: 'other' },
+  ];
+  const { server } = makeServer({ listLibrary: () => lib, libraryFile: (id) => (id === ID ? song : null) });
+  const st = await server.enable(CLIENT);
+  const { port } = server;
+  try {
+    assert.equal((await request(port, 'GET', '/lib')).status, 401, 'not paired');
+    assert.equal((await request(port, 'GET', `/lib/file?id=${ID}`)).status, 401, 'the files neither');
+    const ok = await request(port, 'GET', `/pair/${st.pairUrl.split('/pair/')[1]}`);
+    const jar = { Cookie: ok.headers['set-cookie'][0].split(';')[0] };
+    const page = await request(port, 'GET', '/lib', { headers: jar });
+    assert.equal(page.status, 200);
+    assert.ok(!page.body.includes('<img src=x'), 'names escaped');
+    assert.ok(page.body.includes('Despacito') && !page.body.includes('notes'), 'only audio and video');
+    assert.ok(!/script-src/.test(page.headers['content-security-policy']), 'no script on the list');
+    const found = await request(port, 'GET', '/lib?q=despa', { headers: jar });
+    assert.ok(found.body.includes('Despacito') && !found.body.includes('Rock'));
+    const play = await request(port, 'GET', `/lib/play?id=${ID}&q=`, { headers: jar });
+    assert.equal(play.status, 200);
+    const nonce = /script-src 'nonce-([^']+)'/.exec(play.headers['content-security-policy']);
+    assert.ok(nonce && play.body.includes(`nonce="${nonce[1]}"`), 'its one script, by nonce');
+    assert.match(play.headers['content-security-policy'], /media-src 'self'/);
+    assert.ok(play.body.includes(`id="next" href="/lib/play?id=${'b'.repeat(32)}"`), 'the next one follows');
+    assert.equal((await request(port, 'GET', `/lib/play?id=${'f'.repeat(32)}`, { headers: jar })).status, 404);
+    // The file: whole, or a range; nothing outside the library.
+    const whole = await request(port, 'GET', `/lib/file?id=${ID}`, { headers: jar });
+    assert.equal(whole.status, 200);
+    assert.equal(whole.headers['content-type'], 'audio/mpeg');
+    assert.equal(whole.headers['content-length'], '1000');
+    const part = await request(port, 'GET', `/lib/file?id=${ID}`, { headers: { ...jar, Range: 'bytes=10-19' } });
+    assert.equal(part.status, 206);
+    assert.equal(part.headers['content-range'], 'bytes 10-19/1000');
+    assert.equal(part.headers['content-length'], '10');
+    assert.equal((await request(port, 'GET', `/lib/file?id=${ID}`, { headers: { ...jar, Range: 'bytes=-100' } })).headers['content-range'], 'bytes 900-999/1000');
+    assert.equal((await request(port, 'GET', `/lib/file?id=${ID}`, { headers: { ...jar, Range: 'bytes=5000-' } })).status, 416);
+    for (const id of ['b'.repeat(32), 'c'.repeat(32), '../../etc/passwd', '', 'A'.repeat(32)]) assert.equal((await request(port, 'GET', `/lib/file?id=${id}`, { headers: jar })).status, 404, id);
+  } finally {
+    server.disable();
+  }
+});

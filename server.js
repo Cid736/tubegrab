@@ -1718,8 +1718,53 @@ app.post('/api/watch', requireDesktop, requireClient, (req, res) => {
     res.json(watcher.set({ enabled: body.enabled, clientId: req.clientId, fields, moveOriginals: body.moveOriginals }));
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
+// === A file from the Explorer's right-click menu (desktop): the main process
+// passes it here with a one-time pass the page gets; nothing else can name a
+// path. Ten minutes to use it. ===
+const localFiles = new Map(); // pass -> { file, at }
+const LOCAL_EXT = /\.(mp3|m4a|wav|flac|ogg|opus|aac|wma|mp4|mkv|webm|mov|avi|wmv|m4v)$/i;
+function takeLocal(token, { keep = false } = {}) {
+  for (const [k, v] of localFiles) if (Date.now() - v.at > 10 * 60 * 1000) localFiles.delete(k);
+  const hit = /^[a-f0-9]{32}$/.test(String(token)) ? localFiles.get(token) : null;
+  if (!hit) return null;
+  if (!keep) localFiles.delete(token);
+  try { if (!fs.statSync(hit.file).isFile()) return null; } catch { return null; }
+  return hit.file;
+}
+const MEDIA_TYPES = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', flac: 'audio/flac', ogg: 'audio/ogg', opus: 'audio/ogg', aac: 'audio/aac', wma: 'audio/x-ms-wma', mp4: 'video/mp4', mkv: 'video/x-matroska', webm: 'video/webm', mov: 'video/quicktime', avi: 'video/x-msvideo', wmv: 'video/x-ms-wmv', m4v: 'video/mp4' };
+// For Comprimir / the editor: the file itself, once.
+app.get('/api/local/file', requireDesktop, requireClient, (req, res) => {
+  const file = takeLocal(req.query.token);
+  if (!file) return res.status(404).json({ error: 'Ese archivo ya no está disponible; vuelve a elegirlo en el Explorador.' });
+  res.setHeader('Content-Type', MEDIA_TYPES[path.extname(file).slice(1).toLowerCase()] || 'application/octet-stream');
+  res.setHeader('Content-Length', String(fs.statSync(file).size));
+  fs.createReadStream(file).on('error', () => res.destroy()).pipe(res);
+});
+// "Convertir a MP3": read in place (never changed), like the watch folder.
+app.post('/api/local/convert', requireDesktop, requireClient, createLimiter, (req, res) => {
+  const file = takeLocal((req.body || {}).token);
+  if (!file) return res.status(404).json({ error: 'Ese archivo ya no está disponible; vuelve a elegirlo en el Explorador.' });
+  if (!jobs.canCreate(req.clientId)) return res.status(429).json(TOO_MANY_JOBS);
+  const format = convert.formatFor('mp3');
+  const body = { audioBitrate: '192' };
+  const job = jobs.create({
+    clientId: req.clientId, type: 'convert', title: path.basename(file), detail: `${convert.describeConvert(format.kind, format.config, body)} · Explorador`,
+    run: convert.runConvert({ inputPath: file, originalName: path.basename(file), targetFormat: 'mp3', body, ffmpegPath: currentFfmpegPath(), hw: hwFor() }),
+  });
+  res.json({ ok: Boolean(job) });
+});
+
 // From the main process: the folder was chosen in its dialog.
 process.on('message', (msg) => {
+  // A file from the Explorer's menu (only a real local media file).
+  if (msg && msg.type === 'local-file' && IS_DESKTOP) {
+    const file = String(msg.file || '');
+    if (/^[a-f0-9]{32}$/.test(String(msg.token)) && path.isAbsolute(file) && LOCAL_EXT.test(file) && !/[\u0000-\u001f]/.test(file)) {
+      localFiles.set(msg.token, { file, at: Date.now() });
+      while (localFiles.size > 20) localFiles.delete(localFiles.keys().next().value);
+    }
+    return;
+  }
   // What the app's player is playing (for the phone's music page).
   if (msg && msg.type === 'player-state' && remote) { remote.setPlayer(msg.state); return; }
   if (msg && msg.type === 'watch-reload' && watcher) {
@@ -1851,6 +1896,12 @@ const remote = IS_DESKTOP ? new RemoteServer({
     process.send({ type: 'player-command', cmd });
     return true;
   },
+  // Your library, to play on the phone (read again at most once a minute).
+  listLibrary: () => {
+    if (!library.lastFiles || !library.lastFiles.length || Date.now() - (library.scannedAt || 0) > 60 * 1000) { library.scan(); library.scannedAt = Date.now(); }
+    return (library.lastFiles || []).map((f) => ({ id: f.id, name: f.name, folder: f.folder, kind: f.kind }));
+  },
+  libraryFile: (id) => library.resolve(id),
 }) : null;
 async function remoteView(state) {
   if (!state.pairUrl) return state;

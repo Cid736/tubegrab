@@ -1985,6 +1985,12 @@
           </div>
           <div class="status-message" id="cliStatus" role="status"></div>
 
+          <div class="section-header desktop-only"><h2>Explorador de Windows</h2></div>
+          <div class="group desktop-only">
+            <label class="row switch hidden" id="explorerRow"><span class="row-label">Menú del botón derecho <small>«Convertir a MP3», «Comprimir» y «Abrir en el editor» sobre tus audios y vídeos, sin abrir antes TubeGrab</small></span><input type="checkbox" id="optExplorer"><span class="switch-ui"></span></label>
+          </div>
+          <div class="status-message" id="explorerStatus" role="status"></div>
+
           <div class="section-header desktop-only"><h2>Extensión del navegador</h2></div>
           <div class="group desktop-only">
             <div class="row">
@@ -2415,6 +2421,15 @@
   </div>
   <div class="rec-bar hidden" id="recBar" role="status"><span class="rec-dot" aria-hidden="true"></span><span>Grabando</span><strong id="recTime">0:00</strong><button class="btn btn-primary" id="recStop" type="button">Parar</button></div>
 
+  <!-- Ctrl+K: go anywhere -->
+  <div class="modal hidden cmd-modal" id="cmdModal" role="dialog" aria-modal="true" aria-label="Ir a…">
+    <div class="modal-card cmd-card">
+      <input class="text-input cmd-input" id="cmdInput" type="text" role="combobox" aria-expanded="true" aria-controls="cmdList" aria-autocomplete="list" placeholder="Busca una sección, un ajuste, una lista, una canción…" aria-label="Busca una sección, un ajuste, una lista, una canción…" autocomplete="off" spellcheck="false" maxlength="100">
+      <ul class="cmd-list" id="cmdList" role="listbox" aria-label="Resultados"></ul>
+      <p class="cmd-help"><kbd>↑</kbd> <kbd>↓</kbd> elegir · <kbd>Intro</kbd> ir · <kbd>Esc</kbd> cerrar</p>
+    </div>
+  </div>
+
   <div class="modal hidden" id="keysModal" role="dialog" aria-modal="true" aria-labelledby="keysTitle">
     <div class="modal-card keys-card">
       <h2 id="keysTitle">Atajos de teclado</h2>
@@ -2427,6 +2442,7 @@
           <dt><kbd>Ctrl</kbd> <kbd>4</kbd></dt><dd>Historial</dd>
           <dt><kbd>Ctrl</kbd> <kbd>5</kbd></dt><dd>Biblioteca</dd>
           <dt><kbd>Ctrl</kbd> <kbd>,</kbd></dt><dd>Ajustes</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Ir a cualquier cosa: secciones, ajustes, listas, canciones</dd>
           <dt><kbd>?</kbd></dt><dd>Esta ayuda</dd>
           <dt><kbd>Esc</kbd></dt><dd>Cerrar una ventana</dd>
         </dl>
