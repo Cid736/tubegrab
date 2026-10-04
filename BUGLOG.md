@@ -589,3 +589,16 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 ### [UI] La letra no iba del todo sincronizada
 - **Causa:** se movía con `timeupdate`, que el reproductor lanza unas 4 veces por segundo, y se adelantaba 0,15 s; y con vídeos (intro más larga que la canción) la letra iba tarde.
 - **Fix:** se sigue fotograma a fotograma mientras se ve, la línea que se canta se rellena como en un karaoke y las demás se apagan; botones − / + para adelantar o retrasar (por canción, se recuerda); si el vídeo dura distinto que la canción, se avisa. Para las canciones de Spotify la letra se busca con su artista y título reales, y al elegir el vídeo se prefiere el que dura lo mismo que la canción. 236 pruebas.
+
+---
+
+## 2026-10-04 — v3.7.1: la música sigue con la ventana cerrada; revisión 16
+
+### [UI] Al cerrar la ventana se paraba la música aunque el mini reproductor estuviera abierto
+- **Causa:** el reproductor vive en la ventana principal; cerrarla (sin «seguir en la bandeja») cerraba la app.
+- **Fix:** con el mini reproductor abierto, cerrar la ventana solo la oculta (la página que reproduce sigue viva) y avisa una vez. ↗ en el mini reproductor la vuelve a abrir; cerrar el mini reproductor cierra la app (o, con «seguir en la bandeja», pausa y se queda allí). Probado en la app: la canción siguió sonando con la ventana cerrada, y al cerrar el mini no quedó ningún proceso.
+
+### [Seguridad] Revisión 16 (todo lo de la 3.6 y la 3.7)
+- **Corregido:** pedir muchas canciones distintas a la vez lanzaba un yt-dlp por cada una sin límite; ahora van como mucho 3 a la vez, hasta 30 esperando, y el resto recibe «ocupado».
+- **Comprobado con pruebas de ataque contra el servidor en modo escritorio:** ids de vídeo inventados o con saltos de línea, rutas `../` y opciones de yt-dlp camufladas → 400; sin identificador de cliente → 400; importar listas desde `127.0.0.1`, `file://`, `javascript:`, otros dominios o `open.spotify.com.evil.example` → 400; listas hechas a mano con miniaturas de otros sitios, canciones vacías o datos que no son canciones → se limpian; todo esto no existe en un servidor web propio (404).
+- **Repasado a mano:** el sonido solo se pide a `*.googlevideo.com` y a direcciones públicas, también tras redirecciones; la página nunca ve esa dirección. Todo lo que muestran la página, la lista «A continuación», las listas y el mini reproductor (títulos de YouTube o de Spotify) va como texto, nunca como HTML. Los mensajes del mini reproductor al proceso principal pasan por una lista blanca. El código de estilo y los desfases de la letra se validan al leerlos. `npm audit --omit=dev` → 0 vulnerabilidades. 237 pruebas.

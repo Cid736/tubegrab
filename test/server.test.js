@@ -617,3 +617,44 @@ test('v3.4.0 on the web: profiles and "already have it" per visitor; desktop-onl
   assert.equal(tr.status, 400, 'no engine here: refused');
   assert.equal((await api(`/api/jobs/${'a'.repeat(32)}/stop`, json({}))).status, 404);
 });
+
+test('listening without downloading (desktop): bad ids, links and lists are refused; absent on the web', async () => {
+  for (const p of ['/api/stream/audio?id=dQw4w9WgXcQ', '/api/stream/info?id=dQw4w9WgXcQ', '/api/streamlists', '/api/stream/find?q=x']) {
+    assert.equal((await api(`${p}${p.includes('?') ? '&' : '?'}client=${CLIENT}`)).status, 404, `web: ${p}`);
+  }
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-stream-'));
+  const port = await freePort();
+  const { child, first } = startServer(port, { TUBEGRAB_ELECTRON: '1', TUBEGRAB_DATA_DIR: data });
+  const call = (p, opts = {}) => fetch(`http://localhost:${port}${p}`, { ...opts, headers: { 'x-client-id': CLIENT, ...(opts.headers || {}) } });
+  try {
+    await first;
+    for (const id of ['', 'abc', '../../../x', 'dQw4w9WgXcQ%0a', 'dQw4w9WgXcQQ', '-o%20x.exe']) {
+      assert.equal((await call(`/api/stream/audio?client=${CLIENT}&id=${id}`)).status, 400, `audio ${id}`);
+      assert.equal((await call(`/api/stream/radio?id=${id}`)).status, 400, `radio ${id}`);
+      assert.equal((await call(`/api/stream/lyrics?id=${id}`)).status, 400, `lyrics ${id}`);
+    }
+    assert.equal((await fetch(`http://localhost:${port}/api/stream/audio?id=dQw4w9WgXcQ`)).status, 400, 'no client id');
+    assert.equal((await call(`/api/stream/find?q=${'x'.repeat(201)}`)).status, 400);
+    assert.equal((await call('/api/stream/find?q=')).status, 400);
+    // Only Spotify, Apple Music or YouTube playlist links: never local or other addresses.
+    for (const url of ['http://127.0.0.1:3000/x', 'file:///C:/Windows/win.ini', 'https://evil.example/playlist', 'https://open.spotify.com.evil.example/playlist/x', '', 'javascript:alert(1)']) {
+      const r = await call('/api/streamlists/import', json({ url }));
+      assert.equal(r.status, 400, url);
+    }
+    // Lists made by hand are cleaned.
+    const made = await (await call('/api/streamlists', json({ name: '<img src=x onerror=alert(1)>', tracks: [{ title: 'ok', yt: 'dQw4w9WgXcQ', thumbnail: 'https://evil.example/t.jpg' }, { title: '', yt: 'x' }, 5] }))).json();
+    assert.equal(made.tracks.length, 1);
+    assert.equal(made.tracks[0].thumbnail, undefined);
+    assert.equal(made.name, '<img src=x onerror=alert(1)>', 'kept as text (the page shows it with textContent)');
+    assert.equal((await call('/api/streamlists', json({ name: 'x', tracks: [] }))).status, 400);
+    assert.equal((await call('/api/streamlists/..%2F..%2Fx')).status, 404);
+    assert.equal((await call(`/api/streamlists/${made.id}/tracks/abc`, { method: 'DELETE' })).status, 404);
+    assert.equal((await call(`/api/streamlists/${made.id}/refresh`, json({}))).status, 400, 'not from a link');
+    assert.equal((await (await call('/api/streamlists')).json()).lists.length, 1);
+    assert.ok(fs.existsSync(path.join(data, 'stream-lists.json')));
+    assert.equal((await (await call(`/api/streamlists/${made.id}`, { method: 'DELETE' })).json()).ok, true);
+  } finally {
+    child.kill();
+    fs.rmSync(data, { recursive: true, force: true });
+  }
+});

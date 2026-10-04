@@ -744,8 +744,19 @@ function openMini() {
   miniWindow.loadURL(`${APP_ORIGIN}/mini.html`);
   // Moved by Windows (keyboard, snap) too: remembered either way.
   miniWindow.on('moved', saveMiniPosSoon);
-  miniWindow.on('closed', () => { miniWindow = null; });
+  miniWindow.on('closed', () => {
+    miniWindow = null;
+    // The main window was closed while the mini player kept the music going:
+    // now it really closes (or stays in the tray, if that's what you chose).
+    if (!closedBehindMini || !mainWindow || mainWindow.isVisible()) return;
+    closedBehindMini = false;
+    if (getSettings().closeToTray === true) sendToRenderer('player:command', { cmd: 'pause' });
+    else { quitting = true; app.quit(); }
+  });
 }
+// The main window hidden because it was closed with the mini player open.
+let closedBehindMini = false;
+let miniHintShown = false;
 let miniSaveTimer = null;
 function saveMiniPosSoon() {
   clearTimeout(miniSaveTimer);
@@ -1639,6 +1650,18 @@ async function downloadCopiedLink() {
 // Close button with "keep running in the tray" on: hide instead of quitting,
 // so downloads and subscriptions carry on.
 function onWindowClose(event) {
+  // The mini player is open: the music goes on there (the page that plays it
+  // stays alive, just hidden). Closing the mini player then closes the app.
+  if (!quitting && miniWindow && !miniWindow.isDestroyed()) {
+    event.preventDefault();
+    mainWindow.hide();
+    closedBehindMini = true;
+    if (!miniHintShown && Notification.isSupported()) {
+      miniHintShown = true;
+      new Notification({ title: 'La música sigue sonando', body: 'TubeGrab sigue en el mini reproductor. Ciérralo para salir, o pulsa ↗ para volver a la ventana.', silent: true }).show();
+    }
+    return;
+  }
   if (quitting || getSettings().closeToTray !== true) return;
   event.preventDefault();
   mainWindow.hide();
@@ -1947,6 +1970,7 @@ function createWindow() {
   applyShortcuts();
   // The taskbar buttons are lost when the window is hidden and shown again.
   mainWindow.on('show', updateThumbar);
+  mainWindow.on('show', () => { closedBehindMini = false; });
 
   // Start the Express server. windowsHide keeps this (and anything it in turn
   // spawns, like yt-dlp.exe/ffmpeg.exe) from ever flashing a console window.

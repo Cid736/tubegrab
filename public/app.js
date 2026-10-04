@@ -5370,6 +5370,7 @@ const player = (() => {
     if (cmd === 'enqueue' && Array.isArray(items)) { enqueue(asStreams(items)); return; }
     if (!cur() && cmd !== 'hello') return;
     if (cmd === 'jump' && Number.isInteger(value) && list[value]) { index = value; start(); return; }
+    if (cmd === 'pause') { if (!deck.paused) deck.pause(); pushState(); return; }
     if (cmd === 'toggle') toggle();
     else if (cmd === 'next') step(1);
     else if (cmd === 'prev') step(-1);
