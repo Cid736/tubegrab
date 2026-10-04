@@ -92,6 +92,10 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
   - **Sound** panel: equalizer with styles and **your own saved ones**, **same volume for every song** (measured while it plays, remembered per song), crossfade up to 12 s, **speed** 0.5–2× (keeping the pitch or not) and a **sleep timer** (minutes or "when this song ends", fading out)
   - **Last.fm** scrobbling and **Discord** "Listening to…" (with your own free keys), with the song's cover and a YouTube button for songs from YouTube
   - **Listen**, redesigned: a greeting with quick tiles, big covers, a list page in the colour of its cover with a big ▶, songs in a table (double-click or Enter to play, drag or Alt+↑/↓ to reorder, a search box, a menu on right click: play next, add to queue, song radio, add to a list, download, copy the link) and the song playing marked with moving bars. Choose its look: modern or classic, always dark or not, your colour or the cover's, cover size, compact rows, one click or double click
+  - **Keep a list downloaded**: its songs go to your library, and the new ones too each time the list updates itself (an imported Spotify list, for example)
+  - **Carry on where you left off**: what was playing comes back, paused at the same second, when you open the app; long ones (audiobooks, courses, podcasts) keep their place and speed each, with ±30 s buttons and their chapters
+  - Several songs at once (Ctrl+click, Shift+click, Ctrl+A): play, queue, add to a list, favourite, download, move or remove them together; removing (songs, lists, favourites) shows **Undo** (also Ctrl+Z) instead of "Are you sure?"
+  - Choose where it plays (speakers, headphones, the TV) without changing Windows' output; it pauses when the headphones or Bluetooth disconnect; **karaoke** turns the voice down with the lyrics in big
   - **Favourites**: a star on every song and in the player; the list is in Listen and in the mini player
   - Keyboard shortcuts for listening: Space, Ctrl+←/→, Ctrl+↑/↓, Ctrl+S shuffle, Ctrl+R repeat, Alt+Shift+F favourite, Ctrl+F search in the list, Ctrl+L search… (Ctrl+/ shows them all; they can be turned off)
   - Paste your **Spotify profile** link to bring the public lists it shows, all at once, in a folder of their own (kept up to date)
@@ -215,7 +219,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 ## Tests
 
 ```bash
-npm test                    # 252 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
+npm test                    # 257 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
 TG_NETWORK=1 npm test       # also real YouTube downloads
 ```
 
@@ -344,6 +348,10 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
   - Panel **Sonido**: ecualizador con estilos y **los tuyos guardados**, **mismo volumen en todas las canciones** (se mide mientras suena y se recuerda por canción), fundido de hasta 12 s, **velocidad** de 0,5 a 2× (manteniendo el tono o no) y **temporizador para dormir** (minutos o «al acabar esta canción», bajando poco a poco)
   - **Last.fm** (scrobbling) y **Discord** («Escuchando…»), con tus propias claves gratuitas, con la carátula y un botón de YouTube en las canciones de YouTube
   - **Escuchar**, renovado: saludo con accesos rápidos, portadas grandes, la página de cada lista con el color de su portada y un ▶ grande, canciones en tabla (doble clic o Intro para escuchar, arrastrar o Alt+↑/↓ para reordenar, un buscador, menú con el botón derecho: escuchar a continuación, añadir a la cola, radio de la canción, añadir a una lista, descargar, copiar el enlace) y la que suena marcada con barras que se mueven. Elige su aspecto: moderno o clásico, siempre oscuro o no, tu color o el de la portada, tamaño de las portadas, filas compactas, un clic o doble clic
+  - **Mantener una lista descargada**: sus canciones van a tu biblioteca, y las nuevas también cada vez que la lista se actualiza sola (por ejemplo, una importada de Spotify)
+  - **Seguir donde lo dejaste**: al abrir la app vuelve lo que sonaba, en pausa y en el mismo segundo; los audios largos (audiolibros, cursos, podcasts) recuerdan cada uno su punto y su velocidad, con botones de ±30 s y sus capítulos
+  - Varias canciones a la vez (Ctrl+clic, Mayús+clic, Ctrl+A): escucharlas, ponerlas en la cola, añadirlas a una lista, a Favoritas, descargarlas, moverlas o quitarlas juntas; al quitar (canciones, listas, favoritas) sale **Deshacer** (también Ctrl+Z) en vez de «¿Seguro?»
+  - Elegir por dónde suena (altavoces, cascos, la tele) sin cambiar la salida de Windows; se pausa si se desconectan los cascos o el Bluetooth; **karaoke** que baja la voz con la letra en grande
   - **Favoritas**: una estrella en cada canción y en el reproductor; la lista está en Escuchar y en el mini reproductor
   - Atajos de teclado para escuchar: Espacio, Ctrl+←/→, Ctrl+↑/↓, Ctrl+S aleatorio, Ctrl+R repetir, Alt+Mayús+F favorita, Ctrl+F buscar en la lista, Ctrl+L buscar… (Ctrl+/ los enseña todos; se pueden quitar)
   - Pega el enlace de tu **perfil de Spotify** para traer de una vez las listas públicas que enseña, en su propia carpeta (y al día)
@@ -427,7 +435,7 @@ Con la firma desaparece el aviso "Editor desconocido" de SmartScreen (al momento
 ## Pruebas
 
 ```bash
-npm test                    # 252 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
+npm test                    # 257 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
 TG_NETWORK=1 npm test       # también descargas reales de YouTube
 ```
 

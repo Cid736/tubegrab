@@ -1877,3 +1877,19 @@ body.lx-on .player input[type="range"]:hover::-webkit-slider-thumb, body.lx-on .
 body.lx-on .now-view input[type="range"]:hover::-webkit-slider-thumb, body.lx-on .now-view input[type="range"]:focus-visible::-webkit-slider-thumb { opacity: 1; }
 body.lx-on .now-view .now-play { background: #fff; color: #000; }
 @media (prefers-reduced-motion: reduce) { .lt-eq i { animation: none; transform: scaleY(0.6); } }
+
+/* ===== v3.12: several songs at once, "Deshacer", books (±30 s, chapters) ===== */
+.listen-tracks .lx-row.sel { background: color-mix(in srgb, var(--lx-c) 18%, transparent); }
+.listen-tracks .lx-row.sel:hover { background: color-mix(in srgb, var(--lx-c) 24%, transparent); }
+.lx-selbar { position: sticky; top: 64px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; padding: 8px 12px; border-radius: 12px;
+  background: var(--solid, var(--group)); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25), inset 0 0 0 0.5px var(--hairline); font-size: 13px; font-weight: 600; }
+.lx-selbar.hidden { display: none; }
+.toast-undo { position: fixed; left: 50%; bottom: 24px; z-index: 450; display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 16px; border-radius: 12px;
+  font-size: 13px; color: var(--text); background: var(--glass-strong); box-shadow: var(--shadow-float); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
+.toast-undo.visible { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast-undo button { font-weight: 700; padding: 4px 8px; }
+body.has-player .toast-undo { bottom: 96px; }
+.player:not(.long) .pl-book { display: none; }
+.pl-book svg text { font-size: 7.5px; font-weight: 700; fill: currentColor; stroke: none; font-family: var(--font); }
+@media (prefers-reduced-motion: reduce) { .toast-undo { transition: none; } }

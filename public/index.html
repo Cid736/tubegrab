@@ -661,6 +661,7 @@
                       <label class="ld-folder"><span>Carpeta</span><input id="ldFolder" type="text" maxlength="60" list="ldFolders" placeholder="Sin carpeta" spellcheck="false" autocomplete="off"></label>
                       <datalist id="ldFolders"></datalist>
                       <label class="ld-sync hidden" id="ldSyncWrap"><input type="checkbox" id="ldSync"> Mantener al día (se actualiza sola desde el enlace)</label>
+                      <label class="ld-sync" title="Sus canciones se bajan a tu biblioteca (con tu formato de audio de Descargar), y las nuevas también"><input type="checkbox" id="ldKeepDl"> Mantener descargada</label>
                     </div>
                   </div>
                 </div>
@@ -674,6 +675,16 @@
                 <label class="lx-filter"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg><input id="ldFilter" type="search" placeholder="Buscar en la lista" aria-label="Buscar en la lista" autocomplete="off" spellcheck="false" maxlength="100"></label>
               </div>
               <span class="status-message" id="ldStatus" role="status"></span>
+              <div class="lx-selbar hidden" id="ldSelBar">
+                <span id="ldSelCount" role="status"></span>
+                <span class="ed-flex"></span>
+                <button class="btn btn-primary" id="ldSelPlay" type="button">Escuchar</button>
+                <button class="btn" id="ldSelQueue" type="button">Añadir a la cola</button>
+                <button class="btn" id="ldSelAdd" type="button" aria-haspopup="menu">Añadir a una lista</button>
+                <button class="btn" id="ldSelDownload" type="button">Descargar</button>
+                <button class="btn" id="ldSelRemove" type="button">Quitar</button>
+                <button class="link-btn" id="ldSelClear" type="button" title="Quitar la selección (Esc)">Ninguna</button>
+              </div>
               <div class="lx-thead" aria-hidden="true"><span class="lx-th-n">#</span><span>Título</span><span class="lx-th-dur"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span></div>
               <ol class="listen-tracks" id="ldTracks"></ol>
               <p class="hint hidden" id="ldNoMatch">Ninguna canción coincide.</p>
@@ -2159,6 +2170,7 @@
                 </select>
               </label>
               <label class="row switch"><span class="row-label">Mantener el tono al cambiar la velocidad</span><input type="checkbox" id="sndPitch" checked><span class="switch-ui"></span></label>
+              <label class="row switch"><span class="row-label">Karaoke: bajar la voz <small>en canciones en estéreo; la letra, en grande</small></span><input type="checkbox" id="sndKaraoke"><span class="switch-ui"></span></label>
               <label class="row"><span class="row-label">Temporizador para dormir</span>
                 <select id="sndSleep">
                   <option value="0">No</option>
@@ -2180,6 +2192,7 @@
                 </select>
               </label>
               <label class="row switch desktop-only"><span class="row-label">Visualizador también en el mini reproductor</span><input type="checkbox" id="sndVizMini"><span class="switch-ui"></span></label>
+              <label class="row switch"><span class="row-label">Pausar al desconectar los cascos <small>o el Bluetooth; así no sigue por los altavoces</small></span><input type="checkbox" id="sndUnplug" checked><span class="switch-ui"></span></label>
             </div>
           </div>
         </div>
@@ -2201,9 +2214,11 @@
           <div class="player-center">
             <div class="player-buttons">
               <button class="ed-btn" id="plShuffle" type="button" title="Aleatorio" aria-label="Aleatorio" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
+              <button class="ed-btn pl-book" id="plBack30" type="button" title="Retroceder 30 s" aria-label="Retroceder 30 s"><svg viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4v3.5H8"/><text x="12.6" y="15.2" text-anchor="middle">30</text></svg></button>
               <button class="ed-btn" id="plPrev" type="button" title="Anterior" aria-label="Anterior"><svg viewBox="0 0 24 24"><path d="M6 5v14M19 5l-9 7 9 7z"/></svg></button>
               <button class="ed-btn ed-play" id="plPlay" type="button" title="Reproducir / pausa" aria-label="Reproducir / pausa"><svg class="ed-ico-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="ed-ico-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
               <button class="ed-btn" id="plNext" type="button" title="Siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></svg></button>
+              <button class="ed-btn pl-book" id="plFwd30" type="button" title="Adelantar 30 s" aria-label="Adelantar 30 s"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v3.5H16"/><text x="11.4" y="15.2" text-anchor="middle">30</text></svg></button>
               <button class="ed-btn" id="plRepeat" type="button" title="Repetir" aria-label="Repetir" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
             <button class="ed-btn" id="plRadio" type="button" title="Modo radio: al acabar, sigue con canciones parecidas" aria-label="Modo radio" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l10-5"/><circle cx="8" cy="14" r="2.2"/><path d="M14 12h4M14 16h4"/></svg></button>
             </div>
@@ -2214,6 +2229,7 @@
             </div>
           </div>
           <div class="player-right">
+            <button class="ed-btn hidden" id="plChapters" type="button" title="Capítulos" aria-label="Capítulos" aria-haspopup="menu"><svg viewBox="0 0 24 24"><path d="M6 4h12v16l-6-4-6 4z"/></svg></button>
             <button class="ed-btn" id="plLyricsBtn" type="button" title="Letra" aria-label="Letra" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h10M4 18h7"/></svg></button>
             <button class="ed-btn hidden" id="plSave" type="button" title="Descargar esta canción" aria-label="Descargar esta canción"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/></svg></button>
             <button class="ed-btn" id="plQueueBtn" type="button" title="A continuación" aria-label="A continuación" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 6h11M4 11h11M4 16h7"/><path d="M17 13v8l4-4z"/></svg></button>
@@ -2223,6 +2239,7 @@
             <button class="ed-btn hidden" id="plExpand" type="button" title="Mostrar u ocultar el vídeo" aria-label="Mostrar u ocultar el vídeo"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg></button>
             <button class="ed-btn hidden" id="plSubs" type="button" title="Subtítulos" aria-label="Subtítulos" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 13h4M13 13h4M7 16h7"/></svg></button>
             <button class="ed-btn hidden" id="plFull" type="button" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+            <button class="ed-btn" id="plOutput" type="button" title="Elegir por dónde suena" aria-label="Elegir por dónde suena" aria-haspopup="menu"><svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2.5"/><circle cx="12" cy="14" r="3"/><path d="M12 7.5v.01"/></svg></button>
             <svg class="player-vol-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>
             <input type="range" id="plVolume" min="0" max="1" step="0.05" value="1" aria-label="Volumen">
             <button class="ed-btn" id="plClose" type="button" title="Cerrar el reproductor" aria-label="Cerrar el reproductor"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -2243,6 +2260,7 @@
       <span class="ed-flex"></span>
       <button class="now-chip" id="nowLyricsToggle" type="button" aria-pressed="true">Letra</button>
       <button class="now-chip hidden" id="nowTr" type="button" aria-pressed="false" title="Ver la traducción debajo de cada línea">Traducir</button>
+      <button class="now-chip" id="nowKaraoke" type="button" aria-pressed="false" title="Bajar la voz para cantar tú">Karaoke</button>
       <button class="now-btn" id="nowFull" type="button" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
     </div>
     <div class="now-main">

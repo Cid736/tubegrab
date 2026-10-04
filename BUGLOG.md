@@ -778,3 +778,27 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 ### [Bug] El vídeo encontrado para una canción podía ir a otra
 - Al borrar (o mover) una canción mientras sonaba la lista, el vídeo de YouTube encontrado para una canción de Spotify se guardaba por su posición antigua, en su vecina. Ahora se guarda en la canción buscada con ese nombre.
 - Probado: atajos, reordenar, filtro, Favoritas (YouTube y archivo), mini reproductor, perfil con 10 listas (9 nuevas + 1 que ya estaba; repetido: 0), claro y oscuro, sin controles sin nombre. 252 pruebas.
+
+
+---
+
+## 2026-10-04 — v3.12.0: mantener descargada, seguir donde lo dejaste, varias canciones, salidas de sonido, karaoke
+
+### [Feature] Mantener una lista descargada
+- Interruptor en cada lista tuya: sus canciones se encolan (con tu formato de audio de Descargar) una sola vez cada una (`got`), y al actualizarse la lista sola se bajan las nuevas. La marca sobrevive a releer la lista. El servidor guarda quién lo pidió (su id, nunca uno enviado) y vuelve a comprobar las opciones al usarlas.
+- Probado: 5 canciones a la cola y descargadas; volver a activarla no repite ninguna.
+
+### [Feature] Seguir donde lo dejaste y modo audiolibro
+- Al abrir la app vuelve la lista que sonaba, en la misma canción y segundo, en pausa. Cerrar el reproductor lo olvida.
+- Audios de 15 min o más: cada uno recuerda su punto y su velocidad; botones −30 s / +30 s y menú de capítulos (de tu archivo con ffmpeg, o del vídeo de YouTube). Una canción normal después vuelve a velocidad 1.
+- Probado con un libro de 16 min y 3 capítulos: capítulo 2, +30 s, 1,25×, recargar → en pausa en 5:32 a 1,25×; otra canción a 1×; el libro otra vez, en su punto.
+
+### [Feature] Varias canciones a la vez y «Deshacer»
+- Ctrl+clic, Mayús+clic, Mayús+↑/↓, Ctrl+A; barra con Escuchar, Cola, Añadir a una lista, Descargar, Quitar; menú para varias (también Favoritas); arrastrar o Alt+↑/↓ las mueve juntas (`moveMany`).
+- Quitar canciones, borrar una lista o quitar de Favoritas ya no pregunta: sale «Deshacer» (y Ctrl+Z). Las canciones vuelven a su sitio (`insert`) y la lista con su enlace, carpeta y ajustes (papelera en memoria, 10 min).
+
+### [Feature] Por dónde suena, pausa al desconectar, karaoke
+- Menú de salidas de sonido en el reproductor (`AudioContext.setSinkId`); si la elegida desaparece, suena por la de Windows y vuelve cuando reaparece. Electron solo da el permiso «speaker-selection» (ver los altavoces); micrófono y cámara siguen denegados.
+- Si se desconectan los cascos/Bluetooth mientras suena, pausa (se puede quitar en Sonido).
+- Karaoke: izquierda menos derecha quita el centro (la voz) y un paso bajo devuelve los graves. Medido: una voz en el centro baja a un 12 % (−18 dB); lo de los lados se queda.
+- 257 pruebas.

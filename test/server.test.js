@@ -697,6 +697,30 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
     for (const url of ['https://open.spotify.com/user/../../x', 'https://open.spotify.com/user/a%2F..%2Fb', 'http://open.spotify.com/user/x', 'https://open.spotify.com.evil.example/user/x', 'https://open.spotify.com/user/x/../../playlist']) {
       assert.equal((await call('/api/streamlists/import', json({ url }))).status, 400, url);
     }
+    // v3.12: several songs out and back, a deleted list back, "keep it downloaded" with checked options.
+    const many = await (await call('/api/streamlists', json({ name: 'many', tracks: ['A', 'B', 'C'].map((title) => ({ title, query: title })) }))).json();
+    for (const ns of [undefined, 'x', [], [99], [-1], ['0']]) assert.equal((await call(`/api/streamlists/${many.id}/remove`, json({ ns }))).status, 400, JSON.stringify(ns));
+    const out = await (await call(`/api/streamlists/${many.id}/remove`, json({ ns: [0, 2] }))).json();
+    assert.deepEqual(out.list.tracks.map((t) => t.title), ['B']);
+    assert.deepEqual((await (await call(`/api/streamlists/${many.id}`, json({ insert: out.removed }))).json()).tracks.map((t) => t.title), ['A', 'B', 'C']);
+    assert.equal((await call(`/api/streamlists/${'f'.repeat(16)}/remove`, json({ ns: [0] }))).status, 404);
+    assert.equal((await call('/api/streamlists/../../x/restore', json({}))).status, 404);
+    assert.equal((await call(`/api/streamlists/${'f'.repeat(16)}/restore`, json({}))).status, 404);
+    assert.equal((await call(`/api/streamlists/${many.id}/keep`, json({ on: true, opts: { mode: 'audio', audioFormat: 'exe' } }))).status, 200, 'unknown values: the defaults, as in any download');
+    await call(`/api/streamlists/${many.id}/keep`, json({ on: false }));
+    await call(`/api/streamlists/${many.id}`, json({ insert: [] }));
+    assert.equal((await call(`/api/streamlists/${many.id}/keep`, json({ on: true, opts: { mode: 'audio', audioFormat: 'mp3', outputDir: 'C:\\Windows' } }))).status, 200);
+    const kept = await (await call(`/api/streamlists/${many.id}`)).json();
+    assert.equal(kept.keep.client, CLIENT, 'the client is who asked, never sent');
+    assert.ok(kept.tracks.every((t) => t.got), 'all sent to the queue once');
+    assert.equal((await (await call(`/api/streamlists/${many.id}/keep`, json({ on: true, opts: { mode: 'audio', audioFormat: 'mp3' } }))).json()).queued, 0, 'not twice');
+    assert.equal((await (await call(`/api/streamlists/${many.id}/keep`, json({ on: false }))).json()).keep, false);
+    assert.equal((await (await call(`/api/streamlists/${many.id}`, { method: 'DELETE' })).json()).ok, true);
+    assert.equal((await (await call(`/api/streamlists/${many.id}/restore`, json({}))).json()).name, 'many');
+    assert.equal((await call(`/api/streamlists/${many.id}/restore`, json({}))).status, 404, 'only once');
+    await call(`/api/streamlists/${many.id}`, { method: 'DELETE' });
+    // Chapters: only of files in the library.
+    for (const id of ['', '../../etc/passwd', 'a'.repeat(32), 'C:%5CWindows%5Cwin.ini']) assert.equal((await call(`/api/library/chapters?id=${id}`)).status, 404, id);
   } finally {
     child.kill();
     fs.rmSync(data, { recursive: true, force: true });

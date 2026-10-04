@@ -969,6 +969,20 @@ app.post('/api/library/meta', requireDesktop, requireClient, createLimiter, (req
 // Lyrics for the player: the synced .lrc next to the song, else the words in
 // its tags, else (when asked, v3.8) LRCLIB by the song's artist and title,
 // like a song from YouTube.
+// The chapters of a long file (audiobooks, courses): read once per version of the file.
+const chapterCache = new Map(); // full path -> { mtime, chapters }
+app.get('/api/library/chapters', requireDesktop, requireClient, infoLimiter, async (req, res) => {
+  const file = library.resolve(req.query.id);
+  if (!file) return res.status(404).json({ error: 'No se encuentra el archivo.' });
+  let mtime = 0;
+  try { mtime = fs.statSync(file).mtimeMs; } catch { return res.status(404).json({ error: 'No se encuentra el archivo.' }); }
+  const hit = chapterCache.get(file);
+  if (hit && hit.mtime === mtime) return res.json({ chapters: hit.chapters });
+  const chapters = await require('./lib/chapters').readChapters(currentFfmpegPath(), file, ['-protocol_whitelist', 'file', '-format_whitelist', convert.INPUT_DEMUXERS]);
+  chapterCache.set(file, { mtime, chapters });
+  if (chapterCache.size > 300) chapterCache.delete(chapterCache.keys().next().value);
+  res.json({ chapters });
+});
 const onlineLyrics = new Map(); // full path -> { synced, plain, duration } | null
 app.get('/api/library/lyrics', requireDesktop, requireClient, infoLimiter, async (req, res) => {
   const file = library.resolve(req.query.id);
@@ -1152,7 +1166,62 @@ app.post('/api/streamlists/:id', requireDesktop, requireClient, createLimiter, (
     name: b.name, add: Array.isArray(b.add) ? b.add : undefined,
     folder: typeof b.folder === 'string' ? b.folder : undefined, sync: typeof b.sync === 'boolean' ? b.sync : undefined,
     move: b.move && typeof b.move === 'object' ? { from: b.move.from, to: b.move.to } : undefined,
+    moveMany: b.moveMany && typeof b.moveMany === 'object' ? { from: b.moveMany.from, to: b.moveMany.to } : undefined,
+    insert: Array.isArray(b.insert) ? b.insert : undefined,
   }));
+});
+// "Keep it downloaded": the songs of a list not in your library yet are queued
+// (once each), with the download options you had when you turned it on, now
+// and every time the list is read again.
+app.post('/api/streamlists/:id/keep', requireDesktop, requireClient, createLimiter, (req, res) => {
+  const l = listFor(req, res);
+  if (!l) return;
+  const b = req.body || {};
+  if (b.on !== true) { streamLists.update(l.id, { keep: null }); return res.json({ ok: true, keep: false }); }
+  const opts = download.parseDownloadOptions({ ...(b.opts && typeof b.opts === 'object' ? b.opts : {}), playlist: false, chapters: false, sectionStart: '', sectionEnd: '', live: false });
+  const invalid = download.validateOptions(opts);
+  if (invalid) return res.status(400).json({ error: invalid });
+  streamLists.update(l.id, { keep: { client: req.clientId, opts: b.opts && typeof b.opts === 'object' ? b.opts : {} } });
+  res.json({ ok: true, keep: true, ...keepDownloaded(l.id) });
+});
+function keepDownloaded(id) {
+  const l = streamLists.get(id);
+  if (!l || !l.keep) return { queued: 0, already: 0 };
+  const opts = download.parseDownloadOptions({ ...l.keep.opts, playlist: false, chapters: false, sectionStart: '', sectionEnd: '', live: false });
+  if (download.validateOptions(opts)) return { queued: 0, already: 0 };
+  const client = l.keep.client;
+  const todo = [];
+  const got = [];
+  let already = 0;
+  l.tracks.forEach((t, n) => {
+    if (t.got) return;
+    const url = t.yt ? `https://www.youtube.com/watch?v=${t.yt}` : download.searchUrl(t.query);
+    if (!url) return;
+    if (t.yt && alreadyFor(client, url)) { got.push(n); already++; return; }
+    todo.push({ n, url, title: t.artist ? `${t.artist} - ${t.title}` : t.title });
+  });
+  // As many as the queue takes now (the rest, next time the list is read).
+  let batch = todo.slice(0, 300);
+  while (batch.length && !jobs.canCreate(client, batch.length)) batch = batch.slice(0, Math.floor(batch.length / 2));
+  let queued = 0;
+  for (const x of batch) {
+    if (createFromSpec(client, { kind: 'download', url: x.url, opts }, { title: x.title, priority: 'normal', saveFolder: null })) { queued++; got.push(x.n); }
+  }
+  if (got.length) streamLists.markGot(id, got);
+  return { queued, already };
+}
+// Several songs out at once (the list and what went, to put it back).
+app.post('/api/streamlists/:id/remove', requireDesktop, requireClient, (req, res) => {
+  if (!listFor(req, res)) return;
+  const r = streamLists.removeTracks(String(req.params.id), (req.body || {}).ns);
+  if (!r) return res.status(400).json({ error: 'No se encuentran esas canciones.' });
+  res.json(r);
+});
+// A list deleted a moment ago, back ("Deshacer").
+app.post('/api/streamlists/:id/restore', requireDesktop, requireClient, (req, res) => {
+  const l = /^[a-f0-9]{16}$/.test(String(req.params.id)) ? streamLists.restore(String(req.params.id)) : null;
+  if (!l) return res.status(404).json({ error: 'Ya no se puede recuperar esa lista.' });
+  res.json(l);
 });
 // "Keep it up to date": lists from a link are read again by themselves, a
 // few minutes after start and then every few hours (one at a time; a list
@@ -1165,6 +1234,8 @@ async function syncLists() {
     try {
       const fresh = await readListLink(l.url);
       if (fresh.tracks.length) streamLists.update(id, { tracks: fresh.tracks });
+      // Kept downloaded: its new songs too.
+      keepDownloaded(id);
     } catch { /* next round */ } finally { importSlots.release(); }
   }
 }
@@ -1179,7 +1250,9 @@ app.post('/api/streamlists/:id/refresh', requireDesktop, requireClient, infoLimi
   if (!importSlots.take()) return res.status(429).json(BUSY);
   try {
     const fresh = await readListLink(l.url);
-    res.json(streamLists.update(l.id, { tracks: fresh.tracks }));
+    const updated = streamLists.update(l.id, { tracks: fresh.tracks });
+    keepDownloaded(l.id);
+    res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message && err.message.length < 200 ? err.message : 'No se pudo leer esa lista.' });
   } finally { importSlots.release(); }

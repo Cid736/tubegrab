@@ -4824,7 +4824,7 @@ const player = (() => {
   const SPEEDS = [0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
   const EQ_KEY = 'tubegrab_eq';
   const okGains = (g) => Array.isArray(g) && g.length === BANDS.length && g.every((x) => Number.isFinite(x) && x >= -12 && x <= 12);
-  const eq = { preset: 'flat', gains: [0, 0, 0, 0, 0], crossfade: 0, level: false, speed: 1, pitch: true, viz: 'bars', vizMini: false, mine: [] };
+  const eq = { preset: 'flat', gains: [0, 0, 0, 0, 0], crossfade: 0, level: false, speed: 1, pitch: true, viz: 'bars', vizMini: false, mine: [], unplug: true };
   try {
     const raw = JSON.parse(localStorage.getItem(EQ_KEY));
     if (raw && Array.isArray(raw.mine)) {
@@ -4834,13 +4834,15 @@ const player = (() => {
     if (raw && okGains(raw.gains)) eq.gains = raw.gains;
     if (raw && [0, 2, 4, 6, 10, 12].includes(raw.crossfade)) eq.crossfade = raw.crossfade;
     if (raw && ['bars', 'wave', 'off'].includes(raw.viz)) eq.viz = raw.viz;
-    if (raw) { eq.level = raw.level === true; eq.pitch = raw.pitch !== false; eq.vizMini = raw.vizMini === true; }
+    if (raw) { eq.level = raw.level === true; eq.pitch = raw.pitch !== false; eq.vizMini = raw.vizMini === true; eq.unplug = raw.unplug !== false; }
   } catch { /* defaults */ }
   const saveEq = () => {
     const { speed, ...keep } = eq;
     try { localStorage.setItem(EQ_KEY, JSON.stringify(keep)); } catch { /* ignore */ }
   };
   let actx = null;
+  let voice = null;              // karaoke: { dry, wet }
+  let karaoke = false;
   let filters = [];
   let limiter = null;
   let master = null;             // the sleep timer fades this one out
@@ -4867,19 +4869,49 @@ const player = (() => {
       scope.smoothingTimeConstant = 0.78;
       filters.reduce((a, b) => { a.connect(b); return b; }).connect(limiter).connect(master).connect(actx.destination);
       master.connect(scope);
+      // Karaoke: left minus right takes out what's in the middle (the voice);
+      // the bass, also in the middle, comes back through a low-pass.
+      const vin = actx.createGain();
+      const dry = actx.createGain();
+      const wet = actx.createGain();
+      dry.gain.value = karaoke ? 0 : 1;
+      wet.gain.value = karaoke ? 1 : 0;
+      const split = actx.createChannelSplitter(2);
+      const left = actx.createGain();
+      const right = actx.createGain();
+      right.gain.value = -1;
+      const side = actx.createGain();
+      side.channelCount = 1;
+      side.channelCountMode = 'explicit';
+      side.gain.value = 1.3;
+      const bass = actx.createBiquadFilter();
+      bass.type = 'lowpass';
+      bass.frequency.value = 150;
+      vin.connect(dry).connect(filters[0]);
+      vin.connect(split);
+      split.connect(left, 0);
+      split.connect(right, 1);
+      left.connect(side);
+      right.connect(side);
+      side.connect(wet);
+      vin.connect(bass).connect(wet);
+      wet.connect(filters[0]);
+      voice = { dry, wet };
       for (const m of [A, B]) {
         const src = actx.createMediaElementSource(m);
         const g = actx.createGain();
         const lv = actx.createGain();
         const meter = actx.createAnalyser();
         meter.fftSize = 2048;
-        src.connect(g).connect(lv).connect(filters[0]);
+        src.connect(g).connect(lv).connect(vin);
         src.connect(meter);
         gains.set(m, g);
         levels.set(m, lv);
         meters.set(m, meter);
       }
       setLimiter();
+      // Where it sounds (after this, so a choice saved can never stop the sound).
+      setTimeout(() => applySink(), 0);
     } catch { actx = null; }
   }
   // Only on when something can push the sound over the top (louder songs, boosted bands).
@@ -4966,6 +4998,7 @@ const player = (() => {
     $('sndPitch').checked = eq.pitch;
     $('sndViz').value = eq.viz;
     $('sndVizMini').checked = eq.vizMini;
+    $('sndUnplug').checked = eq.unplug;
     $('plEqBtn').classList.toggle('on', eq.speed !== 1 || Boolean(sleep));
     setLimiter();
     saveEq();
@@ -5022,6 +5055,10 @@ const player = (() => {
     const v = Number($('sndSpeed').value);
     eq.speed = SPEEDS.includes(v) ? v : 1;
     for (const m of [A, B]) applySpeed(m);
+    // A long one (a book): this speed is its own from now on.
+    const f = cur();
+    const k = f && isLong(deck) ? posKey(f) : null;
+    if (k) { positions[k] = { ...(positions[k] || {}), s: eq.speed, at: Date.now() }; savePositions(); bookSpeed = true; }
     applyEq();
   });
   $('sndPitch').addEventListener('change', () => { eq.pitch = $('sndPitch').checked; for (const m of [A, B]) applySpeed(m); applyEq(); });
@@ -5373,7 +5410,13 @@ const player = (() => {
     deck.src = srcOf(f);
     applySpeed(deck);
     setLevel(deck, f);
-    deck.play().catch(() => {});
+    // Coming back to it: where it was (paused, when the app opens), or a long one's own place.
+    const hold = resumeHold;
+    resumeHold = null;
+    const place = hold ? null : posOf(f);
+    if (hold && hold.time) seekWhenReady(deck, hold.time);
+    else if (place) { seekWhenReady(deck, place.t); showToast(t('Sigues donde lo dejaste: {t}', { t: formatDuration(place.t) })); }
+    if (!hold) deck.play().catch(() => {});
     show(f);
   }
   function nextIndex(dir) {
@@ -5399,6 +5442,8 @@ const player = (() => {
     for (const m of [A, B]) { m.pause(); m.removeAttribute('src'); m.load(); }
     list = [];
     index = -1;
+    // Closed on purpose: nothing to come back to.
+    try { localStorage.removeItem(RESUME_KEY); } catch { /* ignore */ }
     $('player').classList.add('hidden');
     document.body.classList.remove('has-player');
     $('plLyrics').classList.add('hidden');
@@ -5457,9 +5502,13 @@ const player = (() => {
   // ---- events (only the deck in use drives the bar) ----
   for (const m of [A, B]) {
     m.addEventListener('play', () => { if (m === deck) { $('plPlay').classList.add('playing'); pushState(); levelsToMini(); nowView.sync(); } });
-    m.addEventListener('pause', () => { if (m === deck && !fading) { $('plPlay').classList.remove('playing'); pushState(); levelsToMini(); nowView.sync(); } });
+    m.addEventListener('pause', () => { if (m === deck && !fading) { $('plPlay').classList.remove('playing'); pushState(); levelsToMini(); nowView.sync(); saveResume(true); if (cur()) keepPlace(m, cur()); } });
     m.addEventListener('loadedmetadata', () => {
       if (m !== deck) return;
+      // A long one: ±30 s, its chapters and its own speed.
+      $('player').classList.toggle('long', isLong(m));
+      if (cur()) speedFor(cur(), m);
+      if (isLong(m) && cur()) loadChapters(cur()); else { chapters = []; $('plChapters').classList.add('hidden'); }
       $('plSeek').max = String(m.duration || 1);
       $('plDur').textContent = formatDuration(Math.round(m.duration)) || '0:00';
     });
@@ -5476,9 +5525,12 @@ const player = (() => {
       if (radio && isStream(f) && index >= list.length - 1 && m.duration - m.currentTime < 25) radioFromYouTube();
       maybeFade();
       pushStateSoon();
+      saveResume();
+      if (f && isLong(m) && Date.now() - placeSaved > 10000) { placeSaved = Date.now(); keepPlace(m, f); }
     });
     m.addEventListener('ended', async () => {
       if (m !== deck || fading) return;
+      keepPlace(m, cur(), true);
       logHeard();
       if (sleep && sleep.song) { endSleep(true); return; }
       if (repeat) { m.currentTime = 0; m.play().catch(() => {}); return; }
@@ -5968,6 +6020,184 @@ const player = (() => {
     };
   })();
 
+  // ---- "Seguir donde lo dejaste": what was playing comes back (paused) when
+  // the app opens again; long ones (books, courses, podcasts) keep their place
+  // and their speed each, and get ±30 s and their chapters ----
+  const RESUME_KEY = 'tubegrab_resume';
+  const POS_KEY = 'tubegrab_positions';
+  const LONG = 15 * 60;
+  let resumeHold = null; // { time }: the next song loads, goes there and waits
+  let resumeSaved = 0;
+  let placeSaved = 0;
+  let positions = {};
+  try { const p = JSON.parse(localStorage.getItem(POS_KEY)); if (p && typeof p === 'object' && !Array.isArray(p)) positions = p; } catch { /* none */ }
+  const isLong = (m) => Number.isFinite(m.duration) && m.duration >= LONG;
+  const posKey = (f) => songKey(f) || (isStream(f) && f.query ? `q:${String(f.query).slice(0, 200)}` : null);
+  function posOf(f) {
+    const p = positions[posKey(f)];
+    return p && Number.isFinite(p.t) && p.t > 20 ? p : null;
+  }
+  function savePositions() {
+    const keys = Object.keys(positions);
+    if (keys.length > 200) for (const k of keys.sort((a, b) => (positions[a].at || 0) - (positions[b].at || 0)).slice(0, keys.length - 200)) delete positions[k];
+    try { localStorage.setItem(POS_KEY, JSON.stringify(positions)); } catch { /* only for now */ }
+  }
+  /** Where a long one is (or: it finished, so next time it starts again). */
+  function keepPlace(m, f, done = false) {
+    const k = f && posKey(f);
+    if (!k || !isLong(m)) return;
+    if (done) { if (positions[k]) { delete positions[k].t; positions[k].at = Date.now(); } } else positions[k] = { ...(positions[k] || {}), t: Math.floor(m.currentTime), at: Date.now() };
+    savePositions();
+  }
+  const serial = (f) => (isStream(f)
+    ? { s: 1, yt: f.yt || null, query: f.query || null, title: f.title, channel: f.channel, artist: f.artist, duration: f.duration || null, thumbnail: f.thumbnail || null, list: f.list || null, n: Number.isInteger(f.n) ? f.n : null }
+    : { f: library.relOf(f) });
+  function saveResume(now = false) {
+    if (!desktopApi || !cur() || cast.active()) return;
+    if (!now && Date.now() - resumeSaved < 5000) return;
+    resumeSaved = Date.now();
+    const base = Math.max(0, index - 50);
+    try { localStorage.setItem(RESUME_KEY, JSON.stringify({ at: Date.now(), idx: index - base, time: Math.floor(deck.currentTime || 0), items: list.slice(base, index + 250).map(serial) })); } catch { /* only for now */ }
+  }
+  /** At start: the list as it was, on the song it was on, at that second, paused. */
+  async function resume() {
+    if (!desktopApi || cur()) return;
+    let r = null;
+    try { r = JSON.parse(localStorage.getItem(RESUME_KEY)); } catch { return; }
+    if (!r || !Array.isArray(r.items) || !r.items.length || !Number.isInteger(r.idx) || !(Date.now() - r.at < 30 * 86400e3)) return;
+    await library.ensure();
+    if (cur()) return;
+    const byRel = new Map(library.files().map((f) => [library.relOf(f), f]));
+    const items = [];
+    let at = 0;
+    r.items.slice(0, 300).forEach((x, i) => {
+      const it = x && x.s === 1 ? asStreams([{ yt: x.yt, query: x.query, title: x.title, channel: x.channel, artist: x.artist, duration: x.duration, thumbnail: x.thumbnail, list: x.list, n: x.n }])[0]
+        : x && typeof x.f === 'string' ? byRel.get(x.f) : null;
+      if (!it) return;
+      if (i <= r.idx) at = items.length;
+      items.push(it);
+    });
+    if (!items.length) return;
+    list = items;
+    index = Math.min(at, items.length - 1);
+    resumeHold = { time: Number.isFinite(r.time) && r.time > 0 ? r.time : 0 };
+    start();
+    showToast(t('Seguías con «{t}»: pulsa ▶ para continuar', { t: nameOf(cur()) }));
+  }
+  /** Goes to `t` once the song's length is known (not into its very end). */
+  function seekWhenReady(m, at) {
+    m.addEventListener('loadedmetadata', () => { if (Number.isFinite(m.duration) && at < m.duration - 5) m.currentTime = at; }, { once: true });
+  }
+  window.addEventListener('pagehide', () => { saveResume(true); if (cur()) keepPlace(deck, cur()); });
+  // Each book its own speed: the one chosen while it played comes back with it.
+  let bookSpeed = false;
+  function speedFor(f, m) {
+    const p = positions[posKey(f)];
+    if (isLong(m) && p && SPEEDS.includes(p.s) && p.s !== eq.speed) { eq.speed = p.s; bookSpeed = true; for (const d of [A, B]) applySpeed(d); applyEq(); } else if (!isLong(m) && bookSpeed) { bookSpeed = false; eq.speed = 1; for (const d of [A, B]) applySpeed(d); applyEq(); }
+  }
+  // ±30 s, and the chapters (of your file, or the video's).
+  let chapters = [];
+  async function loadChapters(f) {
+    chapters = [];
+    $('plChapters').classList.add('hidden');
+    try {
+      const r = isStream(f) ? (f.yt ? await api(`/api/stream/info?id=${f.yt}`) : null) : await api(`/api/library/chapters?id=${encodeURIComponent(f.id)}`);
+      if (cur() !== f || !r || !Array.isArray(r.chapters)) return;
+      chapters = r.chapters.filter((c) => c && Number.isFinite(c.start)).slice(0, 300);
+      $('plChapters').classList.toggle('hidden', chapters.length < 2);
+    } catch { /* none */ }
+  }
+  $('plBack30').addEventListener('click', () => seekBy(-30));
+  $('plFwd30').addEventListener('click', () => seekBy(30));
+  $('plChapters').addEventListener('click', () => {
+    if (!chapters.length) return;
+    const now = deck.currentTime || 0;
+    let on = 0;
+    chapters.forEach((c, i) => { if (c.start <= now + 0.5) on = i; });
+    ctxMenu.open($('plChapters'), chapters.map((c, i) => ({
+      label: `${i === on ? '▶ ' : ''}${formatDuration(Math.floor(c.start)) || '0:00'} · ${c.title || String(i + 1)}`,
+      onClick: () => { if (!cast.active()) { cancelFade(); deck.currentTime = c.start; } },
+    })), $('plChapters'));
+  });
+
+  // ---- where it sounds: speakers, headphones, the TV (HDMI), without changing Windows' own ----
+  const SINK_KEY = 'tubegrab_sink';
+  let sink = null; // { id, label } or null: Windows' default
+  try { const s = JSON.parse(localStorage.getItem(SINK_KEY)); if (s && typeof s.id === 'string' && s.id.length <= 200 && typeof s.label === 'string') sink = { id: s.id, label: s.label.slice(0, 200) }; } catch { /* default */ }
+  async function outputs() {
+    try { return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput' && d.deviceId); } catch { return []; }
+  }
+  /** Sends the sound to the chosen output (Windows' default if it isn't there). */
+  async function applySink() {
+    const there = sink ? (await outputs()).some((d) => d.deviceId === sink.id) : true;
+    const id = sink && there ? sink.id : '';
+    try {
+      if (actx && typeof actx.setSinkId === 'function') await actx.setSinkId(id);
+      else for (const m of [A, B]) if (typeof m.setSinkId === 'function') await m.setSinkId(id);
+    } catch { /* stays where it was */ }
+    $('plOutput').classList.toggle('on', Boolean(sink && there));
+    $('plOutput').title = sink && there ? t('Suena por: {d}', { d: sink.label }) : t('Elegir por dónde suena');
+    $('plOutput').setAttribute('aria-label', $('plOutput').title);
+  }
+  $('plOutput').addEventListener('click', async () => {
+    const all = await outputs();
+    const def = all.find((d) => d.deviceId === 'default');
+    const devices = all.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications');
+    if (!devices.length) { showToast(t('No se ven otras salidas de sonido.')); return; }
+    const pick = (s) => { sink = s; try { if (s) localStorage.setItem(SINK_KEY, JSON.stringify(s)); else localStorage.removeItem(SINK_KEY); } catch { /* only for now */ } graph(); applySink(); showToast(s ? t('Suena por: {d}', { d: s.label }) : t('Suena por la salida de Windows')); };
+    ctxMenu.open($('plOutput'), [
+      { label: `${!sink ? '✓ ' : ''}${t('La de Windows')}${def && def.label ? ` (${def.label.replace(/^[^-]*-\s*/, '')})` : ''}`, onClick: () => pick(null) },
+      '-',
+      ...devices.map((d) => ({ label: `${sink && sink.id === d.deviceId ? '✓ ' : ''}${d.label || t('Salida de sonido')}`, onClick: () => pick({ id: d.deviceId, label: d.label || t('Salida de sonido') }) })),
+    ], $('plOutput'));
+  });
+  // Headphones unplugged (or Bluetooth gone) while it plays: pause, instead of
+  // carrying on through the speakers.
+  let devNow = null; // { ids, groups, def }
+  async function devSnapshot() {
+    const d = await outputs();
+    const def = d.find((x) => x.deviceId === 'default');
+    return { ids: new Set(d.map((x) => x.deviceId)), groups: new Set(d.map((x) => x.groupId)), def: def ? def.groupId : null };
+  }
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    devSnapshot().then((s) => { devNow = s; });
+    navigator.mediaDevices.addEventListener('devicechange', async () => {
+      const now = await devSnapshot();
+      const was = devNow;
+      devNow = now;
+      if (!was) return;
+      const gone = sink ? was.ids.has(sink.id) && !now.ids.has(sink.id) : Boolean(was.def && !now.groups.has(was.def));
+      const back = sink && !was.ids.has(sink.id) && now.ids.has(sink.id);
+      if (gone || back) applySink();
+      if (gone && eq.unplug && cur() && !deck.paused && !cast.active()) {
+        deck.pause();
+        showToast(t('Se ha desconectado la salida de sonido: la música está en pausa.'));
+      }
+    });
+  }
+  $('sndUnplug').addEventListener('change', () => { eq.unplug = $('sndUnplug').checked; applyEq(); });
+
+  // ---- karaoke: the voice (what's in the middle of a stereo song) down ----
+  function setKaraoke(on) {
+    karaoke = on;
+    graph();
+    if (voice) {
+      const at = actx.currentTime;
+      voice.dry.gain.setTargetAtTime(on ? 0 : 1, at, 0.05);
+      voice.wet.gain.setTargetAtTime(on ? 1 : 0, at, 0.05);
+    }
+    $('sndKaraoke').checked = on;
+    $('nowKaraoke').classList.toggle('on', on);
+    $('nowKaraoke').setAttribute('aria-pressed', String(on));
+    // Lyrics in big, to sing along.
+    if (on && cur()) {
+      if ($('nowView').classList.contains('hidden')) $('plNow').click();
+      if (nowView.lyricsShown && !nowView.lyricsShown()) $('nowLyricsToggle').click();
+    }
+  }
+  $('sndKaraoke').addEventListener('change', () => { setKaraoke($('sndKaraoke').checked); showToast($('sndKaraoke').checked ? t('Karaoke: la voz baja (en canciones en estéreo)') : t('Karaoke desactivado')); });
+  $('nowKaraoke').addEventListener('click', () => setKaraoke(!karaoke));
+
   // ---- mini player window (desktop) ----
   let pushTimer = null;
   function pushState() {
@@ -5996,6 +6226,7 @@ const player = (() => {
     $('plCastBtn').classList.add('hidden');
   }
   const mixed = (items) => items.map((x) => (x && x.file ? x.file : asStreams([x])[0])).filter(Boolean);
+  setTimeout(resume, 1500);
   async function playQuery(q) {
     try {
       const r = await api(`/api/stream/find?q=${encodeURIComponent(q.slice(0, 200))}`);
@@ -6331,6 +6562,37 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.remove('visible'), 3000);
 }
+
+/**
+ * "Deshacer" instead of "¿Seguro?": a notice with a button (and Ctrl+Z) for a
+ * few seconds after something was removed; `onUndo` puts it back.
+ */
+let undoLast = null;
+function undoToast(msg, onUndo, ms = 8000) {
+  let box = document.querySelector('.toast-undo');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'toast-undo';
+    box.setAttribute('role', 'status');
+    box.innerHTML = '<span></span><button type="button" class="link-btn"></button>';
+    document.body.appendChild(box);
+    box.querySelector('button').addEventListener('click', () => { const u = undoLast; hide(); if (u) u(); });
+  }
+  function hide() { box.classList.remove('visible'); undoLast = null; clearTimeout(box.timer); }
+  box.querySelector('span').textContent = msg;
+  box.querySelector('button').textContent = t('Deshacer');
+  undoLast = onUndo;
+  box.classList.add('visible');
+  clearTimeout(box.timer);
+  box.timer = setTimeout(hide, ms);
+}
+document.addEventListener('keydown', (e) => {
+  if (!undoLast || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.code !== 'KeyZ' || currentView === 'cv-edit') return;
+  const el = document.activeElement;
+  if (el && (/^(INPUT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable)) return;
+  e.preventDefault();
+  document.querySelector('.toast-undo button').click();
+});
 
 function setBusy(on, label) {
   busy = on;
@@ -7318,6 +7580,8 @@ const listenUi = (() => {
   let likes = []; // your favourites (the star), newest first
   let likedKeys = new Set();
   let forYou = []; // the cards of "Made for you" (also offered as quick tiles)
+  let sel = new Set(); // the songs selected in the open list (their places)
+  let anchor = null;   // where a Shift+click range starts
   const SOURCE = { spotify: 'Spotify', apple: 'Apple Music', youtube: 'YouTube', own: 'Tu lista' };
   const tracksOf = (l) => (l.virtual ? l.tracks : l.tracks.map((tr, n) => ({ ...tr, list: l.id, n, channel: tr.artist })));
   const totalTime = (l) => { const s = l.tracks.reduce((a, tr) => a + (tr.duration || 0), 0); return s ? formatDuration(s) : ''; };
@@ -7446,7 +7710,8 @@ const listenUi = (() => {
       else await postJson('/api/listen/unlike', { key: song.key });
     } catch (err) { showToast(err.message); return; }
     if (on) { likedKeys.add(song.key); likes = [{ ...song, at: Date.now() }, ...likes.filter((s) => s.key !== song.key)]; } else { likedKeys.delete(song.key); likes = likes.filter((s) => s.key !== song.key); }
-    showToast(on ? t('Añadida a Favoritas') : t('Quitada de Favoritas'));
+    if (on) showToast(t('Añadida a Favoritas'));
+    else undoToast(t('Quitada de Favoritas'), () => setLike(song, true));
     syncPlayer();
     if (open && open.kind === 'liked') { open = likedList(); renderDetail(); } else if (open) markRows();
     if (!open) { renderGrid(); renderQuick(); }
@@ -7749,6 +8014,8 @@ const listenUi = (() => {
     $('listenHome').classList.add('hidden');
     $('listenDetail').classList.remove('hidden');
     $('ldFilter').value = '';
+    sel = new Set();
+    anchor = null;
     renderDetail();
     $('ldBack').focus();
   }
@@ -7789,6 +8056,7 @@ const listenUi = (() => {
     if (own) {
       if (document.activeElement !== $('ldFolder')) $('ldFolder').value = l.folder || '';
       $('ldSync').checked = Boolean(l.sync);
+      $('ldKeepDl').checked = Boolean(l.keep);
     }
     $('ldDownload').classList.toggle('hidden', !l.tracks.some((tr) => !tr.file));
     $('ldStatus').textContent = '';
@@ -7809,7 +8077,7 @@ const listenUi = (() => {
       if (q && !fold(`${tr.title} ${tr.artist || tr.channel || ''}`).includes(q)) return;
       shown++;
       const li = document.createElement('li');
-      li.className = 'lx-row';
+      li.className = `lx-row${sel.has(i) ? ' sel' : ''}`;
       li.dataset.i = String(i);
       const key = keyOf(tr);
       if (key) li.dataset.key = key;
@@ -7832,7 +8100,7 @@ const listenUi = (() => {
       main.querySelector('.lt-title').textContent = tr.title;
       main.querySelector('.lt-sub').textContent = [tr.artist || tr.channel || '', tr.file ? t('en tu biblioteca') : ''].filter(Boolean).join(' · ');
       main.title = look.click === 'double' ? t('Doble clic o Intro para escuchar') : t('Escuchar desde aquí');
-      main.addEventListener('click', () => { if (look.click === 'single') playAt(i); });
+      main.addEventListener('click', (e) => { if (pickRow(i, e)) return; if (look.click === 'single') playAt(i); });
       main.addEventListener('dblclick', () => { if (look.click === 'double') playAt(i); });
       li.append(n, main);
       if (key) {
@@ -7859,21 +8127,36 @@ const listenUi = (() => {
       more.title = t('Más opciones para «{t}»', { t: tr.title });
       more.setAttribute('aria-label', more.title);
       more.setAttribute('aria-haspopup', 'menu');
-      more.addEventListener('click', () => ctxMenu.open(more, trackMenu(tr, i), main));
+      more.addEventListener('click', () => ctxMenu.open(more, sel.size > 1 && sel.has(i) ? manyMenu() : trackMenu(tr, i), main));
       li.append(dur, more);
-      li.addEventListener('contextmenu', (e) => { e.preventDefault(); main.focus(); ctxMenu.open({ x: e.clientX, y: e.clientY }, trackMenu(tr, i), main); });
+      li.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (!sel.has(i)) { sel = new Set([i]); anchor = i; paintSel(); }
+        main.focus();
+        ctxMenu.open({ x: e.clientX, y: e.clientY }, sel.size > 1 ? manyMenu() : trackMenu(tr, i), main);
+      });
       // Your own lists: drag a song to another place.
       if (own && !q) {
         li.draggable = true;
-        li.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/x-tubegrab-row', String(i)); li.classList.add('dragging'); });
+        li.addEventListener('dragstart', (e) => {
+          e.dataTransfer.effectAllowed = 'move';
+          // A selected song drags all the selected ones.
+          const rows = sel.has(i) && sel.size > 1 ? [...sel].sort((a, b) => a - b) : [i];
+          e.dataTransfer.setData('text/x-tubegrab-row', JSON.stringify(rows));
+          li.classList.add('dragging');
+        });
         li.addEventListener('dragend', () => li.classList.remove('dragging'));
         li.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/x-tubegrab-row')) { e.preventDefault(); li.classList.add('drop'); } });
         li.addEventListener('dragleave', () => li.classList.remove('drop'));
         li.addEventListener('drop', (e) => {
           e.preventDefault();
           li.classList.remove('drop');
-          const from = Number(e.dataTransfer.getData('text/x-tubegrab-row'));
-          if (Number.isInteger(from) && from !== i) moveTrack(from, i);
+          let rows = [];
+          try { rows = JSON.parse(e.dataTransfer.getData('text/x-tubegrab-row')); } catch { rows = []; }
+          if (!Array.isArray(rows) || !rows.length || !rows.every(Number.isInteger)) return;
+          if (rows.length === 1) { if (rows[0] !== i) moveTrack(rows[0], i); return; }
+          // Dropped lower down: after this song; higher up: before it.
+          if (!rows.includes(i)) moveMany(rows, rows.every((r) => r < i) ? i + 1 : i);
         });
       }
       ol.appendChild(li);
@@ -7882,6 +8165,106 @@ const listenUi = (() => {
     markRows();
   }
   const playAt = (i) => { if (open) player.playMixed(tracksOf(open), i); };
+  // ---- several songs at once: Ctrl+click, Shift+click, Ctrl+A ----
+  /** A click with Ctrl or Shift picks songs (true); a plain one selects just that one. */
+  function pickRow(i, e) {
+    if (e.ctrlKey || e.metaKey) {
+      if (sel.has(i)) sel.delete(i); else sel.add(i);
+      anchor = i;
+      paintSel();
+      return true;
+    }
+    if (e.shiftKey && anchor !== null) {
+      const shown = [...$('ldTracks').children].map((li) => Number(li.dataset.i));
+      const a = shown.indexOf(anchor);
+      const b = shown.indexOf(i);
+      if (a >= 0 && b >= 0) { sel = new Set(shown.slice(Math.min(a, b), Math.max(a, b) + 1)); paintSel(); return true; }
+    }
+    sel = new Set([i]);
+    anchor = i;
+    paintSel();
+    return false;
+  }
+  function paintSel() {
+    for (const li of $('ldTracks').children) li.classList.toggle('sel', sel.has(Number(li.dataset.i)));
+    const many = sel.size > 1;
+    $('ldSelBar').classList.toggle('hidden', !many);
+    if (many) $('ldSelCount').textContent = t('{n} canciones seleccionadas', { n: sel.size });
+    $('ldSelRemove').classList.toggle('hidden', !open || open.virtual);
+  }
+  const picked = () => { const all = tracksOf(open); return [...sel].sort((a, b) => a - b).map((i) => all[i]).filter(Boolean); };
+  function manyMenu() {
+    const items = picked();
+    const songs = items.map(songOf).filter(Boolean);
+    const menu = [
+      { label: t('Escuchar estas'), icon: 'play', onClick: () => player.playMixed(items) },
+      { label: t('Escuchar a continuación'), icon: 'top', onClick: () => player.enqueueMixed(items, { next: true }) },
+      { label: t('Añadir a la cola'), icon: 'addList', onClick: () => player.enqueueMixed(items) },
+      '-',
+    ];
+    if (songs.length) menu.push({ label: t('Añadir a Favoritas'), icon: 'star', onClick: () => likeMany(songs) });
+    if (items.some((x) => !x.file)) menu.push({ label: t('Añadir a una lista'), icon: 'folder', sub: () => listsMenu(items) });
+    if (open && !open.virtual) menu.push({ label: t('Quitar de esta lista'), icon: 'remove', danger: true, onClick: () => removeMany([...sel]) });
+    menu.push('-');
+    if (items.some((x) => !x.file)) menu.push({ label: t('Descargar'), icon: 'download', onClick: () => downloadTracks(items) });
+    return menu;
+  }
+  async function likeMany(songs) {
+    let n = 0;
+    for (const s of songs.slice(0, 200)) {
+      if (likedKeys.has(s.key)) continue;
+      try { await postJson('/api/listen/likes', { song: s }); likedKeys.add(s.key); likes = [{ ...s, at: Date.now() }, ...likes.filter((x) => x.key !== s.key)]; n++; } catch { /* the next one */ }
+    }
+    showToast(t('{n} añadidas a Favoritas', { n }));
+    syncPlayer();
+    markRows();
+  }
+  /** Out of the list, with "Deshacer" (they go back where they were). */
+  async function removeMany(ns) {
+    if (!open || open.virtual || !ns.length) return;
+    const { id, name } = open;
+    let r;
+    try { r = await postJson(`/api/streamlists/${id}/remove`, { ns }); } catch (err) { showToast(err.message); return; }
+    if (open && open.id === id) { open = r.list; sel = new Set(); renderDetail(); }
+    const msg = r.removed.length === 1 ? t('«{t}» quitada de «{name}»', { t: r.removed[0].track.title, name }) : t('{n} canciones quitadas de «{name}»', { n: r.removed.length, name });
+    undoToast(msg, async () => {
+      try {
+        const l = await postJson(`/api/streamlists/${id}`, { insert: r.removed });
+        if (open && open.id === id) { open = l; renderDetail(); }
+      } catch (err) { showToast(err.message); }
+    });
+  }
+  /** Several songs to before the song at `to`; they stay selected. */
+  async function moveMany(rows, to) {
+    if (!open || open.virtual) return;
+    const at = Array.from({ length: to }, (_, k) => k).filter((k) => !rows.includes(k)).length;
+    try {
+      open = await postJson(`/api/streamlists/${open.id}`, { moveMany: { from: rows, to } });
+      sel = new Set(rows.map((_, k) => at + k));
+      anchor = at;
+      renderTracks();
+      paintSel();
+      const first = $('ldTracks').querySelector(`li[data-i="${at}"] .lt-main`);
+      if (first) first.focus();
+    } catch (err) { showToast(err.message); }
+  }
+  $('ldSelPlay').addEventListener('click', () => player.playMixed(picked()));
+  $('ldSelQueue').addEventListener('click', () => player.enqueueMixed(picked()));
+  $('ldSelAdd').addEventListener('click', async () => { const items = picked(); ctxMenu.open($('ldSelAdd'), await listsMenu(items), $('ldSelAdd')); });
+  $('ldSelDownload').addEventListener('click', () => downloadTracks(picked()));
+  $('ldSelRemove').addEventListener('click', () => removeMany([...sel]));
+  $('ldSelClear').addEventListener('click', () => { sel = new Set(); paintSel(); });
+  // "Keep it downloaded": its songs to your library, and the new ones too when it's read again.
+  $('ldKeepDl').addEventListener('change', async () => {
+    if (!open || open.virtual) return;
+    const on = $('ldKeepDl').checked;
+    try {
+      const r = await postJson(`/api/streamlists/${open.id}/keep`, { on, opts: downloadOptions('audio') });
+      open = await api(`/api/streamlists/${open.id}`);
+      renderDetail();
+      showToast(!on ? t('Ya no se mantiene descargada') : r.queued ? t('{n} canciones a la cola; las nuevas se bajarán solas', { n: r.queued }) : t('Ya están todas; las nuevas se bajarán solas'));
+    } catch (err) { $('ldKeepDl').checked = !on; showToast(err.message); }
+  });
   /** The song playing, in colour with moving bars (paused: still bars); the big ▶ becomes ⏸ while this list plays. */
   function markRows() {
     if (!open) return;
@@ -7918,10 +8301,6 @@ const listenUi = (() => {
       const row = $('ldTracks').querySelector(`li[data-i="${to}"] .lt-main`);
       if (row) row.focus();
     } catch (err) { showToast(err.message); }
-  }
-  async function removeTrack(i) {
-    if (!open || open.virtual) return;
-    try { open = await api(`/api/streamlists/${open.id}/tracks/${i}`, { method: 'DELETE' }); renderDetail(); } catch (err) { showToast(err.message); }
   }
   /** Adds a song (or several) to one of your lists, or to a new one. */
   async function addToList(items, id) {
@@ -7960,7 +8339,7 @@ const listenUi = (() => {
     items.push('-');
     if (song) items.push({ label: liked ? t('Quitar de Favoritas') : t('Añadir a Favoritas'), icon: 'star', onClick: () => setLike(song, !liked) });
     if (!tr.file) items.push({ label: t('Añadir a una lista'), icon: 'folder', sub: () => listsMenu([tr]) });
-    if (open && !open.virtual) items.push({ label: t('Quitar de esta lista'), icon: 'remove', danger: true, onClick: () => removeTrack(i) });
+    if (open && !open.virtual) items.push({ label: t('Quitar de esta lista'), icon: 'remove', danger: true, onClick: () => removeMany([i]) });
     items.push('-');
     if (!tr.file) items.push({ label: t('Descargar'), icon: 'download', onClick: () => downloadTracks([tr]) });
     if (tr.yt) items.push({ label: t('Copiar el enlace'), icon: 'copy', onClick: () => copyText(`https://www.youtube.com/watch?v=${tr.yt}`) });
@@ -7989,11 +8368,18 @@ const listenUi = (() => {
     const i = Number(li.dataset.i);
     const go = (el) => { const m = el && el.querySelector('.lt-main'); if (m) { e.preventDefault(); m.focus(); m.scrollIntoView({ block: 'nearest' }); } };
     const tr = tracksOf(open)[i];
-    if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) { e.preventDefault(); playAt(i); } else if (e.key === 'ArrowDown' && e.altKey && !open.virtual && !$('ldFilter').value) { e.preventDefault(); if (i < open.tracks.length - 1) moveTrack(i, i + 1); } else if (e.key === 'ArrowUp' && e.altKey && !open.virtual && !$('ldFilter').value) { e.preventDefault(); if (i > 0) moveTrack(i, i - 1); } else if (e.key === 'ArrowDown' && !e.ctrlKey && !e.shiftKey) go(li.nextElementSibling);
-    else if (e.key === 'ArrowUp' && !e.ctrlKey && !e.shiftKey) go(li.previousElementSibling);
+    const many = sel.size > 1 && sel.has(i);
+    const rows = [...sel].sort((a, b) => a - b);
+    const canMove = !open.virtual && !$('ldFilter').value;
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') { e.preventDefault(); sel = new Set([...$('ldTracks').children].map((x) => Number(x.dataset.i))); paintSel(); } else if (e.key === 'Escape' && sel.size > 1) { e.preventDefault(); e.stopPropagation(); sel = new Set([i]); paintSel(); } else if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (many) player.playMixed(picked()); else playAt(i); } else if (e.key === 'ArrowDown' && e.altKey && canMove) { e.preventDefault(); if (many) { if (rows[rows.length - 1] < open.tracks.length - 1) moveMany(rows, rows[rows.length - 1] + 2); } else if (i < open.tracks.length - 1) moveTrack(i, i + 1); } else if (e.key === 'ArrowUp' && e.altKey && canMove) { e.preventDefault(); if (many) { if (rows[0] > 0) moveMany(rows, rows[0] - 1); } else if (i > 0) moveTrack(i, i - 1); } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.shiftKey && !e.ctrlKey) {
+      // Shift+arrows: the selection grows (or shrinks) with the cursor.
+      const to = e.key === 'ArrowDown' ? li.nextElementSibling : li.previousElementSibling;
+      if (to) { if (anchor === null) anchor = i; sel.add(i); sel.add(Number(to.dataset.i)); paintSel(); go(to); }
+    } else if (e.key === 'ArrowDown' && !e.ctrlKey) go(li.nextElementSibling);
+    else if (e.key === 'ArrowUp' && !e.ctrlKey) go(li.previousElementSibling);
     else if (e.key === 'Home' && !e.ctrlKey) go($('ldTracks').firstElementChild);
     else if (e.key === 'End' && !e.ctrlKey) go($('ldTracks').lastElementChild);
-    else if (e.key === 'Delete' && !open.virtual) { e.preventDefault(); removeTrack(i); } else if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') { e.preventDefault(); ctxMenu.open(e.target, trackMenu(tr, i), e.target); }
+    else if (e.key === 'Delete' && !open.virtual) { e.preventDefault(); removeMany(many ? rows : [i]); } else if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') { e.preventDefault(); ctxMenu.open(e.target, many ? manyMenu() : trackMenu(tr, i), e.target); }
   });
   $('ldFilter').addEventListener('input', renderTracks);
   $('ldFilter').addEventListener('keydown', (e) => {
@@ -8028,8 +8414,13 @@ const listenUi = (() => {
     try { open = await postJson(`/api/streamlists/${open.id}/refresh`, {}); renderDetail(); showToast(t('Lista actualizada')); } catch (err) { $('ldStatus').textContent = err.message; }
   }
   async function remove() {
-    if (!open || open.virtual || !window.confirm(t('¿Borrar la lista «{name}»? Las canciones no estaban descargadas: no se borra ningún archivo.', { name: open.name }))) return;
-    try { await api(`/api/streamlists/${open.id}`, { method: 'DELETE' }); back(); } catch (err) { showToast(err.message); }
+    if (!open || open.virtual) return;
+    const { id, name } = open;
+    try { await api(`/api/streamlists/${id}`, { method: 'DELETE' }); } catch (err) { showToast(err.message); return; }
+    back();
+    undoToast(t('Lista «{name}» borrada', { name }), async () => {
+      try { await postJson(`/api/streamlists/${id}/restore`, {}); await load(); show(id); } catch (err) { showToast(err.message); }
+    });
   }
   /** The list's "…" menu. */
   function listMenu() {

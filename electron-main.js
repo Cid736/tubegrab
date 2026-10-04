@@ -611,8 +611,10 @@ function lockDownSession(ses) {
     }
     callback(ALLOWED_PERMISSIONS.has(permission) && isAppOrigin(details.requestingUrl || webContents.getURL()));
   });
+  // "speaker-selection": the player may list the speakers / headphones to choose one
+  // (never the microphone or the camera, whose checks stay refused).
   ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => (
-    ALLOWED_PERMISSIONS.has(permission)
+    (ALLOWED_PERMISSIONS.has(permission) || permission === 'speaker-selection')
     && isAppOrigin(requestingOrigin || (details && details.requestingUrl) || (webContents && webContents.getURL()))
   ));
 }
