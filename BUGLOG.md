@@ -724,3 +724,13 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - **Historial de escuchas y traducción:** solo canciones con clave válida (`yt:` + id o `f:` + ruta), textos cortos y sin caracteres de control, miniaturas solo de YouTube; un archivo manipulado se lee con cuidado (test). La traducción solo acepta 250 líneas cortas a un idioma de la lista.
 - **Modo juego:** `tasklist` y PowerShell con argumentos fijos (nada de lo que escribes llega a una línea de comandos); nombres validados (`*.exe`, sin rutas) y nunca programas de Windows o de TubeGrab.
 - **Accesibilidad:** auditoría de todas las páginas, del panel Sonido, la letra, «A continuación», «Ahora suena» y una lista hecha para ti: nada sin nombre ni sin etiqueta; en «Ahora suena» el tabulador no se sale y Esc cierra.
+
+
+---
+
+## 2026-10-04 — v3.10.1: listas en el mini reproductor
+
+### [Feature] Pestaña «Listas» en el mini reproductor
+- Hecho para ti (mixes diarios, lo más escuchado, escuchado hace poco, redescubre) y tus listas (las de carpetas detrás, con su carpeta). ▶ reproduce; al abrir una se ve su contenido y se empieza desde la canción que elijas, o con aleatorio.
+- El mini reproductor solo pide «esta lista, desde esta canción»: la ventana principal lo comprueba (id de lista de 16 hex, o uno de los seis tipos; canción por posición o por su clave) y la monta igual que en Escuchar (con tu archivo si ya la tienes). Probado: ▶, empezar en la tercera, empezar en la segunda de «Lo más escuchado» (sonó el archivo descargado), aleatorio, el mix diario, y dos órdenes falsas ignoradas.
+- Las canciones aún sin carátula (de Spotify) dejan su hueco para que los títulos queden alineados.

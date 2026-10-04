@@ -47,6 +47,7 @@
   <div class="drawer hidden" id="drawer">
     <div class="tabs" role="tablist">
       <button class="tab on" id="tabSearch" type="button" role="tab" aria-selected="true">Buscar</button>
+      <button class="tab" id="tabLists" type="button" role="tab" aria-selected="false">Listas</button>
       <button class="tab" id="tabNext" type="button" role="tab" aria-selected="false">A continuación</button>
       <button class="tab" id="tabSet" type="button" role="tab" aria-selected="false">Ajustes</button>
     </div>
@@ -54,6 +55,15 @@
     <p class="note" id="note">Suena directo desde YouTube, sin descargar nada.</p>
     <ul class="list" id="results"></ul>
     <ul class="list hidden" id="upnext"></ul>
+    <div class="lists hidden" id="listsBox">
+      <div class="lhead hidden" id="listHead">
+        <button class="icon sm" id="listBack" type="button"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <span class="lname" id="listName"></span>
+        <button class="icon sm" id="listShuffle" type="button"><svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
+        <button class="icon sm lplay" id="listPlay" type="button"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
+      </div>
+      <ul class="list" id="lists"></ul>
+    </div>
     <div class="settings hidden" id="settings">
       <div class="srow"><span id="lOpacity">Opacidad</span><input type="range" id="sOpacity" min="0.2" max="1" step="0.05" aria-labelledby="lOpacity"><output id="sOpacityOut"></output></div>
       <label class="srow check"><input type="checkbox" id="sHover"><span id="lHover">Del todo visible al pasar el ratón</span></label>

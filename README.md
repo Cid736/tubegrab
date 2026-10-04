@@ -91,6 +91,7 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
   - **Your music** in Statistics: your yearly summary — song of the year, minutes, songs, artists, days with music, your hour, top artists and songs, minutes per month — playable or saved as a list
   - **Sound** panel: equalizer with styles and **your own saved ones**, **same volume for every song** (measured while it plays, remembered per song), crossfade up to 12 s, **speed** 0.5–2× (keeping the pitch or not) and a **sleep timer** (minutes or "when this song ends", fading out)
   - **Last.fm** scrobbling and **Discord** "Listening to…" (with your own free keys), with the song's cover and a YouTube button for songs from YouTube
+  - The mini player has a **Lists** tab: your lists (folders too) and the ones made for you (daily mixes, most played…), to play, shuffle, or open and start from any song
   - **Game mode**: when one of your games is running (by its .exe, pick it from what's open), the mini player goes over it small and see-through in a corner, and back as it was when you close the game
 - **Statistics**: downloads and conversions per month, top channels and artists, most played, library size
 - **Disk space** (desktop): a warning when the disk runs low, and an optional limit for the downloads folder (warn, or move the oldest files to the Recycle Bin — never favourites)
@@ -338,6 +339,7 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
   - **Tu música** en Estadísticas: tu resumen del año (la canción del año, minutos, canciones, artistas, días con música, tu hora, tus artistas y canciones, minutos por mes), que se puede reproducir o guardar como lista
   - Panel **Sonido**: ecualizador con estilos y **los tuyos guardados**, **mismo volumen en todas las canciones** (se mide mientras suena y se recuerda por canción), fundido de hasta 12 s, **velocidad** de 0,5 a 2× (manteniendo el tono o no) y **temporizador para dormir** (minutos o «al acabar esta canción», bajando poco a poco)
   - **Last.fm** (scrobbling) y **Discord** («Escuchando…»), con tus propias claves gratuitas, con la carátula y un botón de YouTube en las canciones de YouTube
+  - El mini reproductor tiene una pestaña **Listas**: las tuyas (también las de carpetas) y las hechas para ti (mixes diarios, lo más escuchado…), para reproducir, en aleatorio, o abrirlas y empezar desde cualquier canción
   - **Modo juego**: cuando uno de tus juegos está abierto (por su .exe, elígelo de lo que tienes abierto), el mini reproductor se pone encima, pequeño y transparente, en una esquina, y vuelve a como estaba al cerrar el juego
 - **Estadísticas**: descargas y conversiones por mes, canales y artistas que más, lo más escuchado y el tamaño de la biblioteca
 - **Espacio en disco** (escritorio): aviso cuando queda poco y un límite opcional para la carpeta de descargas (avisar, o mover lo más antiguo a la papelera; nunca los favoritos)

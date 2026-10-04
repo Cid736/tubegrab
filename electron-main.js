@@ -968,6 +968,14 @@ ipcMain.on('player:command', (event, cmd) => {
     if (!items.length) return;
     const index = Number.isInteger(cmd.index) && cmd.index >= 0 && cmd.index < items.length ? cmd.index : 0;
     sendToRenderer('player:command', { cmd: cmd.cmd, items, value: index });
+  } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'playList' && cmd.value && typeof cmd.value === 'object') {
+    // A list from the mini player: one of yours (its id) or one made for you (its kind), from a song or shuffled.
+    const v = cmd.value;
+    const list = /^[a-f0-9]{16}$/.test(String(v.id || '')) ? { id: String(v.id) } : ['top', 'lately', 'forgotten', 'mix0', 'mix1', 'mix2'].includes(v.kind) ? { kind: v.kind } : null;
+    if (!list) return;
+    const start = Number.isInteger(v.start) && v.start >= 0 && v.start < 500 ? v.start
+      : typeof v.start === 'string' && v.start.length <= 520 && /^(yt:[A-Za-z0-9_-]{11}|f:[^\u0000-\u001f\u007f]+)$/.test(v.start) ? v.start : 0;
+    sendToRenderer('player:command', { cmd: 'playList', value: { ...list, start, shuffle: v.shuffle === true } });
   } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'expand') {
     expandMini(cmd.value === true);
   } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'snap' && ['tl', 'tr', 'bl', 'br'].includes(cmd.value)) {

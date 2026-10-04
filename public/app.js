@@ -5963,6 +5963,8 @@ const player = (() => {
     // The mini window opened / closed: its visualizer bars start / stop.
     if (cmd === 'hello' || cmd === 'miniClosed') { miniOpen = cmd === 'hello'; levelsToMini(); }
     if (cmd === 'miniClosed') return;
+    // From the mini player: one of your lists or one made for you.
+    if (cmd === 'playList' && value && typeof value === 'object') { if (listenUi.playFromMini) listenUi.playFromMini(value); return; }
     // From the phone: a song by its name, found on YouTube and played.
     if (cmd === 'playQuery' && typeof value === 'string') { playQuery(value); return; }
     // From the mini window's search: play from YouTube now, or add to the list.
@@ -7625,7 +7627,33 @@ const listenUi = (() => {
       showToast(t('Guardada como «{name}» en Escuchar', { name: l.name }));
     } catch (err) { showToast(err.message); }
   }
-  return { saveAsList, load, fromLog };
+  /** From the mini player: a list of yours ({ id }) or one made for you ({ kind }), from a song (`start`) or shuffled. */
+  async function playFromMini({ id, kind, start, shuffle }) {
+    try {
+      let items = [];
+      let index = 0;
+      if (id) {
+        items = tracksOf(await api(`/api/streamlists/${id}`));
+        if (Number.isInteger(start) && start < items.length) index = start;
+      } else {
+        const s = await api('/api/listen/smart');
+        await library.ensure();
+        const mix = /^mix(\d)$/.exec(kind || '');
+        if (mix) {
+          const a = s.artists.filter((x) => x.seed)[Number(mix[1])];
+          items = a ? await buildMix(a) : [];
+        } else if (['top', 'lately', 'forgotten'].includes(kind)) {
+          items = (s[kind] || []).map(fromLog).filter(Boolean);
+          const k = items.findIndex((x) => x.key === start);
+          if (k >= 0) index = k;
+        }
+      }
+      if (!items.length) { showToast(t('No se pudo preparar el mix ahora mismo.')); return; }
+      if (shuffle) { items = shuffled(items); index = 0; }
+      player.playMixed(items, index);
+    } catch (err) { showToast(err.message); }
+  }
+  return { saveAsList, load, fromLog, playFromMini };
 })();
 $('searchSaveList').addEventListener('click', () => {
   const sel = searchPicker.selected();
