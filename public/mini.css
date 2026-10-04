@@ -101,3 +101,10 @@ body.compact .play { width: 30px; height: 30px; }
 body.compact .title { font-size: 12px; }
 body.compact .sub { font-size: 11px; }
 body.compact .drawer { height: calc(100% - 64px); }
+
+/* A moment's notice of what changed (volume, song, pause), over a game. */
+.mini { position: relative; }
+.osd { position: absolute; left: 50%; top: 50%; z-index: 5; max-width: calc(100% - 24px); transform: translate(-50%, -50%) scale(0.96);
+  padding: 6px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.78); color: #fff; font-size: 12px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; opacity: 0; transition: opacity 0.18s ease, transform 0.18s ease; }
+.osd.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }

@@ -6900,7 +6900,8 @@ const podcastsUi = (() => {
   if (!desktopApi || !desktopApi.getShortcuts) return;
   const NAMES = {
     toggle: 'Reproducir / pausa', next: 'Siguiente', prev: 'Anterior', stop: 'Parar', volup: 'Subir el volumen', voldown: 'Bajar el volumen',
-    mute: 'Silenciar / con sonido', seekf: 'Adelantar 10 s', seekb: 'Atrasar 10 s', mini: 'Abrir o cerrar el mini reproductor', show: 'Mostrar TubeGrab',
+    mute: 'Silenciar / con sonido', seekf: 'Adelantar 10 s', seekb: 'Atrasar 10 s', mini: 'Abrir o cerrar el mini reproductor',
+    overlay: 'Mini reproductor: dejar pasar los clics sí / no', show: 'Mostrar TubeGrab',
   };
   const pretty = (acc) => String(acc || '').replace(/Control/g, 'Ctrl').replace(/MediaPlayPause/, '⏯ (multimedia)').replace(/MediaNextTrack/, '⏭ (multimedia)')
     .replace(/MediaPreviousTrack/, '⏮ (multimedia)').replace(/MediaStop/, '⏹ (multimedia)').replace(/\bUp\b/, '↑').replace(/\bDown\b/, '↓').replace(/\bLeft\b/, '←').replace(/\bRight\b/, '→').replace(/\+/g, ' + ');
@@ -6992,7 +6993,22 @@ const podcastsUi = (() => {
     renderLfm(await desktopApi.getLastfm());
     renderDc(await desktopApi.getDiscord());
   }
-  document.addEventListener('tg:view', (e) => { if (e.detail === 'set-system') load(); });
+  // "Did it arrive?": the last shortcut Windows delivered, while this page is open.
+  let lastTimer = null;
+  async function showLast() {
+    if (currentView !== 'set-system') { clearInterval(lastTimer); lastTimer = null; return; }
+    const r = await desktopApi.getShortcuts();
+    if (!r || !r.last) return;
+    const secs = Math.max(0, Math.round((Date.now() - r.last.at) / 1000));
+    $('keysLast').textContent = t('Último atajo recibido: «{a}», hace {s} s.', { a: t(NAMES[r.last.action] || r.last.action), s: secs });
+    $('keysLast').classList.toggle('fresh', secs < 4);
+  }
+  document.addEventListener('tg:view', (e) => {
+    if (e.detail !== 'set-system') return;
+    load();
+    clearInterval(lastTimer);
+    lastTimer = setInterval(showLast, 1500);
+  });
 })();
 
 // === Ajustes → Sistema: automatic backup (desktop) ===

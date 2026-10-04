@@ -123,8 +123,8 @@
   if (en) {
     const EN_TEXT = {
       tabSet: 'Settings', lOpacity: 'Opacity', lHover: 'Fully visible under the pointer', lTop: 'Always on top (also of games in a window)',
-      lLock: 'Fix it here (dragging doesn’t move it)', lThrough: 'Let clicks through (overlay): hold Ctrl over it to use it', lCompact: 'Compact', lCorner: 'Send to a corner',
-      lGame: 'Over exclusive fullscreen games Windows shows nothing: use the game’s borderless window mode. If clicks pass through, use it again with Ctrl or from the tray icon.',
+      lLock: 'Fix it here (dragging doesn’t move it)', lNoFocus: 'Don’t take the keyboard from the game when using its buttons', lThrough: 'Let clicks through (overlay): hold Ctrl over it to use it', lCompact: 'Compact', lCorner: 'Send to a corner',
+      lGame: 'Over exclusive fullscreen games Windows shows nothing: use the game’s borderless window mode. If clicks pass through, use it again with Ctrl, with Ctrl+Alt+O or from the tray icon.',
     };
     for (const [id, text] of Object.entries(EN_TEXT)) $(id).textContent = text;
     $('pin').title = 'Always on top';
@@ -166,7 +166,7 @@
   const setPrefs = (patch) => api.miniCommand({ cmd: 'miniPrefs', value: patch });
   $('pin').addEventListener('click', () => setPrefs({ onTop: !prefs.onTop }));
   $('sOpacity').addEventListener('input', () => { $('sOpacityOut').textContent = `${Math.round(Number($('sOpacity').value) * 100)}%`; setPrefs({ opacity: Number($('sOpacity').value) }); });
-  for (const [id, key] of [['sHover', 'hoverFull'], ['sTop', 'onTop'], ['sLock', 'locked'], ['sThrough', 'clickThrough'], ['sCompact', 'compact']]) {
+  for (const [id, key] of [['sHover', 'hoverFull'], ['sTop', 'onTop'], ['sLock', 'locked'], ['sThrough', 'clickThrough'], ['sCompact', 'compact'], ['sNoFocus', 'noFocus']]) {
     $(id).addEventListener('change', () => setPrefs({ [key]: $(id).checked }));
   }
   document.querySelectorAll('[data-corner]').forEach((b) => b.addEventListener('click', () => api.miniCommand({ cmd: 'snap', value: b.dataset.corner })));
@@ -180,6 +180,7 @@
       $('sLock').checked = prefs.locked;
       $('sThrough').checked = prefs.clickThrough;
       $('sCompact').checked = prefs.compact;
+      $('sNoFocus').checked = prefs.noFocus !== false;
       $('pin').classList.toggle('on', prefs.onTop);
       $('pin').setAttribute('aria-pressed', String(prefs.onTop));
       document.body.classList.toggle('compact', prefs.compact);
@@ -275,6 +276,33 @@
   api.onPlayerState((s) => {
     upNext = Array.isArray(s.upNext) ? s.upNext : [];
     if (open && !$('upnext').classList.contains('hidden')) renderNext();
+  });
+  // ---- What a shortcut did, shown for a moment (useful over a game) ----
+  let osdTimer = null;
+  let last = null;
+  function osd(text) {
+    const el = $('osd');
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(osdTimer);
+    osdTimer = setTimeout(() => el.classList.remove('show'), 1400);
+  }
+  const O = en
+    ? { vol: 'Volume', muted: 'Muted', play: '▶ Playing', pause: '⏸ Paused', through: 'Clicks pass through · hold Ctrl to use it', usable: 'Usable with the mouse' }
+    : { vol: 'Volumen', muted: 'Silenciado', play: '▶ Sonando', pause: '⏸ En pausa', through: 'Los clics pasan a través · mantén Ctrl para usarlo', usable: 'Se usa con el ratón' };
+  api.onPlayerState((s) => {
+    if (last) {
+      if (s.muted !== last.muted) osd(s.muted ? `🔇 ${O.muted}` : `🔊 ${O.vol} ${Math.round(s.volume * 100)}%`);
+      else if (Math.abs((s.volume || 0) - (last.volume || 0)) > 0.004) osd(`🔊 ${O.vol} ${Math.round(s.volume * 100)}%`);
+      else if (s.title && s.title !== last.title) osd(`♪ ${s.title}`);
+      else if (s.playing !== last.playing && s.title) osd(s.playing ? O.play : O.pause);
+    }
+    last = { muted: s.muted, volume: s.volume, title: s.title, playing: s.playing };
+  });
+  let lastThrough = null;
+  if (api.onMiniPrefs) api.onMiniPrefs((p) => {
+    if (lastThrough !== null && p && p.clickThrough !== lastThrough) osd(p.clickThrough ? O.through : O.usable);
+    lastThrough = p ? p.clickThrough : lastThrough;
   });
   api.miniCommand('hello');
 })();

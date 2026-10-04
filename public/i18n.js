@@ -763,6 +763,11 @@
     'YouTube no dio el sonido de este vídeo.': "YouTube didn’t give this video’s sound.",
     'YouTube no dejó escuchar este vídeo ahora mismo.': "YouTube didn’t let this video play right now.",
     'Vídeo no válido.': "Invalid video.",
+    // --- v3.7.5 ---
+    'Mini reproductor: dejar pasar los clics sí / no': 'Mini player: let clicks through on / off',
+    'Para probar un atajo dentro de un juego: pulsa la combinación con el juego delante y mira aquí si ha llegado.': 'To try a shortcut inside a game: press it with the game in front and check here whether it arrived.',
+    'En juegos usa combinaciones con Ctrl o Alt, las teclas F o las multimedia: las teclas sueltas (una letra, el espacio) solo funcionan dentro de TubeGrab. Algunos drivers de la tarjeta gráfica usan Ctrl+Alt+flechas para girar la pantalla; si una no llega, prueba otra.': 'In games use combinations with Ctrl or Alt, the F keys or the media keys: plain keys (a letter, Space) only work inside TubeGrab. Some graphics drivers use Ctrl+Alt+arrows to rotate the screen; if one doesn’t arrive, try another.',
+    'Último atajo recibido: «{a}», hace {s} s.': 'Last shortcut received: “{a}”, {s} s ago.',
     // --- v3.7.4 ---
     'No se encuentran las canciones en YouTube. ¿Hay conexión a Internet?': "The songs can't be found on YouTube. Is there an Internet connection?",
     'No se puede escuchar sin descargar ahora mismo.': "Listening without downloading isn't possible right now.",

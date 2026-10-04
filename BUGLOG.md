@@ -642,3 +642,19 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - **Con un proxy**, cada canción de YouTube fallaba y el reproductor recorría la lista entera saltando; ahora pregunta el motivo y, si no es la canción, se para y lo explica.
 - **Sin conexión**, una lista de Spotify iba saltando canción tras canción; ahora para tras tres fallos seguidos y pregunta si hay Internet.
 - Seguridad: lo nuevo (ajustes del mini reproductor) solo lo acepta el proceso principal desde la ventana del mini reproductor y con valores comprobados; `npm audit --omit=dev` → 0.
+
+---
+
+## 2026-10-04 — v3.7.5: el mini reproductor con juegos
+
+### [Bug] El overlay no salía por encima del juego
+- **Causa:** un juego que pasa a primer plano (sobre todo en «ventana sin bordes») puede ponerse él mismo «siempre encima», por encima de las demás ventanas que lo estaban.
+- **Fix:** mientras el mini reproductor deba ir encima, cada 1,5 s vuelve a ponerse arriba (`setAlwaysOnTop(…, 'screen-saver')` + `moveTop()`, sin quitar el foco). Sobre un juego a pantalla completa «exclusiva» Windows no deja mostrar nada; se explica en sus ajustes.
+
+### [Bug] Al cambiar de ventana se quedaba bloqueado y había que cerrarlo
+- **Causa:** al pulsar sus botones, la ventana del mini reproductor se quedaba con el teclado: un juego a pantalla completa que pierde el foco se minimiza, y con «dejar pasar los clics» ya no se podía volver a usar el mini (ni Ctrl llegaba bien tras Alt+Tab).
+- **Fix:** nueva opción, activada por defecto, «No quitarle el teclado al juego al pulsar sus botones» (ventana que no se activa; solo la búsqueda toma el teclado mientras está abierta). Al llegar a él con Alt+Tab se puede usar aunque los clics pasen a través, y al salir nunca se queda medio agarrado. Atajo nuevo `Ctrl+Alt+O` para dejar pasar los clics sí / no, también desde la bandeja.
+
+### [UI] Los atajos dentro del juego: saber si llegan
+- Al cambiar el volumen, la canción o la pausa, el mini reproductor lo enseña un momento encima («🔊 Volumen 35 %»), así se ve desde el juego. En Ajustes → Sistema, «Último atajo recibido» dice si Windows ha entregado el atajo, para probarlo con el juego delante. Se explica que las teclas sueltas solo valen dentro de TubeGrab y que algunos drivers gráficos usan Ctrl+Alt+flechas.
+- Silenciar pasa a `Ctrl+Alt+0` por defecto: `Ctrl+Alt+M` lo suele tener otro programa en Windows (salía en rojo).

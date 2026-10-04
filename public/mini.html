@@ -9,6 +9,7 @@
 </head>
 <body>
   <div class="mini" id="mini">
+    <div class="osd" id="osd" role="status" aria-live="polite"></div>
     <div class="cover" id="cover" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
     </div>
@@ -58,6 +59,7 @@
       <label class="srow check"><input type="checkbox" id="sTop"><span id="lTop">Siempre encima (también de juegos en ventana)</span></label>
       <label class="srow check"><input type="checkbox" id="sLock"><span id="lLock">Fijar aquí (no se mueve al arrastrar)</span></label>
       <label class="srow check"><input type="checkbox" id="sThrough"><span id="lThrough">Dejar pasar los clics (overlay): mantén Ctrl encima para usarlo</span></label>
+      <label class="srow check"><input type="checkbox" id="sNoFocus"><span id="lNoFocus">No quitarle el teclado al juego al pulsar sus botones</span></label>
       <label class="srow check"><input type="checkbox" id="sCompact"><span id="lCompact">Compacto</span></label>
       <div class="srow"><span id="lCorner">Llevar a una esquina</span>
         <span class="corners">
@@ -67,7 +69,7 @@
           <button class="icon sm" type="button" data-corner="br" title="Abajo a la derecha" aria-label="Abajo a la derecha">↘</button>
         </span>
       </div>
-      <p class="note" id="lGame">En juegos a pantalla completa «exclusiva», Windows no deja poner nada encima: usa en el juego el modo «ventana sin bordes». Si dejas pasar los clics, vuelve a usarlo con Ctrl o desde el icono de la bandeja.</p>
+      <p class="note" id="lGame">En juegos a pantalla completa «exclusiva», Windows no deja poner nada encima: usa en el juego el modo «ventana sin bordes». Si dejas pasar los clics, vuelve a usarlo con Ctrl, con Ctrl+Alt+O o desde el icono de la bandeja.</p>
     </div>
   </div>
   <script src="mini.js"></script>

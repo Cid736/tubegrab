@@ -721,13 +721,13 @@ ipcMain.handle('desktop:syncMirror', async (event, info) => {
 let miniWindow = null;
 const MINI_SIZES = { normal: { width: 360, height: 128 }, compact: { width: 300, height: 64 } };
 const MINI_TALL = 470;
-const MINI_DEFAULTS = { opacity: 1, hoverFull: true, onTop: true, locked: false, clickThrough: false, compact: false };
+const MINI_DEFAULTS = { opacity: 1, hoverFull: true, onTop: true, locked: false, clickThrough: false, compact: false, noFocus: true };
 /** The mini player's own settings, each checked (they drive window calls). */
 function miniPrefs() {
   const raw = getSettings().miniPrefs || {};
   const out = { ...MINI_DEFAULTS };
   if (Number.isFinite(raw.opacity)) out.opacity = Math.min(1, Math.max(0.2, Math.round(raw.opacity * 20) / 20));
-  for (const k of ['hoverFull', 'onTop', 'locked', 'clickThrough', 'compact']) if (typeof raw[k] === 'boolean') out[k] = raw[k];
+  for (const k of ['hoverFull', 'onTop', 'locked', 'clickThrough', 'compact', 'noFocus']) if (typeof raw[k] === 'boolean') out[k] = raw[k];
   return out;
 }
 const miniSize = () => MINI_SIZES[miniPrefs().compact ? 'compact' : 'normal'];
@@ -759,7 +759,22 @@ function applyMiniPrefs() {
   miniWindow.setAlwaysOnTop(p.onTop, p.onTop ? 'screen-saver' : 'normal');
   const through = p.clickThrough && !miniGrabbed && !miniExpanded;
   miniWindow.setIgnoreMouseEvents(through, through ? { forward: true } : undefined);
+  // Over a game: its buttons work without taking the keyboard from the game
+  // (a fullscreen game that loses focus minimizes itself). The search needs typing.
+  miniWindow.setFocusable(!(p.noFocus && !miniExpanded));
   miniWindow.webContents.send('mini:prefs', { ...p, through, expanded: miniExpanded, full });
+}
+// A game that comes to the front can put itself above "always on top"
+// windows; while the mini player should stay on top, it's put back up there.
+let miniTopTimer = null;
+function keepMiniOnTop() {
+  clearInterval(miniTopTimer);
+  miniTopTimer = setInterval(() => {
+    if (!miniWindow || miniWindow.isDestroyed()) { clearInterval(miniTopTimer); miniTopTimer = null; return; }
+    if (!miniPrefs().onTop || !miniWindow.isVisible() || miniWindow.isFocused()) return;
+    miniWindow.setAlwaysOnTop(true, 'screen-saver');
+    miniWindow.moveTop();
+  }, 1500);
 }
 function openMini() {
   if (miniWindow && !miniWindow.isDestroyed()) { miniWindow.show(); miniWindow.focus(); return; }
@@ -778,9 +793,18 @@ function openMini() {
   miniWindow.webContents.on('did-finish-load', applyMiniPrefs);
   miniWindow.loadURL(`${APP_ORIGIN}/mini.html`);
   applyMiniPrefs();
+  keepMiniOnTop();
   // Moved by Windows (keyboard, snap) too: remembered either way.
   miniWindow.on('moved', () => { if (!miniExpanded) saveMiniPosSoon(); });
+  // Reached with Alt+Tab or a click: usable even if clicks pass through, and
+  // never left half-grabbed after switching windows.
+  miniWindow.on('focus', () => { miniGrabbed = true; applyMiniPrefs(); });
+  miniWindow.on('blur', () => { miniGrabbed = false; miniHovered = false; applyMiniPrefs(); });
+  miniWindow.on('show', applyMiniPrefs);
+  miniWindow.on('restore', applyMiniPrefs);
   miniWindow.on('closed', () => {
+    clearInterval(miniTopTimer);
+    miniTopTimer = null;
     miniWindow = null;
     miniGrabbed = false;
     miniHovered = false;
@@ -802,6 +826,10 @@ function expandMini(tall) {
     const { workArea: w } = screen.getDisplayMatching({ x, y, width: size.width, height: MINI_TALL });
     miniExpanded = true;
     miniWindow.setBounds({ x, y: Math.max(w.y, Math.min(y, w.y + w.height - MINI_TALL)), width: size.width, height: MINI_TALL });
+    applyMiniPrefs();
+    // The search box takes typing (only while it's open).
+    miniWindow.focus();
+    return;
   } else {
     miniExpanded = false;
     const back = miniBeforeExpand && !miniMovedWhileOpen ? miniBeforeExpand : { x, y };
@@ -829,7 +857,7 @@ function setMiniPrefs(patch) {
   const cur = miniPrefs();
   const next = { ...cur };
   if (Number.isFinite(patch.opacity)) next.opacity = Math.min(1, Math.max(0.2, Math.round(patch.opacity * 20) / 20));
-  for (const k of ['hoverFull', 'onTop', 'locked', 'clickThrough', 'compact']) if (typeof patch[k] === 'boolean') next[k] = patch[k];
+  for (const k of ['hoverFull', 'onTop', 'locked', 'clickThrough', 'compact', 'noFocus']) if (typeof patch[k] === 'boolean') next[k] = patch[k];
   saveSettings({ miniPrefs: next });
   // Compact or not: another size, keeping the same bottom-right corner on screen.
   if (next.compact !== cur.compact && miniWindow && !miniWindow.isDestroyed() && !miniExpanded) {
@@ -974,11 +1002,11 @@ function updateThumbar() {
 }
 
 // === Keyboard shortcuts for the player, the user's own (also with the window in the background) ===
-const SHORTCUT_ACTIONS = ['toggle', 'next', 'prev', 'stop', 'volup', 'voldown', 'mute', 'seekf', 'seekb', 'mini', 'show'];
+const SHORTCUT_ACTIONS = ['toggle', 'next', 'prev', 'stop', 'volup', 'voldown', 'mute', 'seekf', 'seekb', 'mini', 'overlay', 'show'];
 const SHORTCUT_DEFAULTS = {
   toggle: 'MediaPlayPause', next: 'MediaNextTrack', prev: 'MediaPreviousTrack', stop: 'MediaStop',
-  volup: 'Control+Alt+Up', voldown: 'Control+Alt+Down', mute: 'Control+Alt+M', seekf: 'Control+Alt+Right', seekb: 'Control+Alt+Left',
-  mini: 'Control+Alt+P', show: 'Control+Alt+T',
+  volup: 'Control+Alt+Up', voldown: 'Control+Alt+Down', mute: 'Control+Alt+0', seekf: 'Control+Alt+Right', seekb: 'Control+Alt+Left',
+  mini: 'Control+Alt+P', overlay: 'Control+Alt+O', show: 'Control+Alt+T',
 };
 const ACCEL_MODS = new Set(['Control', 'Ctrl', 'CommandOrControl', 'CmdOrCtrl', 'Alt', 'Shift', 'Super', 'Meta']);
 const ACCEL_LONE = /^(MediaPlayPause|MediaNextTrack|MediaPreviousTrack|MediaStop|VolumeUp|VolumeDown|VolumeMute|F([1-9]|1\d|2[0-4])|num[0-9]|numadd|numsub|nummult|numdiv|numdec|Insert|Home|End|PageUp|PageDown)$/;
@@ -1016,6 +1044,7 @@ function shortcutSettings() {
   return { global: raw.global !== false, keys };
 }
 let shortcutFailed = [];
+let lastShortcut = null;
 function applyShortcuts() {
   globalShortcut.unregisterAll();
   shortcutFailed = [];
@@ -1029,6 +1058,9 @@ function applyShortcuts() {
     // Only in TubeGrab (the page handles it): never taken from other programs.
     if (!globalOk(acc)) continue;
     const fire = () => {
+      // Seen in Ajustes: did it arrive?
+      lastShortcut = { action: a, at: Date.now() };
+      if (a === 'overlay') { setMiniPrefs({ clickThrough: !miniPrefs().clickThrough }); return; }
       if (a === 'show') showWindow();
       else if (a === 'mini') { if (miniWindow && !miniWindow.isDestroyed()) miniWindow.close(); else openMini(); }
       else sendToRenderer('player:command', { cmd: a });
@@ -1041,7 +1073,7 @@ function applyShortcuts() {
 }
 const shortcutView = () => {
   const s = shortcutSettings();
-  return { ...s, defaults: SHORTCUT_DEFAULTS, failed: shortcutFailed, localOnly: SHORTCUT_ACTIONS.filter((a) => s.keys[a] && !globalOk(s.keys[a])) };
+  return { ...s, defaults: SHORTCUT_DEFAULTS, failed: shortcutFailed, last: lastShortcut, localOnly: SHORTCUT_ACTIONS.filter((a) => s.keys[a] && !globalOk(s.keys[a])) };
 };
 ipcMain.handle('desktop:getShortcuts', (event) => (isTrustedSender(event) ? shortcutView() : null));
 ipcMain.handle('desktop:setShortcuts', (event, patch) => {

@@ -192,3 +192,4 @@
 .more-look[open] > summary .chev { transform: rotate(90deg); }
 .more-look-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .more-look-text small { font-size: 12px; color: var(--text-2); }
+.keys-last.fresh { color: var(--accent); font-weight: 600; }
