@@ -1,5 +1,5 @@
-// v3.13: reviewing the library, news of your artists, the official audio,
-// downloads checked, albums' songs.
+// v3.13: reviewing the library, the official audio, downloads checked,
+// albums' songs. (News of your artists moved to Escuchar, with its tests.)
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -7,7 +7,6 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { LibInfo, parseInfo, issuesOf } = require('../lib/libinfo');
-const { News, isTheirs } = require('../lib/news');
 const { officialAudio, CLIP_RE } = require('../lib/download');
 const { checkMedia } = require('../lib/verify');
 const { probe, INPUT_DEMUXERS } = require('../lib/convert');
@@ -56,45 +55,6 @@ test('review: each song read once (until it changes), gone ones forgotten, kept 
     assert.equal(new LibInfo(file, { ffmpegPath: () => 'ffmpeg', safeInput: [], inspectFn }).get(songs[0]).bitrate, 96, 'kept on disk');
     await li.refresh([]);
     assert.equal(li.cache.size, 0, 'gone files forgotten');
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('news: the first look only notes; later, a new song by them (not a live, a cover…) is news', () => {
-  const dir = tmp();
-  try {
-    let now = 1000;
-    const n = new News(path.join(dir, 'news.json'), { now: () => now });
-    const e = (id, title, extra = {}) => ({ id: id.padEnd(11, '0'), title, channel: 'Bad Bunny', duration: 200, ...extra });
-    assert.deepEqual(n.take('Bad Bunny', [e('a', 'Old song')]), [], 'first look');
-    const found = n.take('Bad Bunny', [e('b', 'NUEVO TEMA'), e('c', 'Show (Live at X)'), e('d', 'Song (Cover)'), e('e', 'Short', { duration: 30 }), e('f', 'Other', { channel: 'Fan Channel' }), e('a', 'Old song')]);
-    assert.deepEqual(found.map((x) => x.title), ['NUEVO TEMA']);
-    assert.equal(n.take('Bad Bunny', [e('b', 'NUEVO TEMA')]).length, 0, 'once');
-    assert.equal(isTheirs(e('g', 'x', { channel: '' }), 'Bad Bunny', true), true, 'from their own channel: no need to match it');
-    assert.equal(isTheirs(e('g', 'x', { channel: 'Bad Bunny - Topic' }), 'Bad Bunny'), true);
-    n.save();
-    const again = new News(path.join(dir, 'news.json'), { now: () => now });
-    assert.equal(again.list().length, 1);
-    now += 31 * 24 * 3600 * 1000;
-    assert.equal(again.list().length, 0, 'a month later: gone');
-    // Their channel: the one called just like them (or "… Official"), else one of their videos' channel.
-    assert.equal(News.channelOf('Queen', [{ url: 'https://www.youtube.com/channel/UCiMhD4jzUqG-IgPzUmmytRQ', title: 'Queen Official' }]), 'https://www.youtube.com/channel/UCiMhD4jzUqG-IgPzUmmytRQ');
-    assert.equal(News.channelOf('Queen', [{ url: 'https://www.youtube.com/watch?v=x', title: 'Queen', channel: 'Queen Official', channelUrl: 'https://www.youtube.com/channel/UCiMhD4jzUqG-IgPzUmmytRQ' }]), 'https://www.youtube.com/channel/UCiMhD4jzUqG-IgPzUmmytRQ');
-    assert.equal(News.channelOf('Queen', [{ url: 'https://evil.example/channel/x', title: 'Queen' }, { url: 'https://www.youtube.com/channel/UCxxxxxxxxxxxxxxxxxxxxxx', title: 'Queen fans' }]), null);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('news: each artist\'s channel found once, then its newest uploads', async () => {
-  const dir = tmp();
-  try {
-    const n = new News(path.join(dir, 'news.json'));
-    let lookups = 0;
-    const deps = { findChannel: async () => { lookups++; return 'https://www.youtube.com/channel/UCmBA_wu8xGg1OfOkfW13Q0Q'; }, newest: async () => [{ id: 'aaaaaaaaaaa', title: 'Song', duration: 200 }] };
-    await n.check(['Bad Bunny'], deps);
-    await n.check(['Bad Bunny'], { ...deps, newest: async () => [{ id: 'bbbbbbbbbbb', title: 'Nueva', duration: 200 }, { id: 'aaaaaaaaaaa', title: 'Song', duration: 200 }] });
-    assert.equal(lookups, 1);
-    assert.deepEqual(n.list().map((x) => x.yt), ['bbbbbbbbbbb']);
-    await n.check(['Nadie'], { findChannel: async () => 'javascript:alert(1)', newest: async () => { throw new Error('never'); } });
-    assert.equal(n.channels.nadie, '', 'a bad channel is never used');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

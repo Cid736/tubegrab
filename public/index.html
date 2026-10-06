@@ -56,10 +56,6 @@
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>
           <span>Buscar</span>
         </button>
-        <button class="nav-item desktop-only" data-view="listen" type="button" title="Escuchar sin descargar">
-          <svg viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></svg>
-          <span>Escuchar</span>
-        </button>
         <button class="nav-item desktop-only" data-view="dl-subs" type="button" title="Suscripciones">
           <svg viewBox="0 0 24 24"><path d="M5 11a8 8 0 0 1 8 8M5 5a14 14 0 0 1 14 14"/><circle cx="6" cy="18" r="1.3"/></svg>
           <span>Suscripciones</span>
@@ -220,7 +216,6 @@
                   <button class="link-btn" id="playlistAll" type="button">Todos</button>
                   <button class="link-btn" id="playlistNone" type="button">Ninguno</button>
                   <button class="link-btn" id="playlistCopy" type="button">Copiar enlaces</button>
-                  <button class="link-btn desktop-only" id="playlistListen" type="button" title="Escuchar sin descargar">▶ Escuchar todo</button>
                 </div>
               </div>
               <ul class="pick-list" id="playlistList"></ul>
@@ -538,161 +533,12 @@
                 <button class="link-btn" id="searchNone" type="button">Ninguno</button>
                 <button class="link-btn" id="searchCopy" type="button">Copiar enlaces</button>
                 <button class="link-btn" id="searchThumbs" type="button">Solo miniaturas</button>
-                <button class="link-btn desktop-only" id="searchListen" type="button" title="Escuchar sin descargar">▶ Escuchar todo</button>
-                <button class="link-btn desktop-only" id="searchSaveList" type="button" title="Guardar en Escuchar, sin descargar">Guardar como lista</button>
               </div>
             </div>
             <ul class="pick-list" id="searchList"></ul>
             <div class="picker-foot">
               <span class="status-message" id="searchStatus" role="status"></span>
               <button class="btn btn-primary" id="btnSearchDownload" type="button">Descargar seleccionados</button>
-            </div>
-          </div>
-        </section>
-
-        <!-- ===== Escuchar: your lists, played from YouTube without downloading (desktop) ===== -->
-        <section class="view hidden" data-views="listen" id="listenSection">
-          <div class="web-only-note desktop-hide">
-            <p>Escuchar sin descargar funciona en la app de escritorio.</p>
-          </div>
-          <div class="desktop-only lx-root" id="lxRoot">
-            <div class="listen-home" id="listenHome" data-show="all">
-              <div class="lx-hero">
-                <h1 class="lx-greeting" id="lxGreeting">Hola</h1>
-                <div class="lx-chips" id="lxChips" role="group" aria-label="Qué ver">
-                  <button class="lx-chip" type="button" data-show="all" aria-pressed="true">Todo</button>
-                  <button class="lx-chip" type="button" data-show="lists" aria-pressed="false">Listas</button>
-                  <button class="lx-chip" type="button" data-show="foryou" aria-pressed="false">Hecho para ti</button>
-                  <button class="lx-chip" type="button" data-show="artists" aria-pressed="false">Artistas</button>
-                </div>
-              </div>
-              <div class="lx-quick" id="lxQuick" data-shelf="lists foryou"></div>
-
-              <div class="listen-for-you hidden" id="listenForYou">
-                <div data-shelf="foryou">
-                  <div class="section-header"><h2>Hecho para ti</h2><span class="hint">Con lo que escuchas, solo en este equipo</span></div>
-                  <div class="listen-grid-row" id="forYouCards"></div>
-                </div>
-                <div data-shelf="foryou" class="hidden" id="forYouNewsWrap">
-                  <div class="section-header"><h2>Novedades de tus artistas</h2><span class="hint">Lo nuevo de los que más escuchas</span></div>
-                  <div class="listen-grid-row" id="forYouNews"></div>
-                </div>
-                <div data-shelf="artists">
-                  <div class="section-header hidden" id="forYouArtistsHead"><h2>Tus artistas</h2><span class="hint">La radio de cada uno</span></div>
-                  <div class="artist-chips" id="forYouArtists"></div>
-                </div>
-              </div>
-              <div data-shelf="lists">
-                <div class="section-header"><h2>Tus listas</h2></div>
-                <div class="listen-grid" id="listenGrid"></div>
-                <p class="hint hidden" id="listenEmpty">Aún no tienes listas. Pega abajo el enlace de una playlist, o guarda los resultados de Buscar con «Guardar como lista».</p>
-                <form class="search-bar lx-import" id="listenImport">
-                  <div class="field search-field">
-                    <svg class="field-icon" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    <input id="listenUrl" type="text" placeholder="Pega el enlace de una playlist (Spotify, Apple Music, YouTube) o de tu perfil de Spotify" aria-label="Pega el enlace de una playlist (Spotify, Apple Music, YouTube) o de tu perfil de Spotify" autocomplete="off" spellcheck="false" maxlength="500">
-                  </div>
-                  <button class="btn btn-primary" id="listenImportBtn" type="submit">Traer la lista</button>
-                </form>
-                <p class="hint" id="listenHint">Tus listas se quedan aquí y cada canción suena directo desde YouTube cuando le toca, sin descargar nada. En Spotify: los tres puntos de la playlist → Compartir → Copiar enlace (la playlist tiene que ser pública). Para traerlas todas a la vez, pega el enlace de tu perfil (tu perfil → ⋯ → Compartir → Copiar enlace al perfil): llegan las listas públicas que enseña tu perfil.</p>
-              </div>
-
-              <details class="more-look listen-opts" id="listenOpts">
-                <summary>Personalizar Escuchar</summary>
-                <div class="group">
-                  <label class="row"><span class="row-label">Estilo</span>
-                    <select id="lkStyle">
-                      <option value="modern">Moderno, con portadas grandes</option>
-                      <option value="classic">El de TubeGrab</option>
-                    </select>
-                  </label>
-                  <label class="row switch"><span class="row-label">Siempre oscuro <small>aunque la app esté en claro</small></span><input type="checkbox" id="lkDark" checked><span class="switch-ui"></span></label>
-                  <div class="row"><span class="row-label">Color</span>
-                    <span class="sound-inline">
-                      <select id="lkColor">
-                        <option value="app">El color de la app</option>
-                        <option value="cover">El de la carátula que suena</option>
-                        <option value="custom">Elegir…</option>
-                      </select>
-                      <input type="color" id="lkCustom" value="#ff7a59" aria-label="Tu color" class="hidden">
-                    </span>
-                  </div>
-                  <label class="row switch"><span class="row-label">Cabecera con el color de la carátula <small>al abrir una lista</small></span><input type="checkbox" id="lkHead" checked><span class="switch-ui"></span></label>
-                  <label class="row"><span class="row-label">Tamaño de las portadas</span>
-                    <select id="lkCards">
-                      <option value="s">Pequeñas</option>
-                      <option value="m">Normales</option>
-                      <option value="l">Grandes</option>
-                    </select>
-                  </label>
-                  <label class="row"><span class="row-label">Canciones</span>
-                    <select id="lkRows">
-                      <option value="comfy">Con carátula</option>
-                      <option value="compact">Compactas, sin carátula</option>
-                    </select>
-                  </label>
-                  <label class="row"><span class="row-label">Para escuchar una canción</span>
-                    <select id="lkClick">
-                      <option value="double">Doble clic (un clic la selecciona)</option>
-                      <option value="single">Un clic</option>
-                    </select>
-                  </label>
-                  <label class="row switch"><span class="row-label">Saludo y accesos rápidos arriba</span><input type="checkbox" id="lkGreet" checked><span class="switch-ui"></span></label>
-                  <label class="row switch"><span class="row-label">Mostrar «Tus artistas»</span><input type="checkbox" id="lkArtists" checked><span class="switch-ui"></span></label>
-                  <label class="row switch"><span class="row-label">Atajos de teclado para escuchar <small>Ctrl+→ siguiente, Ctrl+S aleatorio… (pulsa Ctrl+/ para verlos)</small></span><input type="checkbox" id="lkKeys" checked><span class="switch-ui"></span></label>
-                </div>
-                <div class="group">
-                  <label class="row switch"><span class="row-label">Si ya la tengo descargada, que suene mi archivo <small>también sin Internet</small></span><input type="checkbox" id="loLocal" checked><span class="switch-ui"></span></label>
-                  <label class="row switch"><span class="row-label">Guardar solas las que más escucho <small>la quinta vez que suena una de YouTube, se descarga en MP3</small></span><input type="checkbox" id="loAuto"><span class="switch-ui"></span></label>
-                  <label class="row switch"><span class="row-label">Recordar lo que escucho <small>para «Hecho para ti» y tu resumen en Estadísticas; solo en este equipo</small></span><input type="checkbox" id="loLog" checked><span class="switch-ui"></span></label>
-                  <div class="row"><span class="row-label">Lo escuchado <small id="loCount"></small></span><button class="btn" id="loClear" type="button">Borrar lo escuchado</button></div>
-                </div>
-              </details>
-            </div>
-
-            <div class="listen-detail hidden" id="listenDetail">
-              <div class="lx-sticky" id="ldSticky" aria-hidden="true">
-                <button class="lx-play lx-play-sm" id="ldStickyPlay" type="button" tabindex="-1" title="Reproducir"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
-                <span class="lx-sticky-name" id="ldStickyName"></span>
-              </div>
-              <div class="listen-head" id="ldHead">
-                <button class="link-btn lx-back" id="ldBack" type="button">← Tus listas</button>
-                <div class="listen-head-main">
-                  <div class="listen-cover-wrap" id="ldCoverWrap"><img class="listen-cover" id="ldCover" alt=""></div>
-                  <div class="listen-head-text">
-                    <span class="listen-kind" id="ldKind"></span>
-                    <input class="listen-name" id="ldName" type="text" maxlength="150" aria-label="Nombre de la lista" spellcheck="false">
-                    <span class="listen-meta" id="ldMeta"></span>
-                    <div class="listen-extra" id="ldExtra">
-                      <label class="ld-folder"><span>Carpeta</span><input id="ldFolder" type="text" maxlength="60" list="ldFolders" placeholder="Sin carpeta" spellcheck="false" autocomplete="off"></label>
-                      <datalist id="ldFolders"></datalist>
-                      <label class="ld-sync hidden" id="ldSyncWrap"><input type="checkbox" id="ldSync"> Mantener al día (se actualiza sola desde el enlace)</label>
-                      <label class="ld-sync" title="Sus canciones se bajan a tu biblioteca (con tu formato de audio de Descargar), y las nuevas también"><input type="checkbox" id="ldKeepDl"> Mantener descargada</label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="lx-actions" id="ldActions">
-                <button class="lx-play" id="ldPlay" type="button" title="Reproducir" aria-label="Reproducir"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
-                <button class="lx-icon" id="ldShuffle" type="button" title="Reproducir en aleatorio" aria-label="Reproducir en aleatorio"><svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
-                <button class="lx-icon" id="ldDownload" type="button" title="Descargar todo" aria-label="Descargar todo"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v8m0 0l-3.5-3.5M12 15l3.5-3.5"/></svg></button>
-                <button class="lx-icon" id="ldMore" type="button" title="Más opciones" aria-label="Más opciones" aria-haspopup="menu"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
-                <span class="ed-flex"></span>
-                <label class="lx-filter"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg><input id="ldFilter" type="search" placeholder="Buscar en la lista" aria-label="Buscar en la lista" autocomplete="off" spellcheck="false" maxlength="100"></label>
-              </div>
-              <span class="status-message" id="ldStatus" role="status"></span>
-              <div class="lx-selbar hidden" id="ldSelBar">
-                <span id="ldSelCount" role="status"></span>
-                <span class="ed-flex"></span>
-                <button class="btn btn-primary" id="ldSelPlay" type="button">Escuchar</button>
-                <button class="btn" id="ldSelQueue" type="button">Añadir a la cola</button>
-                <button class="btn" id="ldSelAdd" type="button" aria-haspopup="menu">Añadir a una lista</button>
-                <button class="btn" id="ldSelDownload" type="button">Descargar</button>
-                <button class="btn" id="ldSelRemove" type="button">Quitar</button>
-                <button class="link-btn" id="ldSelClear" type="button" title="Quitar la selección (Esc)">Ninguna</button>
-              </div>
-              <div class="lx-thead" aria-hidden="true"><span class="lx-th-n">#</span><span>Título</span><span class="lx-th-dur"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span></div>
-              <ol class="listen-tracks" id="ldTracks"></ol>
-              <p class="hint hidden" id="ldNoMatch">Ninguna canción coincide.</p>
             </div>
           </div>
         </section>
@@ -1363,40 +1209,6 @@
 
         <!-- ===== Estadísticas ===== -->
         <section class="view hidden" data-views="stats" id="statsSection">
-          <div class="desktop-only stat-music" id="statMusic">
-            <div class="section-header"><h2>Tu música</h2><select id="statYear" aria-label="Año"></select></div>
-            <div class="wrapped hidden" id="wrapped">
-              <div class="wr-hero">
-                <img class="wr-cover" id="wrCover" alt="">
-                <div class="wr-hero-text">
-                  <span class="wr-kicker" id="wrKicker"></span>
-                  <strong class="wr-song" id="wrSong"></strong>
-                  <span class="wr-artist" id="wrArtist"></span>
-                  <div class="wr-actions">
-                    <button class="btn btn-primary" id="wrPlay" type="button">▶ Reproducir tu top</button>
-                    <button class="btn" id="wrSave" type="button">Guardar como lista</button>
-                  </div>
-                </div>
-              </div>
-              <div class="stat-tiles" id="wrTiles"></div>
-              <div class="stat-cols">
-                <div>
-                  <div class="section-header"><h2>Tus artistas</h2></div>
-                  <div class="group list-group"><ol class="stat-rank" id="wrArtists"></ol></div>
-                </div>
-                <div>
-                  <div class="section-header"><h2>Tus canciones</h2></div>
-                  <div class="group list-group"><ol class="stat-rank" id="wrSongs"></ol></div>
-                </div>
-              </div>
-              <div class="section-header"><h2>Minutos por mes</h2><span class="hint" id="wrMonthsNote"></span></div>
-              <div class="group stat-chart-card">
-                <div class="stat-chart" id="wrMonths" role="img" aria-label="Minutos escuchados por mes"></div>
-              </div>
-            </div>
-            <p class="hint hidden" id="wrEmpty">Aún no hay nada: lo que escuches en el reproductor aparecerá aquí, con tus canciones y artistas del año. Se guarda solo en este equipo.</p>
-            <div class="section-header"><h2>Descargas</h2></div>
-          </div>
           <div class="stat-tiles" id="statTiles"></div>
           <div class="section-header"><h2>Por mes</h2><span class="hint" id="statMonthsNote"></span></div>
           <div class="group stat-chart-card">
@@ -2126,7 +1938,7 @@
           <p class="hint hidden" id="plLyricsEmpty">Esta canción no tiene letra. Descárgala con «Letras» activado, o añádela en Etiquetas.</p>
         </div>
         <div class="player-panel player-queue hidden" id="plQueue">
-          <div class="pl-panel-head"><strong>A continuación</strong><span class="ed-flex"></span><button class="link-btn desktop-only" id="plQueueSave" type="button">Guardar como lista</button><button class="link-btn" id="plQueueClear" type="button">Vaciar lo que viene</button><button class="link-btn" id="plQueueClose" type="button">Cerrar</button></div>
+          <div class="pl-panel-head"><strong>A continuación</strong><span class="ed-flex"></span><button class="link-btn" id="plQueueClear" type="button">Vaciar lo que viene</button><button class="link-btn" id="plQueueClose" type="button">Cerrar</button></div>
           <ol class="pl-queue" id="plQueueList"></ol>
         </div>
         <div class="player-panel player-eq hidden" id="plEq">
@@ -2221,7 +2033,6 @@
               <span class="player-title" id="plTitle"></span>
               <span class="player-sub" id="plSub"></span>
             </div>
-            <button class="ed-btn lx-like hidden" id="plLike" type="button" title="Añadir a Favoritas" aria-label="Añadir a Favoritas" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M12 3.6l2.55 5.2 5.75.84-4.16 4.05.98 5.72L12 16.7l-5.12 2.71.98-5.72L3.7 9.64l5.75-.84z"/></svg></button>
           </div>
           <div class="player-center">
             <div class="player-buttons">
@@ -2243,7 +2054,6 @@
           <div class="player-right">
             <button class="ed-btn hidden" id="plChapters" type="button" title="Capítulos" aria-label="Capítulos" aria-haspopup="menu"><svg viewBox="0 0 24 24"><path d="M6 4h12v16l-6-4-6 4z"/></svg></button>
             <button class="ed-btn" id="plLyricsBtn" type="button" title="Letra" aria-label="Letra" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h10M4 18h7"/></svg></button>
-            <button class="ed-btn hidden" id="plSave" type="button" title="Descargar esta canción" aria-label="Descargar esta canción"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M5 19h14"/></svg></button>
             <button class="ed-btn" id="plQueueBtn" type="button" title="A continuación" aria-label="A continuación" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 6h11M4 11h11M4 16h7"/><path d="M17 13v8l4-4z"/></svg></button>
             <button class="ed-btn" id="plEqBtn" type="button" title="Sonido: ecualizador, velocidad y temporizador" aria-label="Sonido: ecualizador, velocidad y temporizador" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M6 4v16M12 4v16M18 4v16"/><circle cx="6" cy="14" r="2"/><circle cx="12" cy="8" r="2"/><circle cx="18" cy="16" r="2"/></svg></button>
             <button class="ed-btn" id="plCastBtn" type="button" title="Enviar a la tele" aria-label="Enviar a la tele"><svg viewBox="0 0 24 24"><path d="M2 16a6 6 0 0 1 6 6M2 12a10 10 0 0 1 10 10M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/></svg></button>
@@ -2466,23 +2276,16 @@
           <dt><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>P</kbd></dt><dd>Mini reproductor</dd>
           <dt></dt><dd>Todos se cambian en Ajustes → Sistema</dd>
         </dl>
-        <h3 class="desktop-only">Escuchar</h3>
+        <h3 class="desktop-only">En la ventana</h3>
         <dl class="desktop-only">
-          <dt><kbd>Espacio</kbd></dt><dd>Reproducir / pausa (en Escuchar y Biblioteca)</dd>
+          <dt><kbd>Espacio</kbd></dt><dd>Reproducir / pausa (en la Biblioteca)</dd>
           <dt><kbd>Ctrl</kbd> <kbd>←</kbd> <kbd>→</kbd></dt><dd>Anterior / siguiente</dd>
           <dt><kbd>Mayús</kbd> <kbd>←</kbd> <kbd>→</kbd></dt><dd>−10 s / +10 s</dd>
           <dt><kbd>Ctrl</kbd> <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Volumen (<kbd>Ctrl</kbd> <kbd>Mayús</kbd> <kbd>↓</kbd>: silenciar)</dd>
           <dt><kbd>Ctrl</kbd> <kbd>S</kbd> · <kbd>Ctrl</kbd> <kbd>R</kbd></dt><dd>Aleatorio · repetir</dd>
-          <dt><kbd>Alt</kbd> <kbd>Mayús</kbd> <kbd>F</kbd></dt><dd>Marcar como favorita</dd>
           <dt><kbd>Alt</kbd> <kbd>Mayús</kbd> <kbd>Q</kbd> · <kbd>J</kbd> · <kbd>R</kbd></dt><dd>A continuación · letra · ahora suena</dd>
-          <dt><kbd>Alt</kbd> <kbd>Mayús</kbd> <kbd>H</kbd> · <kbd>S</kbd></dt><dd>Inicio de Escuchar · Favoritas</dd>
           <dt><kbd>Ctrl</kbd> <kbd>L</kbd></dt><dd>Buscar</dd>
-          <dt><kbd>Ctrl</kbd> <kbd>F</kbd></dt><dd>Buscar en la lista abierta</dd>
-          <dt><kbd>↑</kbd> <kbd>↓</kbd> <kbd>Intro</kbd></dt><dd>Moverse por las canciones y escuchar una</dd>
-          <dt><kbd>Alt</kbd> <kbd>↑</kbd> <kbd>↓</kbd> · <kbd>Supr</kbd></dt><dd>Subir o bajar la canción · quitarla de tu lista</dd>
-          <dt><kbd>Mayús</kbd> <kbd>F10</kbd></dt><dd>Menú de la canción (también con el botón derecho)</dd>
           <dt><kbd>Ctrl</kbd> <kbd>/</kbd></dt><dd>Esta ayuda</dd>
-          <dt></dt><dd>Se quitan en Escuchar → Personalizar Escuchar</dd>
         </dl>
       </div>
       <div class="modal-actions"><button class="btn btn-primary" id="keysClose" type="button">Cerrar</button></div>

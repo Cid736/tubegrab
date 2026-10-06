@@ -618,109 +618,39 @@ test('v3.4.0 on the web: profiles and "already have it" per visitor; desktop-onl
   assert.equal((await api(`/api/jobs/${'a'.repeat(32)}/stop`, json({}))).status, 404);
 });
 
-test('listening without downloading (desktop): bad ids, links and lists are refused; absent on the web', async () => {
-  for (const p of ['/api/stream/audio?id=dQw4w9WgXcQ', '/api/stream/info?id=dQw4w9WgXcQ', '/api/streamlists', '/api/stream/find?q=x']) {
-    assert.equal((await api(`${p}${p.includes('?') ? '&' : '?'}client=${CLIENT}`)).status, 404, `web: ${p}`);
+// Listening without downloading moved to its own app (Escuchar): none of its
+// routes answers here any more, on the web or in the desktop app.
+const LISTEN_ROUTES = [
+  ['GET', '/api/stream/audio?id=dQw4w9WgXcQ'], ['GET', '/api/stream/info?id=dQw4w9WgXcQ'], ['GET', '/api/stream/radio?id=dQw4w9WgXcQ'],
+  ['GET', '/api/stream/lyrics?id=dQw4w9WgXcQ'], ['GET', '/api/stream/find?q=x'], ['GET', '/api/streamlists'], ['POST', '/api/streamlists'],
+  ['POST', '/api/streamlists/import'], ['GET', '/api/listen/smart'], ['GET', '/api/listen/summary'], ['POST', '/api/listen/log'],
+  ['GET', '/api/listen/likes'], ['POST', '/api/listen/likes'], ['POST', '/api/listen/unlike'], ['GET', '/api/listen/news'], ['DELETE', '/api/listen'],
+];
+
+test('desktop extras: absent on the web; checked inputs in the app; listening without downloading is gone (Escuchar)', async () => {
+  for (const [method, p] of LISTEN_ROUTES) {
+    assert.equal((await api(`${p}${p.includes('?') ? '&' : '?'}client=${CLIENT}`, method === 'GET' ? {} : { ...json({}), method })).status, 404, `web: ${method} ${p}`);
   }
   assert.equal((await api('/api/lyrics/translate', json({ lines: ['hello'], to: 'es' }))).status, 404, 'web: translate');
-  for (const p of ['/api/listen/smart', '/api/listen/summary', '/api/listen/likes', '/api/listen/news', '/api/library/review']) assert.equal((await api(p)).status, 404, `web: ${p}`);
-  assert.equal((await api('/api/listen/unlike', json({ key: 'yt:dQw4w9WgXcQ' }))).status, 404, 'web: unlike');
+  assert.equal((await api('/api/library/review')).status, 404, 'web: review');
   assert.equal((await api('/api/local/file?token=0')).status, 404, 'web: local files');
-  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-stream-'));
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'tg-desktop-'));
   const port = await freePort();
   const { child, first } = startServer(port, { TUBEGRAB_ELECTRON: '1', TUBEGRAB_DATA_DIR: data });
   const call = (p, opts = {}) => fetch(`http://localhost:${port}${p}`, { ...opts, headers: { 'x-client-id': CLIENT, ...(opts.headers || {}) } });
   try {
     await first;
-    for (const id of ['', 'abc', '../../../x', 'dQw4w9WgXcQ%0a', 'dQw4w9WgXcQQ', '-o%20x.exe']) {
-      assert.equal((await call(`/api/stream/audio?client=${CLIENT}&id=${id}`)).status, 400, `audio ${id}`);
-      assert.equal((await call(`/api/stream/radio?id=${id}`)).status, 400, `radio ${id}`);
-      assert.equal((await call(`/api/stream/lyrics?id=${id}`)).status, 400, `lyrics ${id}`);
+    for (const [method, p] of LISTEN_ROUTES) {
+      assert.equal((await call(`${p}${p.includes('?') ? '&' : '?'}client=${CLIENT}`, method === 'GET' ? {} : { ...json({}), method })).status, 404, `desktop: ${method} ${p}`);
     }
-    assert.equal((await fetch(`http://localhost:${port}/api/stream/audio?id=dQw4w9WgXcQ`)).status, 400, 'no client id');
-    assert.equal((await call(`/api/stream/find?q=${'x'.repeat(201)}`)).status, 400);
-    assert.equal((await call('/api/stream/find?q=')).status, 400);
-    // Only Spotify, Apple Music or YouTube playlist links: never local or other addresses.
-    for (const url of ['http://127.0.0.1:3000/x', 'file:///C:/Windows/win.ini', 'https://evil.example/playlist', 'https://open.spotify.com.evil.example/playlist/x', '', 'javascript:alert(1)']) {
-      const r = await call('/api/streamlists/import', json({ url }));
-      assert.equal(r.status, 400, url);
-    }
-    // Lists made by hand are cleaned.
-    const made = await (await call('/api/streamlists', json({ name: '<img src=x onerror=alert(1)>', tracks: [{ title: 'ok', yt: 'dQw4w9WgXcQ', thumbnail: 'https://evil.example/t.jpg' }, { title: '', yt: 'x' }, 5] }))).json();
-    assert.equal(made.tracks.length, 1);
-    assert.equal(made.tracks[0].thumbnail, undefined);
-    assert.equal(made.name, '<img src=x onerror=alert(1)>', 'kept as text (the page shows it with textContent)');
-    assert.equal((await call('/api/streamlists', json({ name: 'x', tracks: [] }))).status, 400);
-    assert.equal((await call('/api/streamlists/..%2F..%2Fx')).status, 404);
-    assert.equal((await call(`/api/streamlists/${made.id}/tracks/abc`, { method: 'DELETE' })).status, 404);
-    assert.equal((await call(`/api/streamlists/${made.id}/refresh`, json({}))).status, 400, 'not from a link');
-    assert.equal((await (await call('/api/streamlists')).json()).lists.length, 1);
-    assert.ok(fs.existsSync(path.join(data, 'stream-lists.json')));
-    assert.equal((await (await call(`/api/streamlists/${made.id}`, { method: 'DELETE' })).json()).ok, true);
+    for (const f of ['stream-lists.json', 'listen-history.json', 'likes.json', 'news.json']) assert.equal(fs.existsSync(path.join(data, f)), false, `${f} not created`);
     // v3.8: the lyrics' translation only takes a short list of short lines, to a known language.
     for (const body of [{}, { lines: 'hola', to: 'es' }, { lines: [], to: 'es' }, { lines: ['x'.repeat(301)], to: 'es' }, { lines: Array(251).fill('a'), to: 'es' },
       { lines: [5], to: 'es' }, { lines: ['hello'], to: 'xx' }, { lines: ['hello'], to: '../es' }, { lines: Array(100).fill('a'.repeat(200)), to: 'es' }]) {
       assert.equal((await call('/api/lyrics/translate', json(body))).status, 400, JSON.stringify(body).slice(0, 80));
     }
     assert.equal((await call(`/api/library/lyrics?online=1&id=${'a'.repeat(32)}`)).status, 404);
-    // v3.9: what you listen to: only songs it can name, kept in the data folder, summaries of it.
-    for (const body of [{}, { song: 'x', secs: 60 }, { song: { key: 'yt:short', title: 'x' }, secs: 60 }, { song: { key: 'yt:dQw4w9WgXcQ', title: 'x' }, secs: 'a lot' },
-      { song: { key: 'yt:dQw4w9WgXcQ', title: 'x' }, secs: 1e9 }, { song: { key: '../../etc', title: 'x' }, secs: 60 }]) {
-      assert.equal((await (await call('/api/listen/log', json(body))).json()).ok, false, JSON.stringify(body));
-    }
-    assert.equal((await (await call('/api/listen/log', json({ song: { key: 'yt:dQw4w9WgXcQ', title: '<b>Never</b>', artist: 'Rick', thumb: 'javascript:alert(1)' }, secs: 90 }))).json()).plays, 1);
-    const smartNow = await (await call('/api/listen/smart')).json();
-    assert.equal(smartNow.top[0].title, '<b>Never</b>', 'kept as text');
-    assert.equal(smartNow.top[0].thumb, undefined, 'only YouTube thumbnails');
-    assert.equal((await (await call('/api/listen/summary?year=abcd&tz=99999')).json()).plays, 1, 'a bad year or zone: everything, UTC');
-    assert.ok(fs.existsSync(path.join(data, 'listen-history.json')));
-    assert.equal((await (await call('/api/listen/settings', json({ paused: 'yes', autoSave: 1 }))).json()).paused, false, 'only real booleans');
-    assert.equal((await (await call('/api/listen', { method: 'DELETE' })).json()).ok, true);
-    assert.equal((await (await call('/api/listen/smart')).json()).count, 0);
-    // v3.11: favourites: only songs it can name, kept as text, removed by key.
-    for (const song of [undefined, 'x', { key: 'yt:short', title: 'x' }, { key: '../../etc/passwd', title: 'x' }, { key: 'yt:dQw4w9WgXcQ', title: '' }, { key: `f:${'a'.repeat(600)}`, title: 'x' }]) {
-      assert.equal((await call('/api/listen/likes', json({ song }))).status, 400, JSON.stringify(song || null).slice(0, 60));
-    }
-    assert.equal((await (await call('/api/listen/likes', json({ song: { key: 'yt:dQw4w9WgXcQ', title: '<img src=x onerror=alert(1)>', thumb: 'javascript:alert(1)' } }))).json()).count, 1);
-    const favs = (await (await call('/api/listen/likes')).json()).songs;
-    assert.equal(favs[0].title, '<img src=x onerror=alert(1)>', 'kept as text');
-    assert.equal(favs[0].thumb, undefined);
-    assert.ok(fs.existsSync(path.join(data, 'likes.json')));
-    assert.equal((await call('/api/listen/unlike', json({ key: 'x'.repeat(600) }))).status, 400);
-    assert.equal((await (await call('/api/listen/unlike', json({ key: 'yt:dQw4w9WgXcQ' }))).json()).count, 0);
-    // A song moved in a list: only real places.
-    const moved = await (await call('/api/streamlists', json({ name: 'm', tracks: [{ title: 'A', yt: 'dQw4w9WgXcQ' }, { title: 'B', yt: 'kJQP7kiw5Fk' }] }))).json();
-    assert.deepEqual((await (await call(`/api/streamlists/${moved.id}`, json({ move: { from: 1, to: 0 } }))).json()).tracks.map((t) => t.title), ['B', 'A']);
-    assert.deepEqual((await (await call(`/api/streamlists/${moved.id}`, json({ move: { from: 0, to: 99 } }))).json()).tracks.map((t) => t.title), ['B', 'A']);
-    assert.deepEqual((await (await call(`/api/streamlists/${moved.id}`, json({ move: 'up' }))).json()).tracks.map((t) => t.title), ['B', 'A']);
-    await call(`/api/streamlists/${moved.id}`, { method: 'DELETE' });
-    // A Spotify profile link that isn't one: refused like any other link (nothing fetched).
-    for (const url of ['https://open.spotify.com/user/../../x', 'https://open.spotify.com/user/a%2F..%2Fb', 'http://open.spotify.com/user/x', 'https://open.spotify.com.evil.example/user/x', 'https://open.spotify.com/user/x/../../playlist']) {
-      assert.equal((await call('/api/streamlists/import', json({ url }))).status, 400, url);
-    }
-    // v3.12: several songs out and back, a deleted list back, "keep it downloaded" with checked options.
-    const many = await (await call('/api/streamlists', json({ name: 'many', tracks: ['A', 'B', 'C'].map((title) => ({ title, query: title })) }))).json();
-    for (const ns of [undefined, 'x', [], [99], [-1], ['0']]) assert.equal((await call(`/api/streamlists/${many.id}/remove`, json({ ns }))).status, 400, JSON.stringify(ns));
-    const out = await (await call(`/api/streamlists/${many.id}/remove`, json({ ns: [0, 2] }))).json();
-    assert.deepEqual(out.list.tracks.map((t) => t.title), ['B']);
-    assert.deepEqual((await (await call(`/api/streamlists/${many.id}`, json({ insert: out.removed }))).json()).tracks.map((t) => t.title), ['A', 'B', 'C']);
-    assert.equal((await call(`/api/streamlists/${'f'.repeat(16)}/remove`, json({ ns: [0] }))).status, 404);
-    assert.equal((await call('/api/streamlists/../../x/restore', json({}))).status, 404);
-    assert.equal((await call(`/api/streamlists/${'f'.repeat(16)}/restore`, json({}))).status, 404);
-    assert.equal((await call(`/api/streamlists/${many.id}/keep`, json({ on: true, opts: { mode: 'audio', audioFormat: 'exe' } }))).status, 200, 'unknown values: the defaults, as in any download');
-    await call(`/api/streamlists/${many.id}/keep`, json({ on: false }));
-    await call(`/api/streamlists/${many.id}`, json({ insert: [] }));
-    assert.equal((await call(`/api/streamlists/${many.id}/keep`, json({ on: true, opts: { mode: 'audio', audioFormat: 'mp3', outputDir: 'C:\\Windows' } }))).status, 200);
-    const kept = await (await call(`/api/streamlists/${many.id}`)).json();
-    assert.equal(kept.keep.client, CLIENT, 'the client is who asked, never sent');
-    assert.ok(kept.tracks.every((t) => t.got), 'all sent to the queue once');
-    assert.equal((await (await call(`/api/streamlists/${many.id}/keep`, json({ on: true, opts: { mode: 'audio', audioFormat: 'mp3' } }))).json()).queued, 0, 'not twice');
-    assert.equal((await (await call(`/api/streamlists/${many.id}/keep`, json({ on: false }))).json()).keep, false);
-    assert.equal((await (await call(`/api/streamlists/${many.id}`, { method: 'DELETE' })).json()).ok, true);
-    assert.equal((await (await call(`/api/streamlists/${many.id}/restore`, json({}))).json()).name, 'many');
-    assert.equal((await call(`/api/streamlists/${many.id}/restore`, json({}))).status, 404, 'only once');
-    await call(`/api/streamlists/${many.id}`, { method: 'DELETE' });
-    // v3.13: reviewing the library: only ids of its own files; albums need both names; news is a list.
+    // v3.13: reviewing the library: only ids of its own files; albums need both names.
     const rev = await (await call('/api/library/review')).json();
     assert.ok(Array.isArray(rev.files) && typeof rev.indexing === 'boolean');
     for (const p of ['/api/library/review/lyrics', '/api/library/review/fix', '/api/library/review/upgrade']) {
@@ -728,7 +658,6 @@ test('listening without downloading (desktop): bad ids, links and lists are refu
     }
     assert.equal((await (await call('/api/library/review/fix', json({ ids: ['a'.repeat(32)] }))).json()).missing, 1, 'an id not in the library: nothing touched');
     for (const body of [{}, { artist: 'Queen' }, { album: 'x' }, { artist: ' ', album: ' ' }]) assert.equal((await call('/api/library/review/album', json(body))).status, 400, JSON.stringify(body));
-    assert.ok(Array.isArray((await (await call('/api/listen/news')).json()).news));
     // v3.14: a file from the Explorer only with the main process's one-time pass (never a path from the page).
     for (const token of ['', 'x', '0'.repeat(32), '../../etc/passwd', 'C:\\Windows\\win.ini']) {
       assert.equal((await call(`/api/local/file?token=${encodeURIComponent(token)}`)).status, 404, token);

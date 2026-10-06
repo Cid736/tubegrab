@@ -1,79 +1,13 @@
-// v3.12: lists kept downloaded, several songs at once, "Deshacer", chapters.
+// v3.12: chapters. (The lists' tests moved with them to Escuchar.)
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { StreamLists, cleanTrack, cleanList } = require('../lib/streamlists');
 const { parseChapters, readChapters, cleanChapters, fromYouTube } = require('../lib/chapters');
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'tg-v312-'));
-const CLIENT = 'a'.repeat(32);
-const songs = (...names) => names.map((title) => ({ title, artist: 'X' }));
-
-test('keep downloaded: only a real client and small options; "sent" survives the list being read again', () => {
-  assert.equal(cleanList({ id: 'b'.repeat(16), name: 'L', tracks: songs('a'), keep: { client: 'nope', opts: {} } }).keep, null);
-  assert.equal(cleanList({ id: 'b'.repeat(16), name: 'L', tracks: songs('a'), keep: { client: CLIENT, opts: 'x' } }).keep, null);
-  assert.equal(cleanList({ id: 'b'.repeat(16), name: 'L', tracks: songs('a'), keep: { client: CLIENT, opts: { big: 'x'.repeat(4000) } } }).keep, null);
-  assert.deepEqual(cleanList({ id: 'b'.repeat(16), name: 'L', tracks: songs('a'), keep: { client: CLIENT, opts: { mode: 'audio' } } }).keep, { client: CLIENT, opts: { mode: 'audio' } });
-  assert.equal(cleanTrack({ title: 'a', got: 'yes' }).got, undefined, 'only true');
-  const dir = tmp();
-  try {
-    const s = new StreamLists(path.join(dir, 'l.json'));
-    const l = s.create({ name: 'L', url: 'https://open.spotify.com/playlist/x', tracks: songs('Uno', 'Dos') });
-    s.update(l.id, { keep: { client: CLIENT, opts: { mode: 'audio' } } });
-    assert.equal(s.summary()[0].keep, true);
-    s.markGot(l.id, [0]);
-    // Read again from Spotify: "Uno" keeps its mark, the new "Tres" doesn't have it.
-    s.update(l.id, { tracks: songs('Tres', 'Uno', 'Dos') });
-    assert.deepEqual(s.get(l.id).tracks.map((t) => Boolean(t.got)), [false, true, false]);
-    s.update(l.id, { keep: null });
-    assert.equal(new StreamLists(path.join(dir, 'l.json')).get(l.id).keep, null);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('several songs: moved together, removed together and put back where they were', () => {
-  const dir = tmp();
-  try {
-    const s = new StreamLists(path.join(dir, 'l.json'));
-    const l = s.create({ name: 'L', tracks: songs('A', 'B', 'C', 'D', 'E') });
-    const order = () => s.get(l.id).tracks.map((t) => t.title).join('');
-    s.update(l.id, { moveMany: { from: [0, 2], to: 4 } });
-    assert.equal(order(), 'BDACE', 'A and C before E');
-    s.update(l.id, { moveMany: { from: [3, 4], to: 0 } });
-    assert.equal(order(), 'CEBDA');
-    for (const moveMany of [{ from: [0, 1, 2, 3, 4], to: 0 }, { from: [9], to: 0 }, { from: 'x', to: 1 }, { from: [1], to: 'x' }, { from: [-1, 1.5], to: 2 }]) s.update(l.id, { moveMany });
-    assert.equal(order(), 'CEBDA', 'nonsense moves change nothing');
-    const r = s.removeTracks(l.id, [4, 0, 0, 9, -1, 'x']);
-    assert.deepEqual(r.removed.map((x) => [x.at, x.track.title]), [[0, 'C'], [4, 'A']]);
-    assert.equal(order(), 'EBD');
-    s.update(l.id, { insert: r.removed });
-    assert.equal(order(), 'CEBDA', 'back where they were');
-    assert.equal(s.removeTracks(l.id, []), null);
-    assert.equal(s.removeTracks('nope', [0]), null);
-    s.update(l.id, { insert: [{ at: 99, track: { title: 'Z' } }, { at: 1, track: { title: '' } }, { at: 'x', track: { title: 'Y' } }, null] });
-    assert.equal(order(), 'CEBDAZ', 'only real songs, at a real place');
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('a list deleted can come back for a while (with its link and settings), then not', () => {
-  const dir = tmp();
-  try {
-    const s = new StreamLists(path.join(dir, 'l.json'));
-    const l = s.create({ name: 'L', url: 'https://open.spotify.com/playlist/x', tracks: songs('A') });
-    s.update(l.id, { folder: 'Mis cosas' });
-    assert.equal(s.remove(l.id, 1000), true);
-    assert.equal(s.get(l.id), null);
-    const back = s.restore(l.id, 2000);
-    assert.equal(back.folder, 'Mis cosas');
-    assert.equal(back.url, 'https://open.spotify.com/playlist/x');
-    assert.equal(s.restore(l.id, 3000), null, 'only once');
-    s.remove(l.id, 10000);
-    assert.equal(s.restore(l.id, 10000 + 11 * 60 * 1000), null, 'too late');
-    assert.equal(s.remove('nope'), false);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
 
 test('chapters: read from ffmpeg\'s description, cleaned; YouTube\'s too', () => {
   const stderr = `Input #0, mov,mp4,m4a, from 'x.m4a':

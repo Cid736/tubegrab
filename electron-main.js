@@ -916,13 +916,11 @@ ipcMain.on('player:state', (event, state) => {
   const clean = {
     title: text(state.title), sub: text(state.sub), artist: text(state.artist, 200), track: text(state.track, 200),
     playing: state.playing === true, time: Number(state.time) || 0, duration: Number(state.duration) || 0,
-    cover: typeof state.cover === 'string' && (/^\/api\/library\/cover\?client=[a-f0-9]{32}&id=[a-f0-9]{32}$/.test(state.cover) || YT_THUMB_RE.test(state.cover)) ? state.cover : null,
+    cover: typeof state.cover === 'string' && /^\/api\/library\/cover\?client=[a-f0-9]{32}&id=[a-f0-9]{32}$/.test(state.cover) ? state.cover : null,
     volume: Number.isFinite(Number(state.volume)) ? Math.min(1, Math.max(0, Number(state.volume))) : 1, muted: state.muted === true,
     // What comes next (the mini window's "Up next"), titles only.
     upNext: Array.isArray(state.upNext) ? state.upNext.slice(0, 30).map((x) => ({ title: text(x && x.title, 200), sub: text(x && x.sub, 120), n: Number.isInteger(x && x.n) ? x.n : -1 })) : [],
-    streaming: state.streaming === true, shuffle: state.shuffle === true, repeat: state.repeat === true, radio: state.radio === true,
-    // The YouTube video of a song playing from YouTube (Discord's "Listen on YouTube").
-    yt: typeof state.yt === 'string' && /^[A-Za-z0-9_-]{11}$/.test(state.yt) ? state.yt : null,
+    shuffle: state.shuffle === true, repeat: state.repeat === true, radio: state.radio === true,
   };
   clean.active = Boolean(clean.title);
   const was = playerNow;
@@ -934,13 +932,13 @@ ipcMain.on('player:state', (event, state) => {
   playerToServer(clean);
 });
 // The phone's music page (the server's own page on the WiFi) sees it too:
-// titles, times, volume and a YouTube cover only, when something changes.
+// titles, times and volume only, when something changes.
 let playerToServerLast = '';
 function playerToServer(st) {
   if (!serverProcess || !serverProcess.connected) return;
   const state = {
     title: st.title, artist: st.artist || st.sub, playing: st.playing, muted: st.muted, time: st.time, duration: st.duration, volume: st.volume,
-    cover: st.cover && YT_THUMB_RE.test(st.cover) ? st.cover : null, upNext: st.upNext.slice(0, 5).map((x) => ({ title: x.title })),
+    upNext: st.upNext.slice(0, 5).map((x) => ({ title: x.title })),
   };
   const sig = JSON.stringify({ ...state, time: Math.round(state.time / 10) });
   if (sig === playerToServerLast) return;
@@ -950,12 +948,7 @@ function playerToServer(st) {
 // What the phone may ask the player for (the server checked it; checked again here).
 const PHONE_COMMANDS = ['prev', 'toggle', 'next', 'voldown', 'volup', 'mute'];
 function phoneCommand(c) {
-  if (!c || typeof c !== 'object') return;
-  if (PHONE_COMMANDS.includes(c.cmd)) sendToRenderer('player:command', { cmd: c.cmd });
-  else if (c.cmd === 'playQuery' && typeof c.q === 'string') {
-    const q = c.q.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
-    if (q && q.length <= 200) sendToRenderer('player:command', { cmd: 'playQuery', value: q });
-  }
+  if (c && typeof c === 'object' && PHONE_COMMANDS.includes(c.cmd)) sendToRenderer('player:command', { cmd: c.cmd });
 }
 // The visualizer's bars (main page → mini window): up to 32 numbers 0–255.
 ipcMain.on('player:levels', (event, levels) => {
@@ -963,7 +956,7 @@ ipcMain.on('player:levels', (event, levels) => {
   if (!miniWindow || miniWindow.isDestroyed() || !miniWindow.isVisible()) return;
   miniWindow.webContents.send('player:levels', levels.slice(0, 32).map((v) => Math.max(0, Math.min(255, Math.round(Number(v) || 0)))));
 });
-const PLAYER_COMMANDS = ['toggle', 'next', 'prev', 'hello', 'stop', 'volup', 'voldown', 'mute', 'seekf', 'seekb', 'shuffle', 'repeat', 'radio', 'save'];
+const PLAYER_COMMANDS = ['toggle', 'next', 'prev', 'hello', 'stop', 'volup', 'voldown', 'mute', 'seekf', 'seekb', 'shuffle', 'repeat', 'radio'];
 ipcMain.on('player:command', (event, cmd) => {
   if (!isTrustedSender(event) || !miniWindow || event.sender !== miniWindow.webContents) return;
   if (cmd === 'close') { miniWindow.close(); return; }
@@ -973,21 +966,7 @@ ipcMain.on('player:command', (event, cmd) => {
   else if (cmd && typeof cmd === 'object' && cmd.cmd === 'seek' && Number.isFinite(cmd.value)) sendToRenderer('player:command', { cmd: 'seek', value: cmd.value });
   else if (cmd && typeof cmd === 'object' && cmd.cmd === 'volume' && Number.isFinite(cmd.value)) sendToRenderer('player:command', { cmd: 'volume', value: Math.min(1, Math.max(0, cmd.value)) });
   else if (cmd && typeof cmd === 'object' && cmd.cmd === 'jump' && Number.isInteger(cmd.value) && cmd.value >= 0 && cmd.value < 10000) sendToRenderer('player:command', { cmd: 'jump', value: cmd.value });
-  // Songs found in the mini window, played from YouTube without saving them.
-  else if (cmd && typeof cmd === 'object' && (cmd.cmd === 'stream' || cmd.cmd === 'enqueue')) {
-    const items = cleanStreamItems(cmd.items);
-    if (!items.length) return;
-    const index = Number.isInteger(cmd.index) && cmd.index >= 0 && cmd.index < items.length ? cmd.index : 0;
-    sendToRenderer('player:command', { cmd: cmd.cmd, items, value: index });
-  } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'playList' && cmd.value && typeof cmd.value === 'object') {
-    // A list from the mini player: one of yours (its id) or one made for you (its kind), from a song or shuffled.
-    const v = cmd.value;
-    const list = /^[a-f0-9]{16}$/.test(String(v.id || '')) ? { id: String(v.id) } : ['top', 'lately', 'forgotten', 'liked', 'mix0', 'mix1', 'mix2'].includes(v.kind) ? { kind: v.kind } : null;
-    if (!list) return;
-    const start = Number.isInteger(v.start) && v.start >= 0 && v.start < 500 ? v.start
-      : typeof v.start === 'string' && v.start.length <= 520 && /^(yt:[A-Za-z0-9_-]{11}|f:[^\u0000-\u001f\u007f]+)$/.test(v.start) ? v.start : 0;
-    sendToRenderer('player:command', { cmd: 'playList', value: { ...list, start, shuffle: v.shuffle === true } });
-  } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'expand') {
+  else if (cmd && typeof cmd === 'object' && cmd.cmd === 'expand') {
     expandMini(cmd.value === true);
   } else if (cmd && typeof cmd === 'object' && cmd.cmd === 'snap' && ['tl', 'tr', 'bl', 'br'].includes(cmd.value)) {
     snapMini(cmd.value);
@@ -1001,19 +980,6 @@ ipcMain.on('player:command', (event, cmd) => {
     applyMiniPrefs();
   }
 });
-// A YouTube thumbnail (the only pictures a song from YouTube shows).
-const YT_THUMB_RE = /^https:\/\/i\d?\.ytimg\.com\/[A-Za-z0-9_\-/.]{1,200}(\?[A-Za-z0-9_\-=&%.]{0,300})?$/;
-/** Songs from the mini window's search: YouTube ids and short texts only. */
-function cleanStreamItems(list) {
-  if (!Array.isArray(list)) return [];
-  const text = (v, n) => String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, n);
-  return list.slice(0, 50).filter((x) => x && typeof x === 'object' && /^[A-Za-z0-9_-]{11}$/.test(String(x.id))).map((x) => ({
-    id: String(x.id), title: text(x.title, 300), channel: text(x.channel, 120),
-    duration: Number.isFinite(x.duration) && x.duration > 0 && x.duration < 86400 * 2 ? x.duration : null,
-    thumbnail: typeof x.thumbnail === 'string' && YT_THUMB_RE.test(x.thumbnail) ? x.thumbnail : null,
-  }));
-}
-
 // === Player buttons in the taskbar thumbnail (⏮ ⏯ ⏭) ===
 // Small white glyphs drawn here, pixel by pixel (no image files needed).
 function glyph(kind) {
@@ -1281,9 +1247,6 @@ const discord = (() => {
       type: 2,
       details: (st.track || st.title).slice(0, 120),
       ...(st.artist ? { state: st.artist.slice(0, 120) } : {}),
-      // A song from YouTube: its picture and a button to listen to it there.
-      ...(st.cover && YT_THUMB_RE.test(st.cover) ? { assets: { large_image: st.cover, large_text: (st.artist || st.title).slice(0, 120) } } : {}),
-      ...(st.yt ? { buttons: [{ label: 'YouTube', url: `https://www.youtube.com/watch?v=${st.yt}` }] } : {}),
       timestamps: st.duration ? { start: Math.round(Date.now() - st.time * 1000), end: Math.round(Date.now() + (st.duration - st.time) * 1000) } : { start: Math.round(Date.now() - st.time * 1000) },
     } : null;
     const sig = JSON.stringify(activity && { ...activity, timestamps: undefined, t: Math.round(st.time / 15) });

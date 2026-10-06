@@ -1,6 +1,6 @@
 {
   "name": "tubegrab",
-  "version": "3.14.1",
+  "version": "4.0.0",
   "main": "electron-main.js",
   "scripts": {
     "start": "node server.js",
