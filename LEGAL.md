@@ -46,7 +46,7 @@ Conexiones a terceros (necesarias para funcionar; cada servicio aplica su propia
 **Control desde el móvil** (opcional, app de escritorio): abre en tu red local una página para mandar enlaces a este PC. Solo funciona desde un móvil que haya escaneado el código QR de la app (el código es secreto y puedes cambiarlo para desconectar los móviles). No sale a internet.
 
 **Extensión del navegador** (opcional): solo lee la dirección de la pestaña o del enlace sobre el que la usas, y solo la envía a la app de tu PC. Para ello, la app de escritorio registra para tu usuario de Windows los enlaces `tubegrab://`.
-- **GitHub** (`api.github.com`, `github.com`): comprobar y descargar actualizaciones de la app, de yt-dlp y, en la versión ligera, de ffmpeg.
+- **GitHub** (`api.github.com`, `github.com`): comprobar y descargar actualizaciones de la app, de yt-dlp y, en la versión ligera, de ffmpeg; y, al abrir la pestaña CLMusic, la versión y el tamaño de su última versión publicada (los enlaces de descarga llevan a GitHub).
 
 **Cookies:** TubeGrab no usa cookies de seguimiento ni de terceros. Solo usa almacenamiento local estrictamente necesario para el funcionamiento, que está exento de consentimiento (art. 22.2 LSSI / art. 5.3 Directiva ePrivacy). Por eso no hay banner de cookies. El `cookies.txt` opcional son *tus* cookies de otro sitio, que tú decides aportar.
 
@@ -110,7 +110,7 @@ Third-party connections (needed for the app to work; each service has its own pr
 **Control from your phone** (optional, desktop app): opens a page on your local network to send links to this PC. It only works from a phone that scanned the app's QR code (the code is secret, and you can change it to sign phones out). Nothing goes to the internet.
 
 **Browser extension** (optional): it only reads the address of the tab or link you use it on, and only sends it to the app on your PC. For that, the desktop app registers `tubegrab://` links for your Windows user.
-- **GitHub** (`api.github.com`, `github.com`): checking for and downloading updates of the app, yt-dlp and, in the light build, ffmpeg.
+- **GitHub** (`api.github.com`, `github.com`): checking for and downloading updates of the app, yt-dlp and, in the light build, ffmpeg; and, when the CLMusic tab is opened, the version and size of its latest release (its download links go to GitHub).
 
 **Cookies:** TubeGrab uses no tracking or third-party cookies. It only uses local storage that is strictly necessary to work, which is exempt from consent under the EU ePrivacy Directive (art. 5(3)). That's why there's no cookie banner. The optional `cookies.txt` holds *your* cookies from another site, which you choose to provide.
 
