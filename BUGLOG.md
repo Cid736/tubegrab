@@ -873,3 +873,17 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 ### Revisión de la pestaña CLMusic
 - `/api/clmusic/latest`: solo pregunta a la API de GitHub (una vez por hora, 5 min si falla), solo devuelve los tamaños de los tres nombres de archivo conocidos y una versión `x.y.z`. La página los escribe con `textContent`. Los enlaces van a `github.com/Cid736/clmusic/releases/latest/download/…`.
 - 242 pruebas.
+
+
+---
+
+## 2026-10-07 — v4.0.1: CLMusic se llama ahora Rumoria
+
+### [Legal] Nombre de la app de música
+- **Por qué:** «CLMusic» chocaba con un reproductor de música para Windows que ya existía («CLMusicPlayer»), con una empresa británica («CL MUSIC LTD») y con la cantante CL. «Rumoria» no tiene marcas registradas en EE. UU., ni uso en la web, ni repos en GitHub, y sus dominios están libres.
+- **Cambios:** la pestaña, el logo (`public/rumoria.png`), la ruta (`/api/rumoria/latest`), los enlaces de descarga (`Cid736/rumoria`, `Rumoria-Setup.exe`, `Rumoria.exe` y `Rumoria-Lite.exe`), las traducciones, README y LEGAL. Las entradas antiguas de este registro conservan el nombre de entonces.
+
+### [Legal] El nombre «TubeGrab», revisado
+- **Registros:** no hay marcas «TUBEGRAB» registradas en EE. UU. y no aparece otra app con ese nombre. Las normas de marca de Google prohíben usar «YouTube» o sus variantes en el nombre de una app; «Tube» suelto es genérico y apps como TubeMate o TubeDigger lo usan desde hace años.
+- **Decisión:** se mantiene. El riesgo es moderado-bajo mientras se publique solo en GitHub. Si algún día va a una tienda de apps, conviene cambiarlo.
+- 242 pruebas.
