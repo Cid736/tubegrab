@@ -41,7 +41,10 @@
       "bin/ffmpeg.exe",
       "bin/ffprobe.exe",
       "yt-dlp.exe",
-      "!node_modules/ffmpeg-static/*.exe"
+      "LICENSE",
+      "LEGAL.md",
+      "third-party/**/*",
+      "!node_modules/ffmpeg-static/**"
     ],
     "nsis": {
       "oneClick": true,

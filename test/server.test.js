@@ -618,7 +618,7 @@ test('v3.4.0 on the web: profiles and "already have it" per visitor; desktop-onl
   assert.equal((await api(`/api/jobs/${'a'.repeat(32)}/stop`, json({}))).status, 404);
 });
 
-// Listening without downloading moved to its own app (Escuchar): none of its
+// Listening without downloading moved to its own app (CLMusic): none of its
 // routes answers here any more, on the web or in the desktop app.
 const LISTEN_ROUTES = [
   ['GET', '/api/stream/audio?id=dQw4w9WgXcQ'], ['GET', '/api/stream/info?id=dQw4w9WgXcQ'], ['GET', '/api/stream/radio?id=dQw4w9WgXcQ'],
@@ -627,7 +627,7 @@ const LISTEN_ROUTES = [
   ['GET', '/api/listen/likes'], ['POST', '/api/listen/likes'], ['POST', '/api/listen/unlike'], ['GET', '/api/listen/news'], ['DELETE', '/api/listen'],
 ];
 
-test('desktop extras: absent on the web; checked inputs in the app; listening without downloading is gone (Escuchar)', async () => {
+test('desktop extras: absent on the web; checked inputs in the app; listening without downloading is gone (CLMusic)', async () => {
   for (const [method, p] of LISTEN_ROUTES) {
     assert.equal((await api(`${p}${p.includes('?') ? '&' : '?'}client=${CLIENT}`, method === 'GET' ? {} : { ...json({}), method })).status, 404, `web: ${method} ${p}`);
   }

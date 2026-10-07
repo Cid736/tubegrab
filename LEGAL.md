@@ -30,6 +30,14 @@ Conexiones a terceros (necesarias para funcionar; cada servicio aplica su propia
 - **El sitio del enlace** (YouTube, Vimeo, SoundCloud…): yt-dlp lo contacta para buscar, previsualizar y descargar. Las miniaturas de la vista previa se cargan directamente desde ese sitio.
 - **SponsorBlock** (`sponsor.ajay.app`), solo si activas "Quitar patrocinios": recibe el identificador del vídeo.
 - **LRCLIB** (`lrclib.net`), solo si activas "Letras" al descargar o "Buscar letras" en Etiquetas: recibe el artista, el título, el álbum y la duración de la canción (nada más).
+- **Spotify** (`open.spotify.com`) y **Apple Music** (`music.apple.com`), solo al importar una lista para descargarla: se lee su página pública; cada canción se busca después en YouTube.
+- **MusicBrainz** (`musicbrainz.org`) y **Cover Art Archive** (`coverartarchive.org`), solo al completar etiquetas o revisar la biblioteca: reciben artista, título o álbum.
+- **AcoustID** (`api.acoustid.org`), solo si pones tu clave y reconoces canciones por su sonido: recibe una huella del audio (no el audio).
+- **Traducción de letras**, solo al pulsar «Traducir»: las líneas de la letra se envían al punto de acceso web gratuito de Google Translate (`translate.googleapis.com`). No es la API oficial de pago de Google y puede dejar de funcionar.
+- **Last.fm** (`ws.audioscrobbler.com`) y **Discord** (su app en tu equipo), solo si los activas con tus claves: reciben el título y el artista de lo que suena.
+- **Podcasts**: el servidor de cada podcast al que te suscribes.
+- **whisper.cpp y sus modelos** (`github.com`, `huggingface.co`) y **fpcalc** (`github.com`), solo si los instalas desde Ajustes.
+- **Tele (Chromecast / DLNA)**: solo dispositivos de tu red local.
 
 **Enviar al móvil** (app de escritorio): al compartir un archivo, TubeGrab abre un pequeño servidor en tu red local (WiFi/cable) que solo sirve ese archivo, con un enlace secreto que caduca a los 30 minutos (o antes si pulsas "Dejar de compartir"). No sale a internet. Cualquiera en tu misma red que tenga el enlace podría descargarlo mientras dure: úsalo en redes de confianza (casa, no WiFi públicas).
 
@@ -49,7 +57,10 @@ Conexiones a terceros (necesarias para funcionar; cada servicio aplica su propia
 - **Uso personal y responsabilidad del usuario.** Solo descarga contenido que tengas derecho a descargar: contenido propio, con licencia libre, de dominio público o con permiso del titular. Descargar contenido protegido puede infringir los derechos de autor y las condiciones de servicio del sitio de origen (las de YouTube, por ejemplo, prohíben descargar salvo donde el servicio lo permita). Tú eres responsable del uso que hagas de la app.
 - **Sin garantía.** El software se ofrece "tal cual", sin garantías de ningún tipo, según la [licencia MIT](LICENSE). Los sitios cambian a menudo y las descargas pueden fallar.
 - **Sin afiliación.** TubeGrab no está afiliado, patrocinado ni aprobado por YouTube, Google ni ninguno de los sitios compatibles. Sus nombres son marcas de sus respectivos titulares y se citan solo para indicar compatibilidad.
-- **Componentes de terceros:** [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense) y [FFmpeg](https://ffmpeg.org) (compilación de gyan.dev, GPL), cada uno bajo su propia licencia.
+- **Sin afiliación con Spotify ni Apple.** Sus nombres se usan solo para decir de dónde se puede importar una lista; no se usan sus logotipos.
+- **Letras y carátulas** (LRCLIB, Cover Art Archive) tienen derechos de autor de sus titulares: TubeGrab las añade a tus archivos para tu uso personal; no las redistribuyas.
+- **Componentes de terceros:** [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense; su .exe incluye Python y otras bibliotecas con sus licencias) y [FFmpeg](https://ffmpeg.org) 9.0.2 (compilación de gyan.dev, GPL v3), programas aparte que TubeGrab ejecuta, cada uno bajo su propia licencia. Las licencias, cómo obtener el código fuente de FFmpeg y los avisos de los paquetes npm están en la carpeta [`third-party/`](third-party/README.txt), que también va dentro de la app.
+- **Escuchar sin descargar** ya no está en TubeGrab: es la app aparte **CLMusic**, con sus propias condiciones.
 
 ## Contacto
 
@@ -83,6 +94,14 @@ Third-party connections (needed for the app to work; each service has its own pr
 - **The linked site** (YouTube, Vimeo, SoundCloud…): yt-dlp contacts it to search, preview and download. Preview thumbnails load straight from that site.
 - **SponsorBlock** (`sponsor.ajay.app`), only if you turn on "Remove sponsors": receives the video ID.
 - **LRCLIB** (`lrclib.net`), only if you turn on "Lyrics" when downloading or "Find lyrics" in Tags: receives the song's artist, title, album and length (nothing else).
+- **Spotify** (`open.spotify.com`) and **Apple Music** (`music.apple.com`), only when importing a list to download it: its public page is read; each song is then looked up on YouTube.
+- **MusicBrainz** (`musicbrainz.org`) and **Cover Art Archive** (`coverartarchive.org`), only when filling in tags or reviewing the library: they receive artist, title or album.
+- **AcoustID** (`api.acoustid.org`), only with your own key, when recognising songs by their sound: receives a fingerprint of the audio (not the audio).
+- **Lyrics translation**, only when you press "Translate": the lyrics' lines go to Google Translate's free web endpoint (`translate.googleapis.com`). It isn't Google's official paid API and may stop working.
+- **Last.fm** (`ws.audioscrobbler.com`) and **Discord** (its app on your computer), only if you turn them on with your keys: they receive the title and artist of what's playing.
+- **Podcasts**: the server of each podcast you subscribe to.
+- **whisper.cpp and its models** (`github.com`, `huggingface.co`) and **fpcalc** (`github.com`), only if you install them from Settings.
+- **TV (Chromecast / DLNA)**: devices on your local network only.
 
 **Send to phone** (desktop app): when you share a file, TubeGrab opens a small server on your local network (WiFi/cable) that only serves that file, behind a secret link that expires after 30 minutes (or sooner if you press "Stop sharing"). Nothing goes to the internet. Anyone on the same network with the link could download it meanwhile: use it on networks you trust (home, not public WiFi).
 
@@ -102,7 +121,10 @@ Third-party connections (needed for the app to work; each service has its own pr
 - **Personal use; you are responsible.** Only download content you have the right to: your own, freely licensed, public domain, or with the owner's permission. Downloading protected content may infringe copyright and the source site's terms of service (YouTube's, for example, forbid downloading except where the service allows it). You are responsible for how you use the app.
 - **No warranty.** The software is provided "as is", without warranty of any kind, under the [MIT licence](LICENSE). Sites change often and downloads may fail.
 - **No affiliation.** TubeGrab isn't affiliated with, sponsored or endorsed by YouTube, Google or any supported site. Their names are trademarks of their owners and are mentioned only to state compatibility.
-- **Third-party components:** [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense) and [FFmpeg](https://ffmpeg.org) (gyan.dev build, GPL), each under its own licence.
+- **No affiliation with Spotify or Apple.** Their names are used only to say where a list can be imported from; their logos are not used.
+- **Lyrics and cover art** (LRCLIB, Cover Art Archive) are copyrighted by their owners: TubeGrab adds them to your files for your personal use; don't redistribute them.
+- **Third-party components:** [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense; its .exe bundles Python and other libraries under their licences) and [FFmpeg](https://ffmpeg.org) 9.0.2 (gyan.dev build, GPL v3), separate programs TubeGrab runs, each under its own licence. The licences, how to get FFmpeg's source code and the npm packages' notices are in the [`third-party/`](third-party/README.txt) folder, which also ships inside the app.
+- **Listening without downloading** is no longer in TubeGrab: it's the separate app **CLMusic**, with its own terms.
 
 ## Contact
 

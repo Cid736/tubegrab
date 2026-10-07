@@ -194,6 +194,24 @@ if (isElectronApp) {
   for (const a of modal.querySelectorAll('.get-app-opt')) a.addEventListener('click', () => setTimeout(close, 300));
 }
 
+// === CLMusic: the music app that split from TubeGrab — its downloads, with
+// the sizes and version of its latest release (once it has one) ===
+(() => {
+  let asked = false;
+  document.addEventListener('tg:view', (e) => {
+    if (e.detail !== 'clmusic' || asked) return;
+    asked = true;
+    fetch('/api/clmusic/latest').then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (!d || !d.version) { asked = false; return; }
+      for (const a of document.querySelectorAll('#clmusicSection .get-app-opt')) {
+        const size = d.sizes && d.sizes[a.dataset.file];
+        if (size) a.querySelector('.get-app-size').textContent = `${Math.round(size / 1048576)} MB`;
+      }
+      $('clmVersion').textContent = t('Versión {v}. Elige una: las tres son la misma app.', { v: d.version });
+    }).catch(() => { asked = false; });
+  });
+})();
+
 // === App updater (desktop app only) ===
 if (window.updater) {
   const updateBanner = $('updateBanner');
@@ -696,6 +714,7 @@ const VIEWS = {
   history: { group: null, title: 'Historial', sub: 'Lo que has terminado en este equipo' },
   library: { group: null, title: 'Biblioteca', sub: 'Escucha y mira lo que has descargado', desktop: true },
   stats: { group: null, title: 'Estadísticas', sub: 'Lo que has descargado, convertido y escuchado' },
+  clmusic: { group: null, title: 'CLMusic', sub: 'Escuchar sin descargar, en su propia app' },
   'set-appearance': { group: 'settings', title: 'Apariencia', sub: 'Idioma, interfaz, colores, letra, menú y estilos', tab: 'Apariencia' },
   'set-downloads': { group: 'settings', title: 'Descargas', sub: 'Carpeta, velocidad y cookies', tab: 'Descargas' },
   'set-convert': { group: 'settings', title: 'Conversión', sub: 'Tarjeta gráfica y conversiones a la vez', tab: 'Conversión' },

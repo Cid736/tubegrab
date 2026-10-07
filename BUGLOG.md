@@ -861,8 +861,8 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 ## 2026-10-07 — v4.0.0: Escuchar, una app aparte
 
 ### [Cambio] Escuchar sin descargar sale de TubeGrab
-- La pestaña Escuchar (listas de Spotify / Apple Music / YouTube, Favoritas, «Hecho para ti», novedades, el resumen del año) es ahora la app **Escuchar** (repositorio propio). TubeGrab se queda con descargar, convertir y la biblioteca con su reproductor de archivos.
+- La pestaña Escuchar (listas de Spotify / Apple Music / YouTube, Favoritas, «Hecho para ti», novedades, el resumen del año) es ahora la app **CLMusic** (repositorio propio), con su propia página para descargarla en TubeGrab (pestaña **CLMusic**: instalador, portable y portable ligera). TubeGrab se queda con descargar, convertir y la biblioteca con su reproductor de archivos.
 - Quitado: rutas `/api/stream/*`, `/api/streamlists*`, `/api/listen*`; `lib/stream.js`, `streamlists.js`, `listenlog.js`, `likes.js`, `news.js`; perfiles de Spotify en `importlist.js`; la vista, el streaming dentro del reproductor, el resumen de Estadísticas, las pestañas Buscar/Listas del mini reproductor, «poner una canción» desde el móvil (y sus carátulas de YouTube: su CSP pasa a `img-src 'none'`), los comandos `stream/enqueue/playList/playQuery/save` en el proceso principal y el botón de YouTube en Discord. 296 selectores CSS y 179 traducciones que solo usaba Escuchar.
 - Seguridad: menos superficie (ningún relé de audio ni yt-dlp por id desde la página). Un test comprueba que ninguna de esas rutas responde ya (web y escritorio) ni se crean sus archivos.
-- Comprobado: identificadores no definidos o sin usar antes/después de cada archivo (0 nuevos); en la app real, Biblioteca, cola, Estadísticas, Ctrl+K y mini reproductor sin errores. Escuchar copia tus datos de `%APPDATA%\tubegrab` la primera vez (no los mueve).
+- Comprobado: identificadores no definidos o sin usar antes/después de cada archivo (0 nuevos); en la app real, Biblioteca, cola, Estadísticas, Ctrl+K y mini reproductor sin errores. CLMusic copia tus datos de `%APPDATA%\tubegrab` la primera vez (no los mueve).
 - 242 pruebas.

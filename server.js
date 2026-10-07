@@ -1,6 +1,9 @@
 const express = require('express');
 const path = require('path');
-const ffmpegPath = require('ffmpeg-static');
+// ffmpeg-static (GPL) is only for the web/server version: the desktop app ships
+// its own ffmpeg with its licence (third-party/) and leaves this package out.
+let ffmpegPath = null;
+try { ffmpegPath = require('ffmpeg-static'); } catch { /* not shipped */ }
 const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -62,7 +65,7 @@ function currentFfmpegPath() {
   const env = process.env.FFMPEG_BIN;
   if (env && path.isAbsolute(env) && fs.existsSync(env)) return env;
   if (isWindows && fs.existsSync(pinnedFfmpeg)) return pinnedFfmpeg;
-  return ffmpegPath;
+  return ffmpegPath || 'ffmpeg';
 }
 
 // yt-dlp — the desktop app's self-updating copy in its data folder, else the
@@ -265,6 +268,27 @@ app.get('/api/desktop/latest', infoLimiter, async (req, res) => {
     }
   }
   res.json(appRelease.data);
+});
+
+// CLMusic (the music app that split from TubeGrab): the same, for the page
+// that offers to download it. Before its first release there's nothing yet.
+const CLMUSIC_FILES = ['CLMusic-Setup.exe', 'CLMusic.exe', 'CLMusic-Lite.exe'];
+let clmusicRelease = { at: 0, data: null };
+app.get('/api/clmusic/latest', infoLimiter, async (req, res) => {
+  if (!clmusicRelease.data || Date.now() - clmusicRelease.at > 3600e3) {
+    try {
+      const r = await require('./lib/netfetch').json('https://api.github.com/repos/Cid736/clmusic/releases/latest', { timeoutMs: 8000, headers: { Accept: 'application/vnd.github+json' } });
+      const sizes = {};
+      for (const a of Array.isArray(r && r.assets) ? r.assets : []) {
+        if (a && CLMUSIC_FILES.includes(a.name) && Number.isFinite(a.size) && a.size > 0) sizes[a.name] = a.size;
+      }
+      const version = typeof r.tag_name === 'string' && /^v?\d+\.\d+\.\d+$/.test(r.tag_name) ? r.tag_name.replace(/^v/, '') : null;
+      clmusicRelease = { at: Date.now(), data: { version, sizes } };
+    } catch {
+      clmusicRelease = { at: Date.now() - 3300e3, data: clmusicRelease.data || { version: null, sizes: {} } };
+    }
+  }
+  res.json(clmusicRelease.data);
 });
 
 app.post('/api/config', (req, res) => {
