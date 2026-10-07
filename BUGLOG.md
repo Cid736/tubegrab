@@ -921,3 +921,15 @@ CodeQL (`security-extended`) se activó por primera vez en el repositorio y dio 
 - **gitleaks en local** sobre todo el historial (83 commits): sin secretos. Nunca se ha subido un archivo sensible (cookies, `.env`, ajustes, claves).
 - **Ejecutables publicados:** sin datos, rutas del equipo, source maps ni secretos.
 - **Pruebas:** `test/hardening.test.js`. 247 pruebas superadas.
+
+
+---
+
+## 2026-10-07 — v4.0.3: el ReDoS de verdad
+
+### [MEDIA] `NOISE_ONLY` seguía atascándose con «version version version…»
+- **Archivo:** `lib/download.js`
+- **Descripción:** el segundo análisis de CodeQL lo volvió a marcar, esta vez por «version ». `version` y `versi[oó]n` casan con el mismo texto, así que cada repetición duplica los caminos posibles. Con 20 repeticiones no terminó en 2 minutos. Ya pasaba desde la v3.13; el arreglo de la v4.0.2 (separar las palabras) no lo tocaba.
+- **Fix:** se quita `version`, que ya cubre `versi[oó]n`. 20 000 repeticiones responden en menos de 2 ms.
+- **Test:** `test/hardening.test.js` mide el tiempo con «of», «version », «2011 » y «remastered ».
+- **Lección:** cada aviso de ReDoS se comprueba midiendo el tiempo, no solo leyendo la expresión.

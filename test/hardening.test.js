@@ -13,10 +13,13 @@ const { SeenIndex } = require('../lib/seen');
 test('"official audio" words: the same answers, and no runaway matching on long repeated text', () => {
   for (const ok of ['official audio', 'remastered 2011', 'hq', 'audio oficial', 'official ']) assert.ok(NOISE_ONLY.test(ok), ok);
   for (const no of ['live', 'piano version 2', 'official video', 'remix']) assert.ok(!NOISE_ONLY.test(no), no);
-  const evil = `${'of'.repeat(5000)}!`;
-  const t0 = Date.now();
-  assert.equal(NOISE_ONLY.test(evil), false);
-  assert.ok(Date.now() - t0 < 200, 'answers at once');
+  assert.ok(NOISE_ONLY.test('version') && NOISE_ONLY.test('versión original'));
+  // "version " twice-matchable used to double the work per repetition (20 never finished).
+  for (const evil of [`${'of'.repeat(5000)}!`, `${'version '.repeat(20000)}!`, `${'2011 '.repeat(20000)}!`, `${'remastered '.repeat(10000)}x`]) {
+    const t0 = Date.now();
+    assert.equal(NOISE_ONLY.test(evil), false);
+    assert.ok(Date.now() - t0 < 200, `answers at once: ${evil.slice(0, 12)}…`);
+  }
 });
 
 test('subtitles: tags other than <b>, <i>, <u> gone even when nested; a stray "<" stays text', () => {
