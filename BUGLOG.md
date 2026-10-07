@@ -866,3 +866,10 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - Seguridad: menos superficie (ningún relé de audio ni yt-dlp por id desde la página). Un test comprueba que ninguna de esas rutas responde ya (web y escritorio) ni se crean sus archivos.
 - Comprobado: identificadores no definidos o sin usar antes/después de cada archivo (0 nuevos); en la app real, Biblioteca, cola, Estadísticas, Ctrl+K y mini reproductor sin errores. CLMusic copia tus datos de `%APPDATA%\tubegrab` la primera vez (no los mueve).
 - 242 pruebas.
+
+### [Seguridad — CRÍTICA en `npm audit`] `proxy-addr` ≤ 2.0.7 (GHSA-jqcg-44mw-7w3h)
+- Suplantación de IP cuando la subred de confianza es IPv4 mapeada en IPv6. TubeGrab solo activa `trust proxy` con `TRUST_PROXY` (la web) y por número de saltos, no por subred, así que en la práctica no le afectaba. Aun así, actualizada a 2.0.8 (dependencia de Express). `npm audit --omit=dev`: 0.
+
+### Revisión de la pestaña CLMusic
+- `/api/clmusic/latest`: solo pregunta a la API de GitHub (una vez por hora, 5 min si falla), solo devuelve los tamaños de los tres nombres de archivo conocidos y una versión `x.y.z`. La página los escribe con `textContent`. Los enlaces van a `github.com/Cid736/clmusic/releases/latest/download/…`.
+- 242 pruebas.
