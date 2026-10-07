@@ -44,7 +44,7 @@ const events = new EventEmitter();
 events.setMaxListeners(0);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = /^\d{1,5}$/.test(String(process.env.PORT || '')) && Number(process.env.PORT) <= 65535 ? Number(process.env.PORT) : 3000;
 // Bind to localhost only by default (this app is meant to run as a local/desktop
 // tool). Any container/host deployment (Docker, Render, Railway...) must set
 // HOST=0.0.0.0 itself — inside a container, binding to 127.0.0.1 is unreachable
@@ -843,7 +843,7 @@ app.post('/api/analyze/highlights', infoLimiter, requireClient, upload.single('f
 // Tags from MusicBrainz (by the sound with an AcoustID key, else by title and artist).
 const uploadIdentify = uploader(MAX_TAG_FILES).array('files', MAX_TAG_FILES);
 app.post('/api/tags/identify', infoLimiter, requireClient, uploadIdentify, async (req, res) => {
-  const files = req.files || [];
+  const files = Array.isArray(req.files) ? req.files : [];
   const discard = () => files.forEach((f) => fs.unlink(f.path, () => {}));
   if (!files.length) return res.status(400).json({ error: 'No se recibió ningún archivo.' });
   let hints = [];
@@ -880,7 +880,7 @@ app.get('/api/tags/coverart', infoLimiter, requireClient, async (req, res) => {
 });
 
 app.post('/api/tags/analyze', infoLimiter, requireClient, uploadTagsRead, async (req, res) => {
-  const files = req.files || [];
+  const files = Array.isArray(req.files) ? req.files : [];
   const discard = () => files.forEach((f) => fs.unlink(f.path, () => {}));
   if (!files.length) return res.status(400).json({ error: 'No se recibió ningún archivo.' });
   if (!analyzeSlots.take()) { discard(); return res.status(429).json(BUSY); }
@@ -899,7 +899,7 @@ app.post('/api/tags/analyze', infoLimiter, requireClient, uploadTagsRead, async 
 // === Tag editor ===
 // Reads the tags of the chosen songs (nothing is kept: the files are deleted right away).
 app.post('/api/tags/read', infoLimiter, requireClient, uploadTagsRead, async (req, res) => {
-  const files = req.files || [];
+  const files = Array.isArray(req.files) ? req.files : [];
   const discard = () => files.forEach((f) => fs.unlink(f.path, () => {}));
   try {
     if (!files.length) return res.status(400).json({ error: 'No se recibió ningún archivo.' });
@@ -1094,7 +1094,7 @@ app.post('/api/library/review/fix', requireDesktop, requireClient, createLimiter
       let cover = null;
       if (info && !info.cover && found.releaseId && tags.COVER_FORMATS.has(ext)) {
         const art = await musicbrainz.coverArt(found.releaseId).catch(() => null);
-        if (art) { cover = path.join(os.tmpdir(), `tg-cover-${crypto.randomBytes(6).toString('hex')}.${art.type === 'image/png' ? 'png' : 'jpg'}`); fs.writeFileSync(cover, art.data); }
+        if (art) { cover = path.join(os.tmpdir(), `tg-cover-${crypto.randomBytes(6).toString('hex')}.${art.type === 'image/png' ? 'png' : 'jpg'}`); fs.writeFileSync(cover, art.data, { flag: 'wx', mode: 0o600 }); }
       }
       if (!Object.keys(newTags).length && !cover) { missing++; continue; }
       const tmp = path.join(path.dirname(file), `.tg-fix-${crypto.randomBytes(4).toString('hex')}.${ext}`);
@@ -1631,7 +1631,7 @@ app.post('/api/remote', requireDesktop, requireClient, async (req, res) => {
 app.post('/api/remote/reset', requireDesktop, requireClient, async (req, res) => res.json(await remoteView(await remote.reset())));
 
 app.post('/api/jobs/merge', createLimiter, requireClient, uploadMany.array('files', MAX_MERGE_FILES), (req, res) => {
-  const files = req.files || [];
+  const files = Array.isArray(req.files) ? req.files : [];
   const discard = () => files.forEach((f) => fs.unlink(f.path, () => {}));
   const body = req.body || {};
   const targetFormat = String(body.targetFormat || '').toLowerCase();

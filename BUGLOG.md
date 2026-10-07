@@ -887,3 +887,37 @@ Nuevo en la 3.5.0: Buscar con las mismas opciones que Descargar y copiar enlaces
 - **Registros:** no hay marcas «TUBEGRAB» registradas en EE. UU. y no aparece otra app con ese nombre. Las normas de marca de Google prohíben usar «YouTube» o sus variantes en el nombre de una app; «Tube» suelto es genérico y apps como TubeMate o TubeDigger lo usan desde hace años.
 - **Decisión:** se mantiene. El riesgo es moderado-bajo mientras se publique solo en GitHub. Si algún día va a una tienda de apps, conviene cambiarlo.
 - 242 pruebas.
+
+
+---
+
+## 2026-10-07 — v4.0.2: primer análisis de CodeQL
+
+CodeQL (`security-extended`) se activó por primera vez en el repositorio y dio 26 avisos; también se activaron las alertas de Dependabot. Cada aviso se revisó en el código.
+
+### Arreglados
+- **[MEDIA] ReDoS en `NOISE_ONLY`** (`lib/download.js`): `(palabra\s*)+` podía partir el mismo texto de muchas formas; un título con «ofofof…» lo atascaba de forma exponencial. Ahora cada palabra acaba en un espacio o al final, así que solo hay una forma de leerlo. Responde al instante y da las mismas respuestas.
+- **[BAJA] `\.` sin efecto en un `RegExp` de plantilla** (`lib/download.js`, miniaturas): dentro de `` `…` ``, `\.` es solo `.`, que casaba con cualquier carácter y podía coger otro archivo. Ahora es `\.`.
+- **[BAJA] Subtítulos saneados una sola vez** (`lib/library.js`, `srtToVtt`): `<<b>script>` dejaba `<script>` tras una pasada. Las etiquetas que no son `<b>`, `<i>` o `<u>` se quitan hasta que no queda ninguna, y los `<` sueltos pasan a `&lt;`. El `.vtt` se sirve como `text/vtt`, que no ejecuta nada, así que esto es defensa en profundidad.
+- **[BAJA] Títulos de Apple Music decodificados dos veces** (`lib/importlist.js`): `&amp;` ahora va el último.
+- **[BAJA] `__proto__` como clave** (`lib/seen.js`, «¿ya descargado?»): la respuesta se construye con un `Map` y `Object.fromEntries`, así que cualquier enlace es solo una clave.
+- **[BAJA] Tipo de `req.files`** (`server.js`, cuatro subidas): siempre el array que crea multer y nunca otra cosa.
+- **[BAJA] `PORT` en `cmd /c start`** (`server.js`): solo un número de 1 a 65535; si no, 3000.
+- **[BAJA] Archivos temporales** (`lib/remote.js`, carátula de MusicBrainz): `lib/atomic.js` (`writeFileAtomic`) escribe con nombre aleatorio y creación exclusiva (`wx`, `0600`). La carátula se crea igual, en exclusiva.
+- **[BAJA] Carrera al guardar en el CLI** (`cli.js`): se crea en exclusiva y, si el nombre ya existe, se prueba el siguiente («(1)», «(2)»…), sin sobrescribir nunca.
+
+### Descartados tras revisarlos
+- **SSRF en `lib/netfetch.js`** (#2, #21): falso positivo. Solo `https`, IPs públicas también tras el DNS (el socket usa esa misma resolución) y en cada redirección; y quien lo llama solo pasa hosts permitidos.
+- **`js/path-injection` en `fs.unlink(file.path)`** (#5–#8): la ruta la crea multer en la carpeta de trabajos, con un nombre aleatorio; no viene de la petición.
+- **XSS por el DOM en las vistas previas** (#3, #4): `img.src` recibe una URL `blob:` creada por la propia página con `URL.createObjectURL(archivo)`.
+- **Certificado sin validar en `lib/cast.js`** (#11): Chromecast usa certificados autofirmados en la red local; es la forma de hablar con él.
+- **MD5 en `electron-main.js`** (#14): la firma (`api_sig`) de la API de Last.fm exige MD5; no protege datos.
+- **Carrera en `electron-main.js:1907`** (#19): lee un archivo que el usuario acaba de elegir en un diálogo.
+- **Datos de HTTP escritos en disco** (#24–#26: `server.js`, `lib/watch.js`, `cli.js`): son los ajustes y las descargas que pide el usuario, con cada valor validado antes.
+- **`test/server.test.js`** (#22): es un test.
+- **Dependabot:** `sprintf-js` y `http-cache-semantics` solo los usan herramientas de desarrollo y no van dentro de la app.
+
+### Además
+- **gitleaks en local** sobre todo el historial (83 commits): sin secretos. Nunca se ha subido un archivo sensible (cookies, `.env`, ajustes, claves).
+- **Ejecutables publicados:** sin datos, rutas del equipo, source maps ni secretos.
+- **Pruebas:** `test/hardening.test.js`. 247 pruebas superadas.

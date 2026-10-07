@@ -127,8 +127,11 @@ async function main() {
             if (!r.ok) continue;
             let target = path.join(out, safeSaveName(job.files[n].name));
             const ext = path.extname(target);
-            for (let k = 1; fs.existsSync(target); k++) target = path.join(out, `${path.basename(job.files[n].name, ext)} (${k})${ext}`);
-            fs.writeFileSync(target, Buffer.from(await r.arrayBuffer()));
+            const data = Buffer.from(await r.arrayBuffer());
+            for (let k = 1; ; k++) {
+              try { fs.writeFileSync(target, data, { flag: 'wx' }); break; } catch (err) { if (err.code !== 'EEXIST' || k > 999) throw err; }
+              target = path.join(out, `${path.basename(job.files[n].name, ext)} (${k})${ext}`);
+            }
             line('');
             process.stdout.write(`${tty ? '\r' : ''}✓ ${target}\n`);
           }
