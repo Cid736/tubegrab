@@ -933,3 +933,13 @@ CodeQL (`security-extended`) se activó por primera vez en el repositorio y dio 
 - **Fix:** se quita `version`, que ya cubre `versi[oó]n`. 20 000 repeticiones responden en menos de 2 ms.
 - **Test:** `test/hardening.test.js` mide el tiempo con «of», «version », «2011 » y «remastered ».
 - **Lección:** cada aviso de ReDoS se comprueba midiendo el tiempo, no solo leyendo la expresión.
+
+
+---
+
+## 2026-10-08 — v4.0.4: la pestaña Rumoria, al día
+
+### [Legacy] El texto de la pestaña Rumoria
+- Ahora menciona lo que trae Rumoria 1.3: «Para ti» y «Para hoy», listas que se llenan solas, mini reproductor con videoclip y letra, el ecualizador y las demás opciones del reproductor que antes tenía TubeGrab, y que se actualiza sola. En español y en inglés.
+- Los enlaces siguen yendo a `github.com/Cid736/rumoria/releases/latest/download/…` (comprobados: responden con el archivo).
+- 247 pruebas.
