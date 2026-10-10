@@ -24,8 +24,10 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - **Only the thumbnail** of a video, in full size
 - **Proxy** (desktop) for sites blocked on your network
 - **Subscriptions** (desktop app): channels or playlists checked every 1–24 h; new uploads download by themselves
+  - **Filters**: no Shorts, a shortest and longest length, only titles with certain words or skipping others (what's left out still counts as seen); editable later
 - Audio: MP3, M4A, OPUS, OGG, FLAC, WAV or the original stream (96–320 kbps). Video: up to 4K/8K as MP4, MKV or WEBM
 - **Download only a part** (e.g. 1:20–3:45, with a slider), or **split by chapters** into one file per chapter (tagged with title and track number)
+- **Split with a tracklist**: for a mix, DJ set or whole album without chapters, paste the list from the comments ("0:00 Intro", "3:21 Artist - Song"…) and each track comes out as its own file, cut without re-encoding and tagged with artist, title, album and number
 - **Music mode**: clean "Artist - Title" (without "(Official Video)"…), artist tag and **square cover art**
 - **Lyrics** (optional): found on LRCLIB (free, no account), embedded in the song, plus a synced **.lrc** file next to it when available
 - **Folders by artist / album** (desktop): downloads can go into `Artist/Album` automatically
@@ -48,6 +50,7 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 **Convert**
 - 11 audio and 12 video formats, batch, presets (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiobook…), speed, rotate, resolution…
 - **Remove the vocals (karaoke) or keep only the vocals** (approximate: works best with stereo studio songs)
+- **Ringtones**: iPhone (.m4r, up to 40 s) or Android (.ogg, up to 30 s), with a fade-out at the end; pick the part with the trim
 - **Trim with a preview and waveform**: drag the handles and play the part before converting
 - **Editor** that fills the window (viewer, settings panel and a timeline with thumbnails, waveform and zoom): keep from any second to any other, cut with the blade (B), mark in/out (I/O), remove or restore clips, undo/redo, frame stepping and NLE-style shortcuts (Space, J/L, arrows). Export with exact cuts (re-encoded, GPU if available) or fast cuts (stream copy, lossless, keyframe-aligned)
   - **Remove silences** in one click, a **clip list** (jump, remove, restore), **snapping** and ↑/↓ to jump between cuts
@@ -275,8 +278,10 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - **Solo la miniatura** de un vídeo, a tamaño completo
 - **Proxy** (app de escritorio) para sitios bloqueados en tu red
 - **Suscripciones** (app de escritorio): canales o playlists revisados cada 1–24 h; lo nuevo se descarga solo
+  - **Filtros**: sin Shorts, duración mínima y máxima, solo títulos con ciertas palabras o saltando otras (lo que se queda fuera cuenta como visto); se pueden cambiar después
 - Audio: MP3, M4A, OPUS, OGG, FLAC, WAV o el original (96–320 kbps). Vídeo: hasta 4K/8K en MP4, MKV o WEBM
 - **Descargar solo un tramo** (p. ej. 1:20–3:45, con deslizador), o **dividir por capítulos** en un archivo por capítulo (con título y número de pista)
+- **Dividir con una lista de pistas**: para una mezcla, sesión o álbum entero sin capítulos, pega la lista de los comentarios («0:00 Intro», «3:21 Artista - Canción»…) y cada pista sale en su propio archivo, cortada sin recodificar y con artista, título, álbum y número
 - **Modo música**: "Artista - Título" limpio (sin "(Official Video)"…), etiqueta de artista y **portada cuadrada**
 - **Letras** (opcional): las busca en LRCLIB (gratis, sin cuenta), las incrusta en la canción y, si están sincronizadas, guarda también un **.lrc** al lado
 - **Carpetas por artista / álbum** (escritorio): las descargas pueden ir solas a `Artista/Álbum`
@@ -299,6 +304,7 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 **Convertir**
 - 11 formatos de audio y 12 de vídeo, por lotes, preajustes (WhatsApp, Instagram/TikTok, YouTube, iPhone, podcast, audiolibro…), velocidad, girar, resolución…
 - **Quitar la voz (karaoke) o quedarte solo con la voz** (aproximado: va mejor con canciones de estudio en estéreo)
+- **Tonos de llamada**: iPhone (.m4r, hasta 40 s) o Android (.ogg, hasta 30 s), con un fundido al final; elige el trozo con el recorte
 - **Recorte con vista previa y forma de onda**: arrastra los tiradores y escucha el tramo antes de convertir
 - **Editor** que ocupa toda la ventana (visor, panel de ajustes y línea de tiempo con miniaturas, forma de onda y zoom): quédate del segundo que quieras al que quieras, corta con la cuchilla (B), marca entrada/salida (I/O), quita o recupera tramos, deshaz/rehaz, avanza fotograma a fotograma y usa atajos de editor (Espacio, J/L, flechas). Exporta con cortes exactos (recodifica, con GPU si hay) o rápidos (copia sin pérdida, ajustados a fotogramas clave)
   - **Quitar silencios** con un clic, **lista de tramos** (saltar, quitar, recuperar), **imán** y ↑/↓ para saltar entre cortes

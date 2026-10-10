@@ -72,6 +72,8 @@ const CONVERT_FORMAT_OPTIONS = {
     { value: 'alac', short: 'ALAC', label: 'ALAC — sin pérdida de Apple', lossless: true },
     { value: 'wav', short: 'WAV', label: 'WAV — sin comprimir', lossless: true },
     { value: 'aiff', short: 'AIFF', label: 'AIFF — sin comprimir (Mac)', lossless: true },
+    { value: 'm4r', short: 'M4R', label: 'Tono de llamada iPhone (M4R) — hasta 40 s' },
+    { value: 'ringtone', short: 'OGG', label: 'Tono de llamada Android (OGG) — hasta 30 s' },
   ],
   video: [
     { value: 'mp4', short: 'MP4', label: 'MP4 (H.264) — el más compatible' },
@@ -98,6 +100,8 @@ const PRESETS = {
     { id: 'audiobook', label: 'Audiolibro — ligero', set: { format: 'm4a', bitrate: '64', sampleRate: '', channels: '1', normalize: true } },
     { id: 'voice', label: 'Nota de voz (OPUS)', set: { format: 'opus', bitrate: '64', sampleRate: '', channels: '1', normalize: true } },
     { id: 'lossless', label: 'Archivo sin pérdida', set: { format: 'flac', bitrate: '', sampleRate: '', channels: '', normalize: false } },
+    { id: 'ringtone-iphone', label: 'Tono de llamada — iPhone', set: { format: 'm4r', bitrate: '256', sampleRate: '44100', channels: '2', normalize: true } },
+    { id: 'ringtone-android', label: 'Tono de llamada — Android', set: { format: 'ringtone', bitrate: '192', sampleRate: '44100', channels: '2', normalize: true } },
   ],
   video: [
     { id: 'custom', label: 'Personalizado' },
@@ -834,6 +838,7 @@ function applyMode() {
   $('optNfoWrap').classList.toggle('hidden', currentMode !== 'video');
   $('optSubtitlesWrap').classList.toggle('hidden', currentMode !== 'video');
   refreshSubtitleRows();
+  refreshTracklistRow();
   $('convertOptions').classList.toggle('hidden', !isConvert);
   $('moreOptions').classList.toggle('hidden', !isConvert);
   refreshButton();
@@ -845,6 +850,37 @@ function refreshSubtitleRows() {
   $('subModeRow').classList.toggle('hidden', !on);
 }
 optSubtitles.addEventListener('change', refreshSubtitleRows);
+
+// A tracklist (audio only): the lines with a time, as the server reads them.
+// (Declared functions: setMode may run before this part of the file.)
+function countTracks(text) {
+  const time = /(?:^|[^\d:])((?:\d{1,2}:)?\d{1,3}:[0-5]\d)(?![\d:])/;
+  const starts = new Set();
+  for (const line of String(text || '').split('\n')) {
+    const m = time.exec(line.slice(0, 300));
+    if (m) starts.add(m[1].split(':').reduce((acc, p) => acc * 60 + Number(p), 0));
+  }
+  return starts.size;
+}
+function tracklistOn() { return currentMode === 'audio' && $('optTracklist').checked; }
+function refreshTracklistRow() {
+  $('optTracklistWrap').classList.toggle('hidden', currentMode !== 'audio');
+  $('tracklistRow').classList.toggle('hidden', !tracklistOn());
+  const n = countTracks($('tracklistText').value);
+  $('tracklistCount').textContent = !$('tracklistText').value.trim() ? t('Una pista por línea, con su tiempo de inicio.')
+    : n > 1 ? t('{n} pistas', { n }) : t('Hacen falta al menos dos líneas con tiempo.');
+}
+$('optTracklist').addEventListener('change', () => {
+  // Chapters or a tracklist: one way of splitting at a time.
+  if ($('optTracklist').checked) optChapters.checked = false;
+  refreshTracklistRow();
+  refreshDlHint();
+});
+optChapters.addEventListener('change', () => {
+  if (optChapters.checked) $('optTracklist').checked = false;
+  refreshTracklistRow();
+});
+$('tracklistText').addEventListener('input', refreshTracklistRow);
 
 function refreshButton() {
   if (currentMode === 'convert') {
@@ -1684,6 +1720,7 @@ function refreshDlHint() {
   const parts = [];
   if (dlStart.value.trim() || dlEnd.value.trim()) parts.push(t('Solo se descargará el tramo {a}–{b}.', { a: dlStart.value.trim() || '0:00', b: dlEnd.value.trim() || t('final') }));
   if (optChapters.checked) parts.push(t('Se guardará un archivo por capítulo (si el vídeo tiene capítulos), juntos en una carpeta.'));
+  if (tracklistOn()) parts.push(t('Se guardará un archivo por pista de tu lista, juntos en una carpeta.'));
   $('dlMoreHint').textContent = parts.join(' ');
 }
 
@@ -1741,6 +1778,73 @@ const INTERVAL_LABELS = { 1: 'cada hora', 3: 'cada 3 horas', 6: 'cada 6 horas', 
 function refreshSubFormat() {
   $('subFormatNote').textContent = t('Lo nuevo se descargará como {f} (cámbialo con Audio/Vídeo arriba y en Descargar → Enlace).', { f: describeDownloadFormat() });
 }
+// Filters: the form's fields ↔ { noShorts, minMinutes, maxMinutes, include, exclude }.
+const SUB_FILTER_FIELDS = ['subNoShorts', 'subMinMinutes', 'subMaxMinutes', 'subInclude', 'subExclude'];
+function subFiltersFromForm() {
+  const num = (id) => $(id).value.trim().replace(',', '.');
+  return { noShorts: $('subNoShorts').checked, minMinutes: num('subMinMinutes'), maxMinutes: num('subMaxMinutes'), include: $('subInclude').value, exclude: $('subExclude').value };
+}
+function subFiltersToForm(f) {
+  $('subNoShorts').checked = Boolean(f && f.noShorts);
+  $('subMinMinutes').value = f && f.minMinutes ? String(f.minMinutes) : '';
+  $('subMaxMinutes').value = f && f.maxMinutes ? String(f.maxMinutes) : '';
+  $('subInclude').value = f && f.include ? f.include.join(', ') : '';
+  $('subExclude').value = f && f.exclude ? f.exclude.join(', ') : '';
+  refreshSubFiltersSummary();
+}
+/** "sin Shorts · 5–60 min · sin «directo»", or '' with no filters. */
+function describeSubFilters(f) {
+  if (!f) return '';
+  const parts = [];
+  if (f.noShorts) parts.push(t('sin Shorts'));
+  if (f.minMinutes && f.maxMinutes) parts.push(t('{a}–{b} min', { a: f.minMinutes, b: f.maxMinutes }));
+  else if (f.minMinutes) parts.push(t('más de {n} min', { n: f.minMinutes }));
+  else if (f.maxMinutes) parts.push(t('hasta {n} min', { n: f.maxMinutes }));
+  if (f.include && f.include.length) parts.push(t('solo «{w}»', { w: f.include.join(', ') }));
+  if (f.exclude && f.exclude.length) parts.push(t('sin «{w}»', { w: f.exclude.join(', ') }));
+  return parts.join(' · ');
+}
+function refreshSubFiltersSummary() {
+  const f = subFiltersFromForm();
+  const on = f.noShorts || f.minMinutes || f.maxMinutes || f.include.trim() || f.exclude.trim();
+  $('subFiltersSummary').textContent = on ? t('activos') : '';
+}
+SUB_FILTER_FIELDS.forEach((id) => $(id).addEventListener(id === 'subNoShorts' ? 'change' : 'input', refreshSubFiltersSummary));
+// Editing the filters of a subscription you already have: the same fields, another button.
+let editingSub = null;
+function editSubFilters(sub) {
+  editingSub = sub;
+  subFiltersToForm(sub.filters);
+  $('subFilters').open = true;
+  $('btnSubscribe').classList.add('hidden');
+  $('btnSubFiltersSave').classList.remove('hidden');
+  $('btnSubFiltersCancel').classList.remove('hidden');
+  $('subStatus').textContent = t('Filtros de {t}', { t: sub.title });
+  $('subStatus').className = 'status-message';
+  $('subFilters').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function stopEditingSubFilters() {
+  editingSub = null;
+  subFiltersToForm(null);
+  $('btnSubscribe').classList.remove('hidden');
+  $('btnSubFiltersSave').classList.add('hidden');
+  $('btnSubFiltersCancel').classList.add('hidden');
+}
+$('btnSubFiltersCancel').addEventListener('click', () => { stopEditingSubFilters(); $('subStatus').textContent = ''; });
+$('btnSubFiltersSave').addEventListener('click', async () => {
+  if (!editingSub) return;
+  const status = $('subStatus');
+  try {
+    const sub = await api(`/api/subscriptions/${editingSub.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filters: subFiltersFromForm() }) });
+    status.textContent = sub.filters ? t('Filtros guardados') : t('Sin filtros');
+    status.className = 'status-message success';
+    stopEditingSubFilters();
+    loadSubscriptions();
+  } catch (err) {
+    status.textContent = err.message;
+    status.className = 'status-message error';
+  }
+});
 async function loadSubscriptions() {
   if (!desktopApi) return;
   try {
@@ -1764,7 +1868,7 @@ function renderSubscriptions(list) {
     const meta = document.createElement('span');
     meta.className = 'sub-meta';
     const last = sub.lastCheck ? t('revisado {when}', { when: timeAgo(sub.lastCheck) }) : '';
-    meta.textContent = [ts(sub.detail), t(INTERVAL_LABELS[sub.interval] || ''), sub.checking ? t('comprobando…') : last, sub.lastError ? ts(sub.lastError) : ''].filter(Boolean).join(' · ');
+    meta.textContent = [ts(sub.detail), describeSubFilters(sub.filters), t(INTERVAL_LABELS[sub.interval] || ''), sub.checking ? t('comprobando…') : last, sub.lastError ? ts(sub.lastError) : ''].filter(Boolean).join(' · ');
     meta.classList.toggle('error', Boolean(sub.lastError));
     text.append(title, meta);
     const actions = document.createElement('div');
@@ -1788,6 +1892,7 @@ function renderSubscriptions(list) {
       } catch (err) { showToast(err.message); }
       loadSubscriptions();
     }));
+    if (!sub.mirror) actions.appendChild(iconButton('filter', t('Filtros'), () => editSubFilters(sub)));
     actions.appendChild(iconButton('remove', t('Dejar de seguir'), () => api(`/api/subscriptions/${sub.id}`, { method: 'DELETE' }).then(loadSubscriptions)));
     li.append(text, actions);
     ul.appendChild(li);
@@ -1806,11 +1911,12 @@ $('btnSubscribe').addEventListener('click', async () => {
     const ruled = profilesUi.profileForUrl(url);
     const sub = await postJson('/api/subscriptions', {
       url, options: ruled ? ruled.options : downloadOptions(), interval: Number($('subInterval').value), backfill: Number($('subBackfill').value),
-      mirror: $('subMirror').checked,
+      mirror: $('subMirror').checked, filters: subFiltersFromForm(),
     });
     status.textContent = t('Suscrito a {t}', { t: sub.title });
     status.className = 'status-message success';
     $('subUrl').value = '';
+    subFiltersToForm(null);
     loadSubscriptions();
   } catch (err) {
     status.textContent = err.message;
@@ -2098,6 +2204,7 @@ async function submitDownload() {
       live,
       playlist: optPlaylist.checked,
       chapters: optChapters.checked,
+      tracklist: tracklistOn() ? $('tracklistText').value : undefined,
       priority: $('dlPriority').value,
       sectionStart: dlStart.value.trim(),
       sectionEnd: dlEnd.value.trim(),
@@ -4133,6 +4240,7 @@ const ICONS = {
   star: svg('<path d="M12 3.6l2.55 5.2 5.75.84-4.16 4.05.98 5.72L12 16.7l-5.12 2.71.98-5.72L3.7 9.64l5.75-.84z"/>'),
   addList: svg('<path d="M4 6h11M4 11h11M4 16h6"/><path d="M18 13v8M14 17h8"/>'),
   folder: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+  filter: svg('<path d="M4 5h16l-6 7.5V18l-4 2v-7.5z"/>'),
 };
 const PRIORITY_NEXT = { normal: 'high', high: 'low', low: 'normal' };
 const PRIORITY_LABEL = { high: 'Urgente', normal: 'Normal', low: 'Cuando haya tiempo' };

@@ -336,6 +336,13 @@
                 <label class="row switch" id="optBpmWrap"><span class="row-label">BPM y tonalidad <small>en las etiquetas, para DJs (MP3, FLAC, OGG, OPUS)</small></span><input type="checkbox" id="optBpm"><span class="switch-ui"></span></label>
                 <label class="row switch" id="optNfoWrap"><span class="row-label">Ficha para Jellyfin, Kodi o Plex <small>un .nfo y la portada junto al vídeo</small></span><input type="checkbox" id="optNfo"><span class="switch-ui"></span></label>
                 <label class="row switch"><span class="row-label">Dividir por capítulos <small>un archivo por capítulo</small></span><input type="checkbox" id="optChapters"><span class="switch-ui"></span></label>
+                <label class="row switch" id="optTracklistWrap"><span class="row-label">Dividir con una lista de pistas <small>para mezclas, sesiones o álbumes enteros sin capítulos: pega la lista de los comentarios</small></span><input type="checkbox" id="optTracklist"><span class="switch-ui"></span></label>
+                <div class="row tracklist-row hidden" id="tracklistRow">
+                  <div class="row-text">
+                    <textarea class="text-input tracklist-input" id="tracklistText" rows="6" maxlength="20000" spellcheck="false" placeholder="3:21 Artista - Canción (una por línea)" aria-label="Lista de pistas"></textarea>
+                    <small class="row-sub row-sub-wrap" id="tracklistCount"></small>
+                  </div>
+                </div>
                 <label class="row switch" id="optSubtitlesWrap"><span class="row-label">Subtítulos</span><input type="checkbox" id="optSubtitles"><span class="switch-ui"></span></label>
                 <label class="row hidden" id="subLangsRow"><span class="row-label">Idioma de los subtítulos</span>
                   <select id="subLangs">
@@ -577,8 +584,26 @@
               </label>
               <label class="row switch"><span class="row-label">Espejo de la playlist <small>la descarga entera, en su carpeta, y lo que quiten de ella va a la papelera</small></span><input type="checkbox" id="subMirror"><span class="switch-ui"></span></label>
             </div>
+            <details class="more" id="subFilters">
+              <summary>
+                <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+                Filtros <small id="subFiltersSummary"></small>
+              </summary>
+              <div class="more-body">
+                <div class="group">
+                  <label class="row switch"><span class="row-label">Sin Shorts <small>se salta los vídeos de un minuto o menos</small></span><input type="checkbox" id="subNoShorts"><span class="switch-ui"></span></label>
+                  <label class="row"><span class="row-label">Duración mínima <small>en minutos</small></span><input class="text-input" type="text" id="subMinMinutes" placeholder="Sin mínimo" inputmode="decimal" autocomplete="off"></label>
+                  <label class="row"><span class="row-label">Duración máxima <small>en minutos</small></span><input class="text-input" type="text" id="subMaxMinutes" placeholder="Sin máximo" inputmode="decimal" autocomplete="off"></label>
+                  <label class="row"><span class="row-label">Solo si el título dice <small>alguna de estas palabras, separadas por comas</small></span><input class="text-input" type="text" id="subInclude" placeholder="p. ej. podcast, entrevista" autocomplete="off" spellcheck="false"></label>
+                  <label class="row"><span class="row-label">Saltar si el título dice <small>separadas por comas</small></span><input class="text-input" type="text" id="subExclude" placeholder="p. ej. directo, tráiler" autocomplete="off" spellcheck="false"></label>
+                </div>
+                <p class="footnote">Lo que no pasa los filtros no se descarga, pero queda como visto. No se aplican al modo espejo, que copia la playlist entera.</p>
+              </div>
+            </details>
             <div class="form-footer">
               <div class="status-message" id="subStatus" role="status"></div>
+              <button class="btn hidden" id="btnSubFiltersCancel" type="button">Cancelar</button>
+              <button class="btn btn-primary hidden" id="btnSubFiltersSave" type="button">Guardar filtros</button>
               <button class="btn btn-primary" id="btnSubscribe" type="button">Suscribirse</button>
             </div>
             <p class="footnote" id="subFormatNote"></p>

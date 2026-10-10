@@ -438,6 +438,9 @@ body.window-blurred .tl { background: rgba(128, 128, 128, 0.3); }
 :root[data-theme="dark"] .row select option { background: #2c2d33; color: #f2f2f7; }
 .text-input { background: linear-gradient(var(--glass-strong), var(--glass-strong)) padding-box, var(--rim) border-box; padding: 0 9px; min-width: 110px; cursor: text; }
 .text-input::placeholder { color: var(--text-3); }
+#btnSubFiltersCancel { margin-left: auto; margin-right: -8px; }
+.tracklist-row .row-text { width: 100%; }
+.text-input.tracklist-input { display: block; width: 100%; max-width: none; height: auto; min-height: 110px; padding: 6px 9px; resize: vertical; font: inherit; font-size: 12.5px; line-height: 1.45; white-space: pre; overflow-x: auto; }
 
 /* Switches (macOS 26: capsule with a liquid knob) */
 .switch { cursor: default; }

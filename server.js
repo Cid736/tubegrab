@@ -565,6 +565,8 @@ app.post('/api/jobs/download', createLimiter, requireClient, async (req, res) =>
     const url = download.isSearchUrl(entry.url) ? entry.url : download.normalizeMediaUrl(entry.url);
     if (url && !(opts.playlist && download.isSearchUrl(url))) picked.push({ url, title: entry.title }); else rejected.push(String(entry.url).slice(0, 200));
   }
+  // A tracklist belongs to one video.
+  if (opts.tracklist && picked.length > 1) return res.status(400).json({ error: 'La lista de pistas es para un solo enlace.' });
   if (!picked.length) {
     return res.status(400).json({ error: 'Ningún enlace válido. Sitios soportados: YouTube, Vimeo, SoundCloud, X/Twitter, TikTok, Instagram, Facebook, Twitch, Dailymotion, Reddit, Bandcamp y más.', rejected });
   }
@@ -1120,7 +1122,7 @@ app.post('/api/library/review/fix', requireDesktop, requireClient, createLimiter
 app.post('/api/library/review/upgrade', requireDesktop, requireClient, createLimiter, (req, res) => {
   const ids = reviewIds(req.body, 100);
   const b = req.body || {};
-  const opts = download.parseDownloadOptions({ ...(b.opts && typeof b.opts === 'object' ? b.opts : {}), mode: 'audio', audioBitrate: '320', playlist: false, chapters: false, sectionStart: '', sectionEnd: '', live: false });
+  const opts = download.parseDownloadOptions({ ...(b.opts && typeof b.opts === 'object' ? b.opts : {}), mode: 'audio', audioBitrate: '320', playlist: false, chapters: false, sectionStart: '', sectionEnd: '', live: false, tracklist: null });
   const invalid = download.validateOptions(opts);
   if (invalid) return res.status(400).json({ error: invalid });
   const items = [];
@@ -1542,7 +1544,7 @@ app.post('/api/recurring', requireDesktop, requireClient, createLimiter, (req, r
   const body = req.body || {};
   const url = download.normalizeMediaUrl(body.url);
   if (!url) return res.status(400).json({ error: 'Enlace no válido o sitio no soportado.' });
-  const opts = download.parseDownloadOptions({ ...(body.options || {}), chapters: false, sectionStart: '', sectionEnd: '', live: false });
+  const opts = download.parseDownloadOptions({ ...(body.options || {}), chapters: false, sectionStart: '', sectionEnd: '', live: false, tracklist: null });
   try {
     recurring.add(req.clientId, { url, options: opts, detail: download.describeOptions(opts), time: body.time, days: body.days, name: body.name });
     res.json({ ...recurring.view(req.clientId), open: recurring.windowOpen() });
@@ -1781,12 +1783,12 @@ app.post('/api/subscriptions', createLimiter, requireSubs, requireClient, async 
   const body = req.body || {};
   const url = download.normalizeMediaUrl(body.url);
   if (!url) return res.status(400).json({ error: 'Enlace no válido o sitio no soportado.' });
-  const opts = download.parseDownloadOptions({ ...(body.options || {}), playlist: false, chapters: false, sectionStart: '', sectionEnd: '' });
+  const opts = download.parseDownloadOptions({ ...(body.options || {}), playlist: false, chapters: false, sectionStart: '', sectionEnd: '', tracklist: null });
   if (!playlistSlots.take()) return res.status(429).json(BUSY);
   try {
     const sub = await subscriptions.add({
       clientId: req.clientId, url, options: opts, detail: `${download.describeOptions(opts)}${body.mirror === true ? ' · espejo' : ''}`,
-      interval: body.interval, backfill: body.backfill, mirror: body.mirror === true,
+      interval: body.interval, backfill: body.backfill, mirror: body.mirror === true, filters: body.filters,
     });
     res.json(sub);
   } catch (err) {
