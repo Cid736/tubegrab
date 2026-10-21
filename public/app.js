@@ -115,8 +115,15 @@ const PRESETS = {
   ],
 };
 
-const AUDIO_DL_LABELS = { best: 'Original', mp3: 'MP3', m4a: 'M4A', opus: 'OPUS', ogg: 'OGG', flac: 'FLAC', wav: 'WAV' };
-const LOSSLESS_DL = new Set(['best', 'flac', 'wav']);
+const AUDIO_DL_LABELS = { best: 'Original', mp3: 'MP3', m4a: 'M4A', opus: 'OPUS', ogg: 'OGG', flac: 'FLAC', wav: 'WAV', midi: 'MIDI' };
+const LOSSLESS_DL = new Set(['best', 'flac', 'wav', 'midi']);
+// MIDI has no bitrate: its row asks which notes instead.
+function syncAudioFormat() {
+  const midi = audioFormat.value === 'midi';
+  audioBitrate.disabled = LOSSLESS_DL.has(audioFormat.value);
+  $('audioBitrateRow').classList.toggle('hidden', midi);
+  $('midiNotesRow').classList.toggle('hidden', !midi);
+}
 
 // === Client identity (jobs are private to it) ===
 function randomHex(bytes) {
@@ -644,7 +651,7 @@ function playDoneSound() {
 }
 
 // Remember the last download options (restored on next launch).
-const REMEMBERED_SELECTS = { audioFormat, audioBitrate, videoQuality, videoContainer, subLangs, subMode, sponsorMode: $('sponsorMode') };
+const REMEMBERED_SELECTS = { audioFormat, audioBitrate, midiNotes: $('midiNotes'), videoQuality, videoContainer, subLangs, subMode, sponsorMode: $('sponsorMode') };
 const REMEMBERED_SWITCHES = { metadata: optMetadata, playlist: optPlaylist, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, official: $('optOfficial'), lyrics: optLyrics, both: optBoth, normalize: optNormalize, bpm: optBpm, nfo: optNfo };
 
 function saveLastOptions() {
@@ -666,7 +673,7 @@ function restoreLastOptions() {
     if (typeof last[k] === 'boolean') el.checked = last[k];
   }
   if (last.downloadMode === 'audio' || last.downloadMode === 'video') downloadMode = last.downloadMode;
-  audioBitrate.disabled = LOSSLESS_DL.has(audioFormat.value);
+  syncAudioFormat();
   $('sponsorModeRow').classList.toggle('hidden', !optSponsorblock.checked);
 }
 
@@ -907,7 +914,7 @@ function describeDownloadFormat(short = false, mode = downloadMode, combined = t
 }
 
 audioFormat.addEventListener('change', () => {
-  audioBitrate.disabled = LOSSLESS_DL.has(audioFormat.value);
+  syncAudioFormat();
   refreshButton();
 });
 videoContainer.addEventListener('change', refreshButton);
@@ -920,6 +927,7 @@ function downloadOptions(mode = downloadMode) {
     nameTemplate: tpl || undefined,
     audioFormat: audioFormat.value,
     audioBitrate: audioBitrate.value,
+    midiNotes: $('midiNotes').value,
     quality: videoQuality.value,
     container: videoContainer.value,
     metadata: optMetadata.checked,
@@ -988,7 +996,7 @@ const profilesUi = (() => {
   const SAVE = '__save';
   const fold = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const SWITCHES = { metadata: optMetadata, subtitles: optSubtitles, sponsorblock: optSponsorblock, music: optMusic, lyrics: optLyrics, normalize: optNormalize, bpm: optBpm, nfo: optNfo };
-  const SELECTS = { audioFormat, audioBitrate, quality: videoQuality, container: videoContainer, subLangs, subMode, sponsorMode: $('sponsorMode') };
+  const SELECTS = { audioFormat, audioBitrate, midiNotes: $('midiNotes'), quality: videoQuality, container: videoContainer, subLangs, subMode, sponsorMode: $('sponsorMode') };
 
   function describe(p) {
     const o = p.options;
@@ -1063,7 +1071,7 @@ const profilesUi = (() => {
     for (const [k, el] of Object.entries(SWITCHES)) if (typeof o[k] === 'boolean') el.checked = o[k];
     optBoth.checked = p.both === true;
     $('sponsorModeRow').classList.toggle('hidden', !optSponsorblock.checked);
-    audioBitrate.disabled = LOSSLESS_DL.has(audioFormat.value);
+    syncAudioFormat();
     if (o.mode === 'audio' || o.mode === 'video') setMode(o.mode);
     refreshSubtitleRows();
     refreshButton();
@@ -1693,7 +1701,8 @@ function refreshEstimate() {
     const e = dlEnd.value.trim() ? parseTime(dlEnd.value) : secs;
     const part = Number.isFinite(s) && Number.isFinite(e) && e > s ? Math.min(1, (e - s) / secs) : 1;
     const audioBytes = () => {
-      const kbps = { flac: 900, wav: 1411 }[audioFormat.value];
+      // A MIDI file is a few KB a minute.
+      const kbps = { flac: 900, wav: 1411, midi: 0.5 }[audioFormat.value];
       return audioFormat.value === 'best' ? previewSizes.audio : (kbps || Number(audioBitrate.value) || 192) * secs * 125;
     };
     const videoBytes = () => {

@@ -272,10 +272,17 @@
                 <option value="ogg">OGG</option>
                 <option value="flac">FLAC (sin pérdida)</option>
                 <option value="wav">WAV</option>
+                <option value="midi">MIDI (las notas)</option>
                 <option value="best">Original</option>
               </select>
             </label>
-            <label class="row"><span class="row-label">Calidad</span>
+            <label class="row hidden" id="midiNotesRow"><span class="row-label">Notas <small>sacadas del sonido: aproximado, va mejor con un solo instrumento o una melodía clara</small></span>
+              <select id="midiNotes">
+                <option value="all" selected>Todas (acordes)</option>
+                <option value="melody">Solo la melodía</option>
+              </select>
+            </label>
+            <label class="row" id="audioBitrateRow"><span class="row-label">Calidad</span>
               <select id="audioBitrate">
                 <option value="320">320 kbps</option>
                 <option value="256">256 kbps</option>

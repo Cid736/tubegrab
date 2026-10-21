@@ -943,3 +943,21 @@ CodeQL (`security-extended`) se activó por primera vez en el repositorio y dio 
 - Ahora menciona lo que trae Rumoria 1.3: «Para ti» y «Para hoy», listas que se llenan solas, mini reproductor con videoclip y letra, el ecualizador y las demás opciones del reproductor que antes tenía TubeGrab, y que se actualiza sola. En español y en inglés.
 - Los enlaces siguen yendo a `github.com/Cid736/rumoria/releases/latest/download/…` (comprobados: responden con el archivo).
 - 247 pruebas.
+
+
+---
+
+## 2026-10-22 — v4.2.0: descargar como MIDI
+
+### [ALTA] La interfaz en inglés no cargaba desde la v4.0.4
+- **Archivo:** `public/i18n.js`
+- **Descripción:** el texto en inglés de la pestaña Rumoria llevaba «TubeGrab's» con el apóstrofo sin escapar dentro de una cadena entre comillas simples. El archivo entero dejaba de compilar: sin tabla en inglés y sin `t()` propia, así que la app se quedaba en español aunque se eligiera inglés. Las pruebas no lo vieron porque leen `i18n.js` como texto.
+- **Fix:** apóstrofo escapado.
+- **Test:** `test/v42.test.js` compila todos los scripts de `public/` con `vm.Script`.
+- **Lección:** al tocar textos de la interfaz, comprobar que el archivo sigue compilando (`node --check`).
+
+### [Nuevo] MIDI (`lib/midi.js`)
+- Las notas se sacan en un hilo aparte (`worker_threads`): el servidor sigue respondiendo mientras tanto, y cancelar termina el hilo.
+- ffmpeg solo lee archivos locales (`-protocol_whitelist file`, demuxers limitados), igual que el resto. Como mucho 20 min de audio (unos 50 MB de muestras en memoria).
+- `.mid` añadido a las extensiones que se pueden guardar.
+- 265 pruebas.

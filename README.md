@@ -26,6 +26,7 @@ Every page is always visible in the sidebar, with no drop-down menus: **Download
 - **Subscriptions** (desktop app): channels or playlists checked every 1–24 h; new uploads download by themselves
   - **Filters**: no Shorts, a shortest and longest length, only titles with certain words or skipping others (what's left out still counts as seen); editable later
 - Audio: MP3, M4A, OPUS, OGG, FLAC, WAV or the original stream (96–320 kbps). Video: up to 4K/8K as MP4, MKV or WEBM
+- **MIDI**: the notes of a song instead of its sound, as a `.mid` at the song's tempo (all notes with chords, or only the melody), worked out on your computer. Approximate: works best with one instrument (piano, guitar…) or a clear melody; a full band gives a sketch to fix in your music program
 - **Download only a part** (e.g. 1:20–3:45, with a slider), or **split by chapters** into one file per chapter (tagged with title and track number)
 - **Split with a tracklist**: for a mix, DJ set or whole album without chapters, paste the list from the comments ("0:00 Intro", "3:21 Artist - Song"…) and each track comes out as its own file, cut without re-encoding and tagged with artist, title, album and number
 - **Music mode**: clean "Artist - Title" (without "(Official Video)"…), artist tag and **square cover art**
@@ -189,6 +190,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 │   ├── library.js         # Library, own playlists, duplicates, lyrics, LAN sharing (phone, and seekable for the TV)
 │   ├── whisper.js         # Automatic subtitles (whisper.cpp, pinned): .srt, transcript, burnt-in captions
 │   ├── analysis.js        # Tempo (BPM) and key, worked out from the sound
+│   ├── midi.js            # The notes of a song as a MIDI file (pitch detection in a worker thread)
 │   ├── loudness.js        # Same loudness for every file (EBU R128, two passes)
 │   ├── cast.js            # Chromecast (CASTV2) and DLNA/UPnP on the local network
 │   ├── seen.js            # "You already have it": downloads by video id
@@ -217,7 +219,7 @@ Once signed, SmartScreen's "Unknown publisher" warning goes away (immediately wi
 ## Tests
 
 ```bash
-npm test                    # 265 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
+npm test                    # 267 tests: options, conversions with real ffmpeg, compress/merge/image, queue, API, security
 TG_NETWORK=1 npm test       # also real YouTube downloads
 ```
 
@@ -280,6 +282,7 @@ Todas las páginas están siempre a la vista en la barra lateral, sin menús des
 - **Suscripciones** (app de escritorio): canales o playlists revisados cada 1–24 h; lo nuevo se descarga solo
   - **Filtros**: sin Shorts, duración mínima y máxima, solo títulos con ciertas palabras o saltando otras (lo que se queda fuera cuenta como visto); se pueden cambiar después
 - Audio: MP3, M4A, OPUS, OGG, FLAC, WAV o el original (96–320 kbps). Vídeo: hasta 4K/8K en MP4, MKV o WEBM
+- **MIDI**: las notas de una canción en vez de su sonido, en un `.mid` al tempo de la canción (todas las notas con acordes, o solo la melodía), calculado en tu ordenador. Aproximado: va mejor con un solo instrumento (piano, guitarra…) o una melodía clara; con un grupo entero sale un boceto para retocar en tu programa de música
 - **Descargar solo un tramo** (p. ej. 1:20–3:45, con deslizador), o **dividir por capítulos** en un archivo por capítulo (con título y número de pista)
 - **Dividir con una lista de pistas**: para una mezcla, sesión o álbum entero sin capítulos, pega la lista de los comentarios («0:00 Intro», «3:21 Artista - Canción»…) y cada pista sale en su propio archivo, cortada sin recodificar y con artista, título, álbum y número
 - **Modo música**: "Artista - Título" limpio (sin "(Official Video)"…), etiqueta de artista y **portada cuadrada**
@@ -431,7 +434,7 @@ Con la firma desaparece el aviso "Editor desconocido" de SmartScreen (al momento
 ## Pruebas
 
 ```bash
-npm test                    # 265 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
+npm test                    # 267 pruebas: opciones, conversiones con ffmpeg real, comprimir/unir/imagen, cola, API, seguridad
 TG_NETWORK=1 npm test       # también descargas reales de YouTube
 ```
 

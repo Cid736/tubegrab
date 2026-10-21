@@ -18,7 +18,8 @@ const HELP = `TubeGrab — descarga desde la terminal
 Uso: tubegrab <enlace> [más enlaces] [opciones]
 
   --mp3 | --m4a | --opus | --flac | --wav   audio en ese formato (por defecto: MP3)
-  --audio[=formato]                          audio (mp3, m4a, opus, ogg, flac, wav, best)
+  --audio[=formato]                          audio (mp3, m4a, opus, ogg, flac, wav, midi, best)
+  --midi[=melodia]                           las notas en un .mid (todas, o solo la melodía)
   --kbps=192                                 calidad del audio (96–320)
   --video[=1080]                             vídeo (best, 2160, 1440, 1080, 720, 480, 360)
   --mp4 | --mkv | --webm                     vídeo en ese formato
@@ -39,6 +40,7 @@ function parseArgs(argv) {
     else if (!m && a.startsWith('-')) opts.bad = a;
     else if (!m) opts.urls.push(a);
     else if (['mp3', 'm4a', 'opus', 'flac', 'wav'].includes(m[1])) { opts.mode = 'audio'; opts.audioFormat = m[1]; }
+    else if (m[1] === 'midi') { opts.mode = 'audio'; opts.audioFormat = 'midi'; if (m[2] === 'melodia' || m[2] === 'melody') opts.midiNotes = 'melody'; }
     else if (m[1] === 'audio') { opts.mode = 'audio'; if (m[2]) opts.audioFormat = m[2]; }
     else if (m[1] === 'video') { opts.mode = 'video'; if (m[2]) opts.quality = m[2]; }
     else if (['mp4', 'mkv', 'webm'].includes(m[1])) { opts.mode = 'video'; opts.container = m[1]; }
